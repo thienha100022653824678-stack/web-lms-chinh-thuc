@@ -169,10 +169,33 @@
               </div>
             </div>
 
+            <!-- Course Share Links box -->
+            <div id="shareLinksBox" class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3 hidden">
+              <h3 class="text-xs font-black text-slate-400 uppercase tracking-wider">2. Đường dẫn học tập</h3>
+              <div class="space-y-3">
+                <!-- Course Link -->
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-500 mb-1">Đường dẫn khóa học:</label>
+                  <div class="flex gap-2">
+                    <input id="shareCourseUrl" type="text" readonly class="flex-grow border border-slate-200 rounded-xl px-2.5 py-1.5 text-[10px] font-medium bg-slate-50 text-slate-600 focus:outline-none"/>
+                    <button onclick="copyShareLink('shareCourseUrl')" class="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-xl transition shrink-0">Copy</button>
+                  </div>
+                </div>
+                <!-- Lesson Link -->
+                <div id="shareLessonUrlContainer" class="hidden">
+                  <label class="block text-[10px] font-bold text-slate-500 mb-1">Đường dẫn bài học:</label>
+                  <div class="flex gap-2">
+                    <input id="shareLessonUrl" type="text" readonly class="flex-grow border border-slate-200 rounded-xl px-2.5 py-1.5 text-[10px] font-medium bg-slate-50 text-slate-600 focus:outline-none"/>
+                    <button onclick="copyShareLink('shareLessonUrl')" class="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-xl transition shrink-0">Copy</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- Lesson List column -->
             <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex-grow flex flex-col min-h-[300px]">
               <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
-                <h3 class="text-xs font-black text-slate-400 uppercase tracking-wider">2. Danh sách bài học</h3>
+                <h3 class="text-xs font-black text-slate-400 uppercase tracking-wider">3. Danh sách bài học</h3>
                 <button onclick="initNewLesson()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold px-2 py-1 rounded-lg transition">+ Thêm mới</button>
               </div>
               <div id="lessonList" class="custom-scrollbar overflow-y-auto flex-grow max-h-[400px] lg:max-h-none space-y-1">
@@ -832,6 +855,16 @@
       }, 4000);
     }
 
+    function copyShareLink(inputId) {
+      const input = document.getElementById(inputId);
+      if (!input || !input.value) return;
+      input.select();
+      input.setSelectionRange(0, 99999);
+      navigator.clipboard.writeText(input.value)
+        .then(() => toast("Đã sao chép liên kết học tập!"))
+        .catch(() => toast("Không thể tự động sao chép liên kết", "error"));
+    }
+
     // ── Loader Overlay ─────────────────────────────────────────────────────
     function showLoader(msg = "Đang xử lý...") {
       document.getElementById("loaderMsg").innerText = msg;
@@ -1002,9 +1035,18 @@
       const course = document.getElementById("courseSelect").value;
       if (!course) {
         document.getElementById("lessonList").innerHTML = "";
+        const shareLinksBox = document.getElementById("shareLinksBox");
+        if (shareLinksBox) shareLinksBox.classList.add("hidden");
         initNewLesson();
         return;
       }
+
+      const shareLinksBox = document.getElementById("shareLinksBox");
+      const shareCourseUrl = document.getElementById("shareCourseUrl");
+      const shareLessonUrlContainer = document.getElementById("shareLessonUrlContainer");
+      if (shareLinksBox) shareLinksBox.classList.remove("hidden");
+      if (shareCourseUrl) shareCourseUrl.value = `${window.location.origin}/lms.html?course=${encodeURIComponent(course)}`;
+      if (shareLessonUrlContainer) shareLessonUrlContainer.classList.add("hidden");
 
       // Fill configs
       document.getElementById("metaTitle").value = STATE.globalConfig[`${course}_title`] || "";
@@ -1203,6 +1245,9 @@
       document.getElementById("mainVideoStatus").innerHTML = "";
       document.getElementById("mediaBlocksContainer").innerHTML = "";
       resetMainVideoProgress();
+      
+      const shareLessonUrlContainer = document.getElementById("shareLessonUrlContainer");
+      if (shareLessonUrlContainer) shareLessonUrlContainer.classList.add("hidden");
     }
 
     function loadLessonToEditor(idx) {
@@ -1243,6 +1288,15 @@
       document.getElementById("recipeFileInput").value = "";
       document.getElementById("mainVideoStatus").innerHTML = "";
       resetMainVideoProgress();
+
+      const shareLessonUrlContainer = document.getElementById("shareLessonUrlContainer");
+      const shareLessonUrl = document.getElementById("shareLessonUrl");
+      if (l.id) {
+        if (shareLessonUrlContainer) shareLessonUrlContainer.classList.remove("hidden");
+        if (shareLessonUrl) shareLessonUrl.value = `${window.location.origin}/lesson.html?id=${l.id}`;
+      } else {
+        if (shareLessonUrlContainer) shareLessonUrlContainer.classList.add("hidden");
+      }
 
       const link = document.getElementById("recipeOpenLink");
       if (recipeVal && /^https?:\/\//i.test(recipeVal)) {
