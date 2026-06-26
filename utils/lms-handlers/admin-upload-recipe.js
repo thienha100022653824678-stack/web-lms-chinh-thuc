@@ -1,4 +1,4 @@
-import { Readable } from "stream";
+import { PassThrough } from "stream";
 import { supabase } from "../supabase.js";
 import { getAdminFromRequest, getDriveClientWithToken } from "../lms.js";
 
@@ -9,6 +9,12 @@ export const config = {
     },
   },
 };
+
+function bufferToStream(buffer) {
+  const pass = new PassThrough();
+  pass.end(buffer);
+  return pass;
+}
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -75,7 +81,7 @@ export default async function handler(req, res) {
     if (folderId) requestBody.parents = [folderId];
 
     const contentBuffer = Buffer.from(content, "utf8");
-    const bodyStream = Readable.from(contentBuffer);
+    const bodyStream = bufferToStream(contentBuffer);
 
     let docFile;
     let isFallback = false;
@@ -95,7 +101,7 @@ export default async function handler(req, res) {
             name: docName,
             mimeType: "application/vnd.google-apps.document",
           };
-          const fallbackStream = Readable.from(contentBuffer);
+          const fallbackStream = bufferToStream(contentBuffer);
           docFile = await drive.files.create({
             requestBody: fallbackRequestBody,
             media: { mimeType: "text/plain", body: fallbackStream },

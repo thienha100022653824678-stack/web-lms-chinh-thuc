@@ -1,7 +1,13 @@
-import { Readable } from "stream";
+import { PassThrough } from "stream";
 import { getAdminFromRequest, getDriveClientWithToken } from "../lms.js";
 
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024; // 4 MB
+
+function bufferToStream(buffer) {
+  const pass = new PassThrough();
+  pass.end(buffer);
+  return pass;
+}
 
 export const config = {
   api: {
@@ -85,7 +91,7 @@ export default async function handler(req, res) {
     try {
       driveFile = await drive.files.create({
         requestBody: fileMetadata,
-        media: { mimeType: cleanMimeType, body: Readable.from(buffer) },
+        media: { mimeType: cleanMimeType, body: bufferToStream(buffer) },
         fields: "id, webViewLink, webContentLink",
         supportsAllDrives: true,
       });
@@ -97,7 +103,7 @@ export default async function handler(req, res) {
           const fallbackMetadata = { name: finalFileName };
           driveFile = await drive.files.create({
             requestBody: fallbackMetadata,
-            media: { mimeType: cleanMimeType, body: Readable.from(buffer) },
+            media: { mimeType: cleanMimeType, body: bufferToStream(buffer) },
             fields: "id, webViewLink, webContentLink",
             supportsAllDrives: true,
           });

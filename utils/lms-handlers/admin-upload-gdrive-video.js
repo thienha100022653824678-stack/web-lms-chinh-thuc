@@ -1,11 +1,89 @@
-import { Readable } from "stream";
+import { PassThrough } from "stream";
 import { getAdminFromRequest, getDriveClientWithToken } from "../lms.js";
 import { supabase } from "../supabase.js";
 
 const MAX_VIDEO_BYTES = 500 * 1024 * 1024; // 500 MB limit
 
+// Map extension → correct IANA video MIME type
+// Windows often reports "" or "application/octet-stream" for .mkv, .avi, .mov etc.
+const VIDEO_MIME_MAP = {
+  "mp4":  "video/mp4",
+  "m4v":  "video/mp4",
+  "mov":  "video/quicktime",
+  "qt":   "video/quicktime",
+  "avi":  "video/x-msvideo",
+  "mkv":  "video/x-matroska",
+  "webm": "video/webm",
+  "wmv":  "video/x-ms-wmv",
+  "flv":  "video/x-flv",
+  "3gp":  "video/3gpp",
+  "3g2":  "video/3gpp2",
+  "mpeg": "video/mpeg",
+  "mpg":  "video/mpeg",
+  "ts":   "video/mp2t",
+  "mts":  "video/mp2t",
+  "m2ts": "video/mp2t",
+  "ogv":  "video/ogg",
+  "vob":  "video/x-ms-vob",
+};
+
+// Map x-* subtype to human-readable extension for safe filename generation
+const MIME_TO_EXT = {
+  "video/mp4":          "mp4",
+  "video/quicktime":    "mov",
+  "video/x-msvideo":   "avi",
+  "video/x-matroska":  "mkv",
+  "video/webm":         "webm",
+  "video/x-ms-wmv":    "wmv",
+  "video/x-flv":       "flv",
+  "video/3gpp":         "3gp",
+  "video/3gpp2":        "3g2",
+  "video/mpeg":         "mpg",
+  "video/mp2t":         "ts",
+  "video/ogg":          "ogv",
+  "video/x-ms-vob":    "vob",
+};
+
+/**
+ * Infer the correct video MIME type from filename extension and/or
+ * from the data URL mime (if detected by the browser).
+ */
+function resolveVideoMime(rawMimeFromBrowser, fileName) {
+  // 1. Start with what the browser reported
+  let mime = (rawMimeFromBrowser || "").trim();
+
+  // 2. If it looks like a real video/* MIME (not generic), accept it
+  if (mime && mime.startsWith("video/") && mime !== "video/x-generic") {
+    return mime;
+  }
+
+  // 3. Otherwise, infer from file extension
+  const ext = String(fileName || "").split(".").pop().toLowerCase().trim();
+  if (ext && VIDEO_MIME_MAP[ext]) {
+    console.log(`[upload-video] Inferred MIME from .${ext} → ${VIDEO_MIME_MAP[ext]}`);
+    return VIDEO_MIME_MAP[ext];
+  }
+
+  // 4. Final fallback
+  console.log(`[upload-video] Could not infer MIME for "${fileName}", defaulting to video/mp4`);
+  return "video/mp4";
+}
+
+/**
+ * Create a proper PassThrough stream from a Buffer so that googleapis
+ * receives a single, correctly-sized binary chunk rather than thousands
+ * of individual bytes (which is what Readable.from(buffer) would produce
+ * when iterating a Uint8Array byte-by-byte in objectMode).
+ */
+function bufferToStream(buffer) {
+  const pass = new PassThrough();
+  pass.end(buffer);
+  return pass;
+}
+
 async function getOrCreateFolder(drive, name, parentId = null) {
-  let query = `mimeType = 'application/vnd.google-apps.folder' and name = '${name.replace(/'/g, "\\'")}' and trashed = false`;
+  const safeName = name.replace(/'/g, "\\'");
+  let query = `mimeType = 'application/vnd.google-apps.folder' and name = '${safeName}' and trashed = false`;
   if (parentId) {
     query += ` and '${parentId}' in parents`;
   } else {
@@ -22,8 +100,8 @@ async function getOrCreateFolder(drive, name, parentId = null) {
       includeItemsFromAllDrives: true
     });
     files = res.data.files || [];
-  } catch (err) {
-    console.warn("[getOrCreateFolder] List with shared drives failed, trying standard list:", err.message);
+  } catch {
+    // Fallback: try without shared-drive parameters (personal Drive accounts)
     try {
       const res = await drive.files.list({
         q: query,
@@ -32,23 +110,18 @@ async function getOrCreateFolder(drive, name, parentId = null) {
       });
       files = res.data.files || [];
     } catch (fallbackErr) {
-      console.error("[getOrCreateFolder] Standard list failed:", fallbackErr.message);
-      throw fallbackErr;
+      throw new Error(`Không thể liệt kê thư mục Drive: ${fallbackErr.message}`);
     }
   }
 
-  if (files.length > 0) {
-    return files[0].id;
-  }
+  if (files.length > 0) return files[0].id;
 
-  // Create folder if not found
+  // Folder not found → create it
   const fileMetadata = {
-    name: name,
+    name,
     mimeType: "application/vnd.google-apps.folder"
   };
-  if (parentId) {
-    fileMetadata.parents = [parentId];
-  }
+  if (parentId) fileMetadata.parents = [parentId];
 
   let folder;
   try {
@@ -57,16 +130,14 @@ async function getOrCreateFolder(drive, name, parentId = null) {
       fields: "id",
       supportsAllDrives: true
     });
-  } catch (err) {
-    console.warn("[getOrCreateFolder] Create with supportsAllDrives failed, trying standard create:", err.message);
+  } catch {
     try {
       folder = await drive.files.create({
         requestBody: fileMetadata,
         fields: "id"
       });
     } catch (fallbackErr) {
-      console.error("[getOrCreateFolder] Standard create failed:", fallbackErr.message);
-      throw fallbackErr;
+      throw new Error(`Không thể tạo thư mục "${name}": ${fallbackErr.message}`);
     }
   }
 
@@ -78,10 +149,7 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-
+  if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") {
     return res.status(405).json({ success: false, error: "Method not allowed" });
   }
@@ -104,142 +172,92 @@ export default async function handler(req, res) {
       accessToken
     } = req.body || {};
 
+    // Validate required fields
     if (!accessToken || typeof accessToken !== "string" || !accessToken.trim()) {
-      return res.status(200).json({
-        success: false,
-        needsOAuth: true,
-        error: "Chưa kết nối Google Drive"
-      });
+      return res.status(200).json({ success: false, needsOAuth: true, error: "Chưa kết nối Google Drive" });
     }
-
     if (!fileData || typeof fileData !== "string") {
       return res.status(400).json({ success: false, error: "Thiếu dữ liệu video (fileData)" });
     }
-
     if (!course_slug) {
       return res.status(400).json({ success: false, error: "Thiếu slug khóa học (course_slug)" });
     }
 
+    // ── Extract base64 and MIME from data URL ──────────────────────────────
     let cleanBase64 = fileData;
-    let cleanMimeType = mimeType || "";
+    let mimeFromDataUrl = "";
 
     if (fileData.includes(";base64,")) {
       const parts = fileData.split(";base64,");
       const mimeMatch = parts[0].match(/data:([^;]+)/);
-      if (mimeMatch) cleanMimeType = mimeMatch[1];
+      if (mimeMatch) mimeFromDataUrl = mimeMatch[1];
       cleanBase64 = parts[1];
     }
 
-    // Normalize MIME type: browsers on Windows often report "" or
-    // "application/octet-stream" for video files like .mkv, .avi, .mov.
-    // We map from file extension to avoid Google Drive "invalid media type" error.
-    const VIDEO_MIME_MAP = {
-      "mp4":  "video/mp4",
-      "m4v":  "video/mp4",
-      "mov":  "video/quicktime",
-      "qt":   "video/quicktime",
-      "avi":  "video/x-msvideo",
-      "mkv":  "video/x-matroska",
-      "webm": "video/webm",
-      "wmv":  "video/x-ms-wmv",
-      "flv":  "video/x-flv",
-      "3gp":  "video/3gpp",
-      "3g2":  "video/3gpp2",
-      "mpeg": "video/mpeg",
-      "mpg":  "video/mpeg",
-      "ts":   "video/mp2t",
-      "mts":  "video/mp2t",
-      "m2ts": "video/mp2t",
-      "ogv":  "video/ogg",
-      "vob":  "video/dvd",
-    };
+    // Determine correct MIME type (browser mimeType > data URL MIME > extension fallback)
+    const effectiveMime = resolveVideoMime(mimeType || mimeFromDataUrl, fileName);
+    console.log(`[upload-video] File: "${fileName}" | Browser MIME: "${mimeType}" | DataURL MIME: "${mimeFromDataUrl}" | Final MIME: "${effectiveMime}"`);
 
-    const isValidVideoMime = cleanMimeType && cleanMimeType.startsWith("video/")
-      && cleanMimeType !== "video/x-generic";
-    const isGenericMime = !cleanMimeType
-      || cleanMimeType === "application/octet-stream"
-      || cleanMimeType === "application/x-www-form-urlencoded"
-      || cleanMimeType === "";
-
-    if (!isValidVideoMime || isGenericMime) {
-      // Try to detect from the file name extension
-      const ext = String(fileName || "").split(".").pop().toLowerCase().trim();
-      if (ext && VIDEO_MIME_MAP[ext]) {
-        cleanMimeType = VIDEO_MIME_MAP[ext];
-        console.log(`[upload-video] Normalized MIME type from extension ".${ext}" → ${cleanMimeType}`);
-      } else {
-        cleanMimeType = "video/mp4"; // safe fallback
-        console.log(`[upload-video] Could not detect MIME from ext "${ext}", defaulting to video/mp4`);
-      }
-    }
-
+    // ── Decode base64 to binary Buffer ─────────────────────────────────────
     let buffer;
     try {
       buffer = Buffer.from(cleanBase64, "base64");
     } catch {
-      return res.status(400).json({ success: false, error: "Dữ liệu video không hợp lệ" });
+      return res.status(400).json({ success: false, error: "Dữ liệu video base64 không hợp lệ" });
+    }
+
+    if (buffer.byteLength === 0) {
+      return res.status(400).json({ success: false, error: "File video rỗng, không thể tải lên" });
     }
 
     if (buffer.byteLength > MAX_VIDEO_BYTES) {
       return res.status(400).json({
         success: false,
-        error: `Video quá lớn (${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB). Tối đa 500 MB.`
+        error: `Video quá lớn (${(buffer.byteLength / 1024 / 1024).toFixed(1)} MB). Tối đa 500 MB.`
       });
     }
 
+    console.log(`[upload-video] Buffer size: ${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB`);
+
+    // ── Build folder hierarchy in Google Drive ──────────────────────────────
     const drive = getDriveClientWithToken(accessToken);
 
-
-    // 1. Resolve / Create folders recursively
-    // A. "Culinary LMS"
     const culinaryLmsId = await getOrCreateFolder(drive, "Culinary LMS");
+    const coursesId     = await getOrCreateFolder(drive, "Courses", culinaryLmsId);
 
-    // B. "Courses" inside "Culinary LMS"
-    const coursesId = await getOrCreateFolder(drive, "Courses", culinaryLmsId);
+    const slugUpper  = String(course_slug).toUpperCase().trim();
+    const titleVal   = String(course_title || slugUpper).trim();
+    const courseFolder = `${slugUpper} - ${titleVal}`.replace(/[/\\?%*:|"<>]/g, "-");
+    const courseFolderId = await getOrCreateFolder(drive, courseFolder, coursesId);
 
-    // C. "[course_slug] - [course_title]" inside "Courses"
-    const slugUpper = String(course_slug).toUpperCase().trim();
-    const titleVal = String(course_title || slugUpper).trim();
-    const courseFolderCleanName = `${slugUpper} - ${titleVal}`.replace(/[/\\?%*:|"<>]/g, "-");
-    const courseFolderId = await getOrCreateFolder(drive, courseFolderCleanName, coursesId);
+    // Persist folder ID for Drive permission syncing (non-blocking)
+    supabase.from("site_config").upsert({
+      key: `${course_slug.trim().toLowerCase()}_gdrive_folder_id`,
+      value: { val: courseFolderId },
+      updated_at: new Date().toISOString()
+    }, { onConflict: "key" }).catch(e =>
+      console.error("[upload-video] site_config upsert failed:", e.message)
+    );
 
-    // Save the course folder ID to site_config for permissions syncing!
-    try {
-      await supabase.from("site_config").upsert({
-        key: `${course_slug.trim().toLowerCase()}_gdrive_folder_id`,
-        value: { val: courseFolderId },
-        updated_at: new Date().toISOString()
-      }, {
-        onConflict: "key"
-      });
-    } catch (dbErr) {
-      console.error("[upload-video] Failed to save folder ID to site_config:", dbErr.message);
-    }
-
-    // D. "Lesson [lesson_no] - [lesson_title]" inside course folder
-    const lNo = String(lesson_no || "1").trim();
+    const lNo   = String(lesson_no || "1").trim();
     const lTitle = String(lesson_title || "Untitled").trim();
-    const lessonFolderCleanName = `Lesson ${lNo} - ${lTitle}`.replace(/[/\\?%*:|"<>]/g, "-");
-    const lessonFolderId = await getOrCreateFolder(drive, lessonFolderCleanName, courseFolderId);
+    const lessonFolder = `Lesson ${lNo} - ${lTitle}`.replace(/[/\\?%*:|"<>]/g, "-");
+    const lessonFolderId = await getOrCreateFolder(drive, lessonFolder, courseFolderId);
 
-    // E. Target folder ("Main Video" or "Media Videos") inside lesson folder
     const targetFolderName = media_type === "main_video" ? "Main Video" : "Media Videos";
-    const targetFolderId = await getOrCreateFolder(drive, targetFolderName, lessonFolderId);
+    const targetFolderId   = await getOrCreateFolder(drive, targetFolderName, lessonFolderId);
 
-    // 2. Upload file to target folder (Keep it restricted/private by default)
-    // Use original file extension from filename; avoid mime-type-derived "x-matroska" etc.
-    const origExt = String(fileName || "").split(".").pop().toLowerCase().trim();
-    const mimeExt = cleanMimeType.split("/")[1]?.replace("x-msvideo", "avi")
-      .replace("x-matroska", "mkv")
-      .replace("quicktime", "mov")
-      .replace("x-ms-wmv", "wmv")
-      .replace("x-flv", "flv")
-      .replace("3gpp", "3gp")
-      .replace("3gpp2", "3g2")
-      .replace("mp2t", "ts")
-      .replace("ogg", "ogv") || "mp4";
-    const ext = origExt || mimeExt;
-    const finalFileName = fileName || `${media_type}_${Date.now()}.${ext}`;
+    // ── Upload the video file ───────────────────────────────────────────────
+    // IMPORTANT: Use bufferToStream() (PassThrough) instead of Readable.from(buffer).
+    // Readable.from(buffer) iterates the Buffer as a Uint8Array, yielding individual
+    // NUMBERS (0-255) in objectMode — not binary chunks — causing the multipart
+    // uploader to produce garbled data → Google Drive "invalid media type" error.
+    // PassThrough.end(buffer) sends the whole buffer as ONE binary chunk. ✓
+
+    const origExt    = String(fileName || "").split(".").pop().toLowerCase().trim();
+    const fallbackExt = MIME_TO_EXT[effectiveMime] || "mp4";
+    const finalExt   = origExt || fallbackExt;
+    const finalFileName = fileName || `${media_type}_${Date.now()}.${finalExt}`;
 
     const fileMetadata = {
       name: finalFileName,
@@ -251,49 +269,47 @@ export default async function handler(req, res) {
       driveFile = await drive.files.create({
         requestBody: fileMetadata,
         media: {
-          mimeType: cleanMimeType,
-          body: Readable.from(buffer)
+          mimeType: effectiveMime,
+          body: bufferToStream(buffer)     // ← THE FIX
         },
         fields: "id, webViewLink, webContentLink",
         supportsAllDrives: true
       });
     } catch (err) {
-      console.warn("[upload-video] Create with supportsAllDrives failed, trying standard create:", err.message);
+      console.warn("[upload-video] Upload with supportsAllDrives failed:", err.message, "| Retrying without...");
       try {
         driveFile = await drive.files.create({
           requestBody: fileMetadata,
           media: {
-            mimeType: cleanMimeType,
-            body: Readable.from(buffer)
+            mimeType: effectiveMime,
+            body: bufferToStream(buffer)   // ← THE FIX (fallback too)
           },
           fields: "id, webViewLink, webContentLink"
         });
       } catch (fallbackErr) {
-        console.error("[upload-video] Standard create failed:", fallbackErr.message);
-        throw fallbackErr;
+        throw new Error(`Upload lên Drive thất bại: ${fallbackErr.message}`);
       }
     }
 
-    const fileId = driveFile.data.id;
+    const fileId = driveFile?.data?.id;
     if (!fileId) {
-      return res.status(500).json({ success: false, error: "Google API không trả về ID file" });
+      return res.status(500).json({ success: false, error: "Google API không trả về ID file sau khi upload" });
     }
 
-    const directUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
-    const webViewLink = driveFile.data.webViewLink || `https://drive.google.com/file/d/${fileId}/view`;
+    console.log(`[upload-video] Success! fileId=${fileId}`);
 
     return res.status(200).json({
       success: true,
       fileId,
-      directUrl,
-      webViewLink
+      directUrl: `https://drive.google.com/uc?export=download&id=${fileId}`,
+      webViewLink: driveFile.data.webViewLink || `https://drive.google.com/file/d/${fileId}/view`
     });
 
   } catch (err) {
-    console.error("[admin-upload-gdrive-video] Unexpected error:", err);
+    console.error("[admin-upload-gdrive-video] Error:", err);
     return res.status(500).json({
       success: false,
-      error: `Lỗi server khi upload video: ${err.message}`,
+      error: `Upload thất bại: ${err.message}`,
       message: err.message
     });
   }
