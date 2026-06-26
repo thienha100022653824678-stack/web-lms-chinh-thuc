@@ -202,14 +202,16 @@ export default async function handler(req, res) {
       const courseFolder = `${slugUpper} - ${titleVal}`.replace(/[/\\?%*:|"<>]/g, "-");
       const courseFolderId = await getOrCreateFolder(drive, courseFolder, coursesId);
 
-      // Persist folder ID for Drive permission syncing (non-blocking)
-      supabase.from("site_config").upsert({
-        key: `${course_slug.trim().toLowerCase()}_gdrive_folder_id`,
-        value: { val: courseFolderId },
-        updated_at: new Date().toISOString()
-      }, { onConflict: "key" }).catch(e =>
-        console.error("[upload-video] site_config upsert failed:", e.message)
-      );
+      // Persist folder ID for Drive permission syncing
+      try {
+        await supabase.from("site_config").upsert({
+          key: `${course_slug.trim().toLowerCase()}_gdrive_folder_id`,
+          value: { val: courseFolderId },
+          updated_at: new Date().toISOString()
+        }, { onConflict: "key" });
+      } catch (e) {
+        console.error("[upload-video] site_config upsert failed:", e.message);
+      }
 
       const lNo   = String(lesson_no || "1").trim();
       const lTitle = String(lesson_title || "Untitled").trim();
@@ -273,14 +275,16 @@ export default async function handler(req, res) {
     const courseFolder = `${slugUpper} - ${titleVal}`.replace(/[/\\?%*:|"<>]/g, "-");
     const courseFolderId = await getOrCreateFolder(drive, courseFolder, coursesId);
 
-    // Persist folder ID for Drive permission syncing (non-blocking)
-    supabase.from("site_config").upsert({
-      key: `${course_slug.trim().toLowerCase()}_gdrive_folder_id`,
-      value: { val: courseFolderId },
-      updated_at: new Date().toISOString()
-    }, { onConflict: "key" }).catch(e =>
-      console.error("[upload-video] site_config upsert failed:", e.message)
-    );
+    // Persist folder ID for Drive permission syncing
+    try {
+      await supabase.from("site_config").upsert({
+        key: `${course_slug.trim().toLowerCase()}_gdrive_folder_id`,
+        value: { val: courseFolderId },
+        updated_at: new Date().toISOString()
+      }, { onConflict: "key" });
+    } catch (e) {
+      console.error("[upload-video] site_config upsert failed:", e.message);
+    }
 
     const lNo   = String(lesson_no || "1").trim();
     const lTitle = String(lesson_title || "Untitled").trim();
