@@ -742,7 +742,7 @@
         }
       }
 
-      clearSelection() {
+      clearSelection(triggerCallback = true) {
         this.selectedSlug = "";
         this.hiddenInput.value = "";
         this.input.value = "";
@@ -750,7 +750,7 @@
         this.query = "";
         this.hideDropdown();
 
-        if (this.onClear) {
+        if (triggerCallback && this.onClear) {
           this.onClear();
         }
       }
@@ -1865,7 +1865,7 @@
       document.getElementById("bulkEnrollEmails").value = "";
       document.getElementById("bulkCsvFileInput").value = "";
       
-      const course = document.getElementById("courseSelect").value || STATE.courses[0] || "";
+      const course = selectedCourseFilter || "";
       
       document.getElementById("bulkPreviewSection").classList.add("hidden");
       document.getElementById("bulkReportSection").classList.add("hidden");
@@ -1903,7 +1903,7 @@
 
     function clearBulkCourseSelection() {
       bulkSelectedCourseSlug = "";
-      if (bulkEnrollCourseAutocomplete) bulkEnrollCourseAutocomplete.clearSelection();
+      if (bulkEnrollCourseAutocomplete) bulkEnrollCourseAutocomplete.clearSelection(false);
       document.getElementById("bulkSelectedCourseDisplay").classList.add("hidden");
       document.getElementById("bulkCourseSearchWrapper").classList.remove("hidden");
       validateBulkActionsState();
