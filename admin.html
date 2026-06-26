@@ -1892,6 +1892,59 @@
       }
     }
 
+    function selectBulkCourseCallback(slug, title) {
+      bulkSelectedCourseSlug = slug;
+      const infoEl = document.getElementById("bulkSelectedCourseInfo");
+      if (infoEl) infoEl.innerHTML = `🥖 ${slug.toUpperCase()} — ${title}`;
+      document.getElementById("bulkSelectedCourseDisplay").classList.remove("hidden");
+      document.getElementById("bulkCourseSearchWrapper").classList.add("hidden");
+      validateBulkActionsState();
+    }
+
+    function clearBulkCourseSelection() {
+      bulkSelectedCourseSlug = "";
+      if (bulkEnrollCourseAutocomplete) bulkEnrollCourseAutocomplete.clearSelection();
+      document.getElementById("bulkSelectedCourseDisplay").classList.add("hidden");
+      document.getElementById("bulkCourseSearchWrapper").classList.remove("hidden");
+      validateBulkActionsState();
+    }
+
+    function validateBulkActionsState() {
+      const hasCourse = !!bulkSelectedCourseSlug;
+      const btnCheck = document.getElementById("btnCheckBulkEmails");
+      const btnSubmit = document.getElementById("btnSubmitBulkEnroll");
+      if (btnCheck) btnCheck.disabled = !hasCourse;
+      if (btnSubmit) {
+        const newCountEl = document.getElementById("previewCountNew");
+        const hasNew = newCountEl && newCountEl.innerText !== "0";
+        btnSubmit.disabled = !hasCourse || !hasNew;
+      }
+    }
+
+    function extractEmailsFromString(str) {
+      const re = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+      return str.match(re) || [];
+    }
+
+    function importBulkEmailsFromFile(input) {
+      const file = input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const content = e.target.result;
+        const emails = extractEmailsFromString(content);
+        if (emails.length === 0) {
+          toast("Không tìm thấy email nào trong tệp tin!", "error");
+          return;
+        }
+        const textarea = document.getElementById("bulkEnrollEmails");
+        textarea.value = emails.join("\n");
+        toast(`Đã tải ${emails.length} email từ tệp ${file.name}`);
+        input.value = "";
+      };
+      reader.readAsText(file);
+    }
+
     async function checkBulkEmails() {
       const courseSlug = bulkSelectedCourseSlug;
       const emailsStr = document.getElementById("bulkEnrollEmails").value;
