@@ -1160,6 +1160,17 @@
       }).join("");
     }
 
+    function resetMainVideoProgress() {
+      const wrapper = document.getElementById("mainVideoUploadProgressWrapper");
+      if (wrapper) wrapper.classList.add("hidden");
+      const progressBar = document.getElementById("mainVideoUploadProgressBar");
+      if (progressBar) progressBar.style.width = "0%";
+      const statusText = document.getElementById("mainVideoUploadStatus");
+      if (statusText) statusText.innerText = "Đang tải video lên Google Drive...";
+      const percentText = document.getElementById("mainVideoUploadPercent");
+      if (percentText) percentText.innerText = "0%";
+    }
+
     // ── Lesson Form Initialization ─────────────────────────────────────────
     function initNewLesson() {
       STATE.isEditMode = false;
@@ -1170,10 +1181,12 @@
 
       document.getElementById("formTitle").innerText = "Thêm Bài Học Mới";
       const badge = document.getElementById("formModeBadge");
+      const courseSelect = document.getElementById("courseSelect");
+      const course = courseSelect ? courseSelect.value : "";
+
       badge.innerText = "TẠO MỚI";
       badge.className = "text-[9px] font-black tracking-wider px-2.5 py-1 rounded-full bg-blue-50 text-blue-600 uppercase";
 
-      const course = document.getElementById("courseSelect").value;
       document.getElementById("fCourse").value = course;
       document.getElementById("fLesson").value = STATE.lessons.length + 1;
       document.getElementById("fTitle").value = "";
@@ -1189,6 +1202,7 @@
       document.getElementById("recipeOpenLink").classList.add("hidden");
       document.getElementById("mainVideoStatus").innerHTML = "";
       document.getElementById("mediaBlocksContainer").innerHTML = "";
+      resetMainVideoProgress();
     }
 
     function loadLessonToEditor(idx) {
@@ -1199,6 +1213,7 @@
       STATE.originalCourse = l.course;
       STATE.originalLesson = l.lesson;
       STATE.recipeFileBase64 = "";
+      STATE.originalMime = ""; // Unused reset placeholder if needed
       STATE.recipeFileName = "";
 
       document.getElementById("formTitle").innerText = `Sửa: ${l.title || "Bài " + l.lesson}`;
@@ -1213,7 +1228,7 @@
       document.getElementById("fDuration").value = l.duration || "";
       document.getElementById("fLevel").value = l.level || "Cơ bản";
       document.getElementById("fStatus").value = l.status || "active";
-       document.getElementById("fThumbnailUrl").value = l.thumbnailUrl || "";
+      document.getElementById("fThumbnailUrl").value = l.thumbnailUrl || "";
       document.getElementById("fVideoUrl").value = l.videoUrl || "";
       
       const recipeVal = l.recipeUrl || "";
@@ -1227,6 +1242,7 @@
       
       document.getElementById("recipeFileInput").value = "";
       document.getElementById("mainVideoStatus").innerHTML = "";
+      resetMainVideoProgress();
 
       const link = document.getElementById("recipeOpenLink");
       if (recipeVal && /^https?:\/\//i.test(recipeVal)) {
