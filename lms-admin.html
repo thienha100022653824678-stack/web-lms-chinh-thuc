@@ -126,11 +126,22 @@
             <!-- Course selector box -->
             <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
               <h3 class="text-xs font-black text-slate-400 uppercase tracking-wider mb-2">1. Khóa học</h3>
-              <div class="flex gap-2 mb-3">
-                <select id="courseSelect" onchange="onCourseChange()" class="flex-grow bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium">
-                  <option value="">-- Chọn khóa học --</option>
-                </select>
-                <button onclick="showNewCourseInput()" class="bg-brandGreen text-white px-3.5 py-2 rounded-xl text-sm font-black hover:bg-brandGreenLight transition">+</button>
+              <div class="flex flex-col gap-2 mb-3 relative" id="lessonsCourseSelectorContainer">
+                <input type="hidden" id="courseSelect" value=""/>
+                <!-- Selected State -->
+                <div id="lessonsSelectedCourseDisplay" class="hidden bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex items-center justify-between">
+                  <div class="text-[11px] font-semibold text-slate-700 truncate mr-2">
+                    <span class="text-slate-400">Đã chọn:</span><br/>
+                    <span id="lessonsSelectedCourseInfo" class="text-brandGreen font-extrabold text-xs"></span>
+                  </div>
+                  <button type="button" onclick="clearLessonsCourseSelection()" class="bg-red-50 hover:bg-red-100 text-red-600 text-[10px] font-bold px-2 py-1 rounded-lg transition shrink-0">✕ Bỏ chọn</button>
+                </div>
+                
+                <!-- Search Input wrapper -->
+                <div id="lessonsCourseSearchWrapper" class="flex gap-1.5 w-full items-center">
+                  <div id="lessonsCourseAutocompleteContainer" class="flex-grow min-w-0"></div>
+                  <button onclick="showNewCourseInput()" class="bg-brandGreen text-white px-3.5 py-2 rounded-xl text-sm font-black hover:bg-brandGreenLight transition shrink-0">+</button>
+                </div>
               </div>
               <div id="newCourseRow" class="hidden flex gap-2">
                 <input id="newCourseInput" type="text" placeholder="slug-khoa-hoc-moi" class="flex-grow border border-slate-200 rounded-xl px-3 py-1.5 text-sm"/>
@@ -788,6 +799,7 @@
     let enrollCourseFilterAutocomplete = null;
     let bulkEnrollCourseAutocomplete = null;
     let modalEnrollCourseAutocomplete = null;
+    let lessonsCourseAutocomplete = null;
     let selectedCourseFilter = "";
 
     // ── Toast messaging ────────────────────────────────────────────────────
@@ -872,12 +884,31 @@
         STATE.courses = d.courses || [];
         STATE.globalConfig = d.config || {};
 
-        // Populate course dropdowns
+        // Populate course dropdowns if select element exists
         const courseSelect = document.getElementById("courseSelect");
-        const courseOptions = STATE.courses.map(c => `<option value="${c}">${c.toUpperCase()}</option>`).join("");
-        courseSelect.innerHTML = `<option value="">-- Chọn khóa học --</option>` + courseOptions;
+        if (courseSelect && courseSelect.tagName === "SELECT") {
+          const courseOptions = STATE.courses.map(c => `<option value="${c}">${c.toUpperCase()}</option>`).join("");
+          courseSelect.innerHTML = `<option value="">-- Chọn khóa học --</option>` + courseOptions;
+        }
 
         // Initialize or update Course Autocompletes
+        if (!lessonsCourseAutocomplete) {
+          lessonsCourseAutocomplete = new CourseAutocomplete({
+            containerId: "lessonsCourseAutocompleteContainer",
+            placeholder: "🔍 Tìm khóa học...",
+            hiddenInputId: "lessonsCourseFilterDummy",
+            showAllOption: false,
+            onSelect: (slug, title) => {
+              selectLessonsCourseCallback(slug, title);
+            },
+            onClear: () => {
+              clearLessonsCourseSelection();
+            }
+          });
+        } else {
+          lessonsCourseAutocomplete.renderDropdown();
+        }
+
         if (!enrollCourseFilterAutocomplete) {
           enrollCourseFilterAutocomplete = new CourseAutocomplete({
             containerId: "enrollCourseAutocompleteContainer",
@@ -930,6 +961,23 @@
       } catch (err) {
         toast("Lỗi kết nối khi tải danh sách khóa học", "error");
       }
+    }
+
+    function selectLessonsCourseCallback(slug, title) {
+      document.getElementById("courseSelect").value = slug;
+      const infoEl = document.getElementById("lessonsSelectedCourseInfo");
+      if (infoEl) infoEl.innerHTML = `🥖 ${slug.toUpperCase()} — ${title}`;
+      document.getElementById("lessonsSelectedCourseDisplay").classList.remove("hidden");
+      document.getElementById("lessonsCourseSearchWrapper").classList.add("hidden");
+      onCourseChange();
+    }
+
+    function clearLessonsCourseSelection() {
+      document.getElementById("courseSelect").value = "";
+      if (lessonsCourseAutocomplete) lessonsCourseAutocomplete.clearSelection(false);
+      document.getElementById("lessonsSelectedCourseDisplay").classList.add("hidden");
+      document.getElementById("lessonsCourseSearchWrapper").classList.remove("hidden");
+      onCourseChange();
     }
 
     // ── Course Selection Changes ───────────────────────────────────────────
@@ -1034,8 +1082,11 @@
           
           // Reload
           await loadCoursesAndMeta();
-          document.getElementById("courseSelect").value = val;
-          onCourseChange();
+          const valTitle = STATE.globalConfig[`${val}_title`] || val.toUpperCase();
+          selectLessonsCourseCallback(val, valTitle);
+          if (lessonsCourseAutocomplete) {
+            lessonsCourseAutocomplete.setSelection(val);
+          }
         } else {
           toast(d.error || "Thêm khóa học thất bại", "error");
         }
@@ -1268,6 +1319,17 @@
      // ── Media Blocks construction ──────────────────────────────────────────
     let blockIdCounter = 0;
     function addMediaBlock(type, titleVal = "", urlVal = "") {
+      // Auto-generate title if empty
+      if (!titleVal) {
+        const existingBlocks = Array.from(document.querySelectorAll("[data-media-block]"));
+        const typedCount = existingBlocks.filter(block => block.getAttribute("data-media-type") === type).length;
+        if (type === "video") {
+          titleVal = `Video ${typedCount + 1}`;
+        } else {
+          titleVal = `Ảnh ${typedCount + 1}`;
+        }
+      }
+
       const id = `mb_${++blockIdCounter}`;
       const color = type === "video" ? "bg-blue-50 text-blue-600" : "bg-emerald-50 text-emerald-600";
       const label = type === "video" ? "Video (GDrive)" : "Ảnh";
@@ -1559,9 +1621,12 @@
         return null;
       }
 
-      const course = document.getElementById("fCourse").value;
-      const lesson = document.getElementById("fLesson").value;
-      const title = document.getElementById("fTitle").value.trim() || file.name;
+      const courseEl = document.getElementById("fCourse");
+      const lessonEl = document.getElementById("fLesson");
+      const titleEl = document.getElementById("fTitle");
+      const course = courseEl ? courseEl.value : "";
+      const lesson = lessonEl ? lessonEl.value : "";
+      const title = (titleEl && titleEl.value.trim()) || file.name;
 
       showLoader("Đang tải ảnh lên Google Drive...");
       return new Promise((resolve) => {
@@ -2312,6 +2377,69 @@
       STATE.adminEmail = "";
       location.reload();
     }
+
+    // Paste image from clipboard to auto-upload feature
+    document.addEventListener("paste", async (e) => {
+      const activeEl = document.activeElement;
+      if (!activeEl || activeEl.tagName !== "INPUT" || activeEl.type !== "text") {
+        return;
+      }
+
+      // Check if this input is intended for image URLs
+      const id = activeEl.id || "";
+      const isImageInput = id === "metaHeroImage" || 
+                           id === "fThumbnailUrl" || 
+                           activeEl.hasAttribute("data-media-url") ||
+                           activeEl.placeholder.toLowerCase().includes("ảnh") ||
+                           activeEl.placeholder.toLowerCase().includes("thumbnail") ||
+                           activeEl.placeholder.toLowerCase().includes("banner") ||
+                           activeEl.placeholder.toLowerCase().includes("url");
+
+      if (!isImageInput) {
+        return;
+      }
+
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      let imageFile = null;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf("image") !== -1) {
+          imageFile = items[i].getAsFile();
+          break;
+        }
+      }
+
+      if (!imageFile) {
+        return; // Clipboard does not contain an image file. Standard paste is allowed.
+      }
+
+      // Prevent standard paste action
+      e.preventDefault();
+
+      const originalVal = activeEl.value;
+      activeEl.value = "Đang tải ảnh...";
+      activeEl.disabled = true;
+
+      try {
+        const directUrl = await uploadImageFile(imageFile);
+        if (directUrl) {
+          activeEl.value = directUrl;
+          // Trigger input and change events so frameworks/bindings know about the update
+          activeEl.dispatchEvent(new Event("input", { bubbles: true }));
+          activeEl.dispatchEvent(new Event("change", { bubbles: true }));
+        } else {
+          activeEl.value = originalVal;
+        }
+      } catch (err) {
+        console.error("Paste image upload failed:", err);
+        toast("Upload ảnh từ clipboard thất bại", "error");
+        activeEl.value = originalVal;
+      } finally {
+        activeEl.disabled = false;
+        activeEl.focus();
+      }
+    });
 
     window.onload = () => {
       initGoogleSignIn();
