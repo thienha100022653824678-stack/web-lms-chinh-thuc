@@ -1856,20 +1856,27 @@
         initXhr.setRequestHeader("X-Upload-Content-Length", file.size);
 
         initXhr.onload = function() {
+          console.log(`[Google Drive] Session Init Response status: ${initXhr.status}`);
           if (initXhr.status === 200 || initXhr.status === 201) {
             const sessionUrl = initXhr.getResponseHeader("Location");
             if (!sessionUrl) {
-              toast("Lỗi khởi tạo phiên upload: Không tìm thấy Session URL", "error");
+              console.error("[Google Drive] Session URL 'Location' header was missing or restricted under CORS.");
+              toast("Lỗi khởi tạo phiên upload: Không tìm thấy Session URL. Hãy kiểm tra Console.", "error");
               if (wrapper) wrapper.classList.add("hidden");
               resetInput();
               return;
             }
 
+            console.log(`[Google Drive] Session URL acquired: ${sessionUrl}`);
             if (statusText) statusText.innerText = "Đang tải video trực tiếp lên Drive...";
 
             // Step 3: PUT the file binary data directly to Google Drive sessionUrl
             const putXhr = new XMLHttpRequest();
             putXhr.open("PUT", sessionUrl, true);
+            
+            // Set required headers for resumable upload PUT request
+            putXhr.setRequestHeader("Content-Type", file.type || "video/mp4");
+            putXhr.setRequestHeader("Content-Range", `bytes 0-${file.size - 1}/${file.size}`);
 
             // Track upload progress
             putXhr.upload.onprogress = function(e) {
@@ -1882,6 +1889,7 @@
             };
 
             putXhr.onload = function() {
+              console.log(`[Google Drive] PUT request completed. Status: ${putXhr.status}`);
               if (putXhr.status === 200 || putXhr.status === 201) {
                 let driveFileData;
                 try {
@@ -1892,6 +1900,7 @@
 
                 const fileId = driveFileData.id;
                 if (!fileId) {
+                  console.error("[Google Drive] No file ID returned in response:", putXhr.responseText);
                   toast("Lỗi: Không nhận được ID file từ Google Drive.", "error");
                   if (statusText) statusText.innerText = "Lỗi nhận file ID";
                   resetInput();
@@ -1924,6 +1933,7 @@
                   }
                 }
               } else {
+                console.error(`[Google Drive] PUT request failed. Status: ${putXhr.status}, Response: ${putXhr.responseText}`);
                 toast(`Tải video thất bại (PUT: ${putXhr.status})`, "error");
                 if (statusText) statusText.innerText = `Lỗi upload: code ${putXhr.status}`;
               }
@@ -1931,7 +1941,8 @@
             };
 
             putXhr.onerror = function() {
-              toast("Lỗi kết nối khi tải video trực tiếp lên Drive.", "error");
+              console.error("[Google Drive] PUT request encountered a network/CORS error.");
+              toast("Lỗi kết nối khi tải video trực tiếp lên Drive. Kiểm tra F12 console.", "error");
               if (statusText) statusText.innerText = "Lỗi kết nối mạng (PUT)";
               resetInput();
             };
@@ -1940,6 +1951,7 @@
             putXhr.send(file);
 
           } else {
+            console.error(`[Google Drive] Session Init failed. Status: ${initXhr.status}, Response: ${initXhr.responseText}`);
             toast(`Khởi tạo upload thất bại: code ${initXhr.status}`, "error");
             if (statusText) statusText.innerText = `Lỗi khởi tạo: code ${initXhr.status}`;
             resetInput();
@@ -1947,7 +1959,8 @@
         };
 
         initXhr.onerror = function() {
-          toast("Lỗi kết nối khi khởi tạo upload với Google Drive.", "error");
+          console.error("[Google Drive] Session Init encountered a network/CORS error.");
+          toast("Lỗi kết nối khi khởi tạo upload với Google Drive. Kiểm tra F12 console.", "error");
           if (statusText) statusText.innerText = "Lỗi kết nối mạng (POST)";
           resetInput();
         };
