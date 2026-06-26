@@ -176,6 +176,36 @@
   </style>
 </head>
 <body class="min-h-screen flex flex-col selection:bg-brandOrange selection:text-white">
+  <!-- Diagnostic Banner for debugging user-agent and block logic -->
+  <div id="diag-banner" style="display:none; background:#000; color:#0f0; padding:12px; font-family:monospace; font-size:12px; position:fixed; top:0; left:0; width:100%; z-index:999999; text-align:left; word-break:break-all; border-bottom:2px solid #0f0;">
+    <strong>DIAGNOSTICS (?debug=1):</strong><br>
+    UA: <span id="diag-ua">Loading...</span><br>
+    vendor: <span id="diag-vendor">Loading...</span><br>
+    window.coccoc: <span id="diag-wcc">Loading...</span><br>
+    isCocCocBrowser(): <span id="diag-isc">Loading...</span><br>
+    window.webkit: <span id="diag-wk">Loading...</span>
+  </div>
+  <script>
+    (function() {
+      if (window.location.search.indexOf('debug=1') !== -1) {
+        var banner = document.getElementById('diag-banner');
+        if (banner) {
+          banner.style.display = 'block';
+          document.getElementById('diag-ua').innerText = navigator.userAgent;
+          document.getElementById('diag-vendor').innerText = navigator.vendor;
+          document.getElementById('diag-wcc').innerText = typeof window.coccoc !== 'undefined' ? 'Defined' : 'Undefined';
+          document.getElementById('diag-wk').innerText = typeof window.webkit !== 'undefined' ? 'Defined' : 'Undefined';
+          setTimeout(function() {
+            if (typeof isCocCocBrowser === 'function') {
+              document.getElementById('diag-isc').innerText = isCocCocBrowser() ? 'true' : 'false';
+            } else {
+              document.getElementById('diag-isc').innerText = 'isCocCocBrowser function not defined yet';
+            }
+          }, 500);
+        }
+      }
+    })();
+  </script>
 
   <!-- HOME VIEW CONTAINER -->
   <div id="homeView" class="flex-grow flex flex-col">
