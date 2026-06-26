@@ -1,0 +1,1666 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Culinary LMS - Quản Trị Hệ Thống</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://accounts.google.com/gsi/client" async></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brandCream: '#FCF8F2',
+            brandGreen: '#2A4B2A',
+            brandGreenLight: '#3E6B3E',
+            brandBrown: '#2D1914',
+            brandOrange: '#D96B27',
+            brandGray: '#F5EFEB',
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      font-family: 'Be Vietnam Pro', sans-serif;
+      background: #f8fafc;
+    }
+    input, textarea, select {
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input:focus, textarea:focus, select:focus {
+      border-color: #2A4B2A;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 99px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <!-- Spinner Overlay -->
+  <div id="loader" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[9999] flex items-center justify-center hidden">
+    <div class="bg-white rounded-2xl p-6 shadow-xl text-center flex flex-col items-center gap-3">
+      <div class="w-10 h-10 border-4 border-brandGreen border-t-transparent rounded-full animate-spin"></div>
+      <p id="loaderMsg" class="text-sm font-bold text-slate-700">Đang xử lý...</p>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-[9999] flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- Main Login Screen -->
+  <div id="loginScreen" class="flex-grow flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-8 sm:p-10 shadow-lg border border-slate-100 max-w-md w-full text-center">
+      <span class="text-5xl">🍳</span>
+      <h1 class="text-2xl font-black text-brandGreen mt-4 mb-2">Culinary LMS Admin</h1>
+      <p class="text-sm text-slate-500 mb-8 leading-relaxed">
+        Hệ thống quản trị bài giảng, học viên và phân quyền khóa học. Đăng nhập bằng Gmail Admin để tiếp tục.
+      </p>
+      <div id="googleSignInBtn" class="flex justify-center mb-4"></div>
+      <p id="loginStatusMsg" class="text-xs font-bold text-red-500 min-h-[16px]"></p>
+    </div>
+  </div>
+
+  <!-- App Shell (Hidden by default) -->
+  <div id="appShell" class="hidden flex-grow flex flex-col min-h-screen">
+    
+    <!-- Top Header -->
+    <header class="bg-[#1e293b] text-white h-16 flex items-center justify-between px-4 sm:px-6 shadow-md shrink-0">
+      <div class="flex items-center gap-2">
+        <span class="text-2xl">🍳</span>
+        <span class="font-extrabold tracking-tight text-base sm:text-lg">Culinary <span class="text-yellow-500">CMS</span></span>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <span id="hdrEmail" class="text-xs text-slate-400 font-medium hidden md:inline">admin@gmail.com</span>
+        <span id="driveBadge" class="text-[10px] font-bold px-2 py-1 rounded-full bg-slate-700 text-slate-400">Drive: Chưa kết nối</span>
+        <button onclick="connectDrive()" class="bg-[#1967d2] hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition">
+          🔗 Kết nối Drive
+        </button>
+        <button onclick="logoutAdmin()" class="bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition">
+          Đăng xuất
+        </button>
+      </div>
+    </header>
+
+    <!-- Shell Container -->
+    <div class="flex-grow flex flex-col lg:flex-row min-h-0">
+      
+      <!-- Side Tab Navigation -->
+      <aside class="bg-white border-b lg:border-b-0 lg:border-r border-slate-200 lg:w-60 flex shrink-0 flex-row lg:flex-col lg:py-4 overflow-x-auto lg:overflow-x-visible">
+        <button onclick="switchTab('lessons')" id="tabBtn-lessons" class="tab-btn flex-grow lg:flex-none flex items-center justify-center lg:justify-start gap-2.5 py-4 lg:py-3 px-5 text-sm font-bold border-b-2 lg:border-b-0 lg:border-l-4 border-transparent text-slate-500 hover:bg-slate-50 transition">
+          📖 Bài Học
+        </button>
+        <button onclick="switchTab('students')" id="tabBtn-students" class="tab-btn flex-grow lg:flex-none flex items-center justify-center lg:justify-start gap-2.5 py-4 lg:py-3 px-5 text-sm font-bold border-b-2 lg:border-b-0 lg:border-l-4 border-transparent text-slate-500 hover:bg-slate-50 transition">
+          👥 Học Viên
+        </button>
+        <button onclick="switchTab('enrollments')" id="tabBtn-enrollments" class="tab-btn flex-grow lg:flex-none flex items-center justify-center lg:justify-start gap-2.5 py-4 lg:py-3 px-5 text-sm font-bold border-b-2 lg:border-b-0 lg:border-l-4 border-transparent text-slate-500 hover:bg-slate-50 transition">
+          🔑 Phân Quyền
+        </button>
+      </aside>
+
+      <!-- Main Panel Workspace -->
+      <div class="flex-grow flex flex-col min-h-0 overflow-y-auto p-4 sm:p-6">
+        
+        <!-- ── TAB: LESSONS ── -->
+        <div id="tabContent-lessons" class="tab-content hidden flex-grow grid lg:grid-cols-[300px_1fr] gap-6">
+          <!-- Left side: Course selection & Lesson list -->
+          <div class="flex flex-col gap-4">
+            <!-- Course selector box -->
+            <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+              <h3 class="text-xs font-black text-slate-400 uppercase tracking-wider mb-2">1. Khóa học</h3>
+              <div class="flex gap-2 mb-3">
+                <select id="courseSelect" onchange="onCourseChange()" class="flex-grow bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium">
+                  <option value="">-- Chọn khóa học --</option>
+                </select>
+                <button onclick="showNewCourseInput()" class="bg-brandGreen text-white px-3.5 py-2 rounded-xl text-sm font-black hover:bg-brandGreenLight transition">+</button>
+              </div>
+              <div id="newCourseRow" class="hidden flex gap-2">
+                <input id="newCourseInput" type="text" placeholder="slug-khoa-hoc-moi" class="flex-grow border border-slate-200 rounded-xl px-3 py-1.5 text-sm"/>
+                <button onclick="addCourseSlug()" class="bg-emerald-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl hover:bg-emerald-700 transition">Thêm</button>
+              </div>
+            </div>
+
+            <!-- Course Meta configuration box -->
+            <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+              <h3 class="text-xs font-black text-slate-400 uppercase tracking-wider mb-3">Cấu hình khóa học</h3>
+              <div class="space-y-3">
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-500 mb-1">Tiêu đề khóa học</label>
+                  <input id="metaTitle" type="text" placeholder="Khóa học Bánh Mì..." class="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium"/>
+                </div>
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-500 mb-1">Phụ đề khóa học</label>
+                  <input id="metaSubtitle" type="text" placeholder="Học làm bánh chuyên nghiệp..." class="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium"/>
+                </div>
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-500 mb-1">Ảnh banner (Hero URL)</label>
+                  <input id="metaHeroImage" type="text" placeholder="https://..." class="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium"/>
+                </div>
+                <button onclick="saveCourseMeta()" class="w-full bg-brandGreen hover:bg-brandGreenLight text-white text-xs font-bold py-2 rounded-xl transition">Lưu cấu hình</button>
+              </div>
+            </div>
+
+            <!-- Lesson List column -->
+            <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex-grow flex flex-col min-h-[300px]">
+              <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
+                <h3 class="text-xs font-black text-slate-400 uppercase tracking-wider">2. Danh sách bài học</h3>
+                <button onclick="initNewLesson()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold px-2 py-1 rounded-lg transition">+ Thêm mới</button>
+              </div>
+              <div id="lessonList" class="custom-scrollbar overflow-y-auto flex-grow max-h-[400px] lg:max-h-none space-y-1">
+                <!-- Rendered dynamically -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Right side: Lesson editor form -->
+          <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+            <div class="bg-slate-50 px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+              <h3 id="formTitle" class="font-extrabold text-slate-800 text-sm">Thêm Bài Học Mới</h3>
+              <span id="formModeBadge" class="text-[9px] font-black tracking-wider px-2.5 py-1 rounded-full bg-blue-50 text-blue-600 uppercase">TẠO MỚI</span>
+            </div>
+            
+            <div class="p-5 flex-grow space-y-4">
+              <!-- Grid Fields -->
+              <div class="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-xs font-bold text-slate-500 mb-1">Slug khóa học</label>
+                  <input id="fCourse" type="text" readonly class="w-full bg-slate-100 text-slate-500 border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold"/>
+                </div>
+                <div>
+                  <label class="block text-xs font-bold text-slate-500 mb-1">Bài số (Lesson no)</label>
+                  <input id="fLesson" type="number" min="1" placeholder="1" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"/>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-500 mb-1">Tiêu đề bài học</label>
+                <input id="fTitle" type="text" placeholder="Ví dụ: Tổng quan lý thuyết nhào bột" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"/>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-500 mb-1">Mô tả ngắn</label>
+                <textarea id="fDescription" rows="2" placeholder="Tóm tắt nội dung bài học..." class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"></textarea>
+              </div>
+
+              <div class="grid sm:grid-cols-3 gap-4">
+                <div>
+                  <label class="block text-xs font-bold text-slate-500 mb-1">Thời lượng (ví dụ: 12:45)</label>
+                  <input id="fDuration" type="text" placeholder="12:45" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"/>
+                </div>
+                <div>
+                  <label class="block text-xs font-bold text-slate-500 mb-1">Cấp độ</label>
+                  <select id="fLevel" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm">
+                    <option>Cơ bản</option>
+                    <option>Trung cấp</option>
+                    <option>Nâng cao</option>
+                    <option>Chuyên nghiệp</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-bold text-slate-500 mb-1">Trạng thái</label>
+                  <select id="fStatus" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm">
+                    <option value="active">Hiển thị (active)</option>
+                    <option value="hidden">Ẩn (hidden)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-500 mb-1">Ảnh đại diện (Thumbnail URL)</label>
+                <div class="flex gap-2">
+                  <input id="fThumbnailUrl" type="text" placeholder="https://..." class="flex-grow border border-slate-200 rounded-xl px-3 py-2 text-sm"/>
+                  <label class="bg-brandOrange text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-orange-600 transition flex items-center justify-center shrink-0 cursor-pointer">
+                    Tải ảnh
+                    <input type="file" accept="image/*" class="hidden" onchange="handleThumbnailUpload(this)" />
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-500 mb-1">Video bài giảng chính (Bunny / YouTube)</label>
+                <div class="flex gap-2">
+                  <input id="fVideoUrl" type="text" placeholder="Dán URL phát video hoặc iframe Bunny/YouTube..." class="flex-grow border border-slate-200 rounded-xl px-3 py-2 text-sm"/>
+                  <button onclick="testMainVideoUrl()" class="bg-slate-200 hover:bg-slate-350 text-slate-700 text-xs font-bold px-4 py-2 rounded-xl transition shrink-0">Kiểm tra</button>
+                </div>
+                <div id="mainVideoStatus" class="mt-1"></div>
+              </div>
+
+              <!-- RECIPE -->
+              <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                <label class="block text-xs font-black text-slate-500">📄 CÔNG THỨC CHI TIẾT (GOOGLE DOCS)</label>
+                <textarea id="recipeText" rows="3" placeholder="Viết hoặc dán công thức bằng văn bản vào đây..." class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"></textarea>
+                <div class="flex items-center gap-2 text-xs text-slate-500">
+                  <span>Hoặc tải tệp .txt:</span>
+                  <input type="file" id="recipeFileInput" accept=".txt" onchange="handleRecipeFile(this)" class="text-xs"/>
+                </div>
+                <button onclick="createGoogleDoc()" class="bg-brandGreen hover:bg-brandGreenLight text-white text-xs font-bold px-4 py-2 rounded-xl transition">📝 Tạo Google Docs</button>
+                
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-500 mb-1">Đường dẫn Google Docs (recipeUrl)</label>
+                  <div class="flex gap-2">
+                    <input id="fRecipeUrl" type="text" placeholder="https://docs.google.com/document/..." class="flex-grow border border-slate-200 rounded-xl px-3 py-2 text-xs"/>
+                    <a id="recipeOpenLink" href="#" target="_blank" class="hidden bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold px-4 py-2 rounded-xl transition flex items-center">Mở</a>
+                  </div>
+                </div>
+              </div>
+
+              <!-- MEDIA PHỤ -->
+              <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                <div class="flex items-center justify-between">
+                  <label class="block text-xs font-black text-slate-500">🌾 MEDIA PHỤ BỔ SUNG (mediaUrls)</label>
+                  <button onclick="previewMediaUrls()" class="text-xs text-blue-600 font-bold hover:underline">Xem dạng văn bản</button>
+                </div>
+                <div id="mediaBlocksContainer" class="space-y-3">
+                  <!-- Dynamic media blocks populated here -->
+                </div>
+                <div class="flex flex-wrap gap-2 pt-2 border-t border-slate-200">
+                  <button onclick="addMediaBlock('video')" class="bg-blue-50 text-blue-600 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-blue-100 transition">+ Video Bunny</button>
+                  <button onclick="addMediaBlock('youtube')" class="bg-red-50 text-red-600 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-red-100 transition">+ YouTube</button>
+                  <button onclick="addMediaBlock('image')" class="bg-emerald-50 text-emerald-600 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-emerald-100 transition">+ Thêm Ảnh</button>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Footer Actions -->
+            <div class="bg-slate-50 px-5 py-4 border-t border-slate-200 flex justify-end gap-3 shrink-0">
+              <button onclick="initNewLesson()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 text-sm font-bold px-5 py-2.5 rounded-xl transition">Đặt lại</button>
+              <button onclick="saveLesson()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition shadow-md shadow-emerald-600/10">💾 Lưu bài học</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── TAB: STUDENTS ── -->
+        <div id="tabContent-students" class="tab-content hidden flex-grow bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 class="text-lg font-extrabold text-slate-800">Quản Lý Danh Sách Học Viên</h2>
+              <p class="text-xs text-slate-500">Danh sách tài khoản học viên đăng ký trên hệ thống.</p>
+            </div>
+            <button onclick="openStudentModal()" class="bg-brandGreen hover:bg-brandGreenLight text-white text-sm font-bold px-4 py-2.5 rounded-xl transition shadow-md shrink-0">+ Thêm học viên</button>
+          </div>
+
+          <!-- Search Bar -->
+          <div class="flex gap-2">
+            <input id="studentSearchInput" type="text" placeholder="Tìm kiếm theo email, họ tên, số điện thoại..." class="flex-grow border border-slate-200 rounded-xl px-4 py-2.5 text-sm"/>
+            <button onclick="searchStudents()" class="bg-slate-800 hover:bg-slate-750 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition">Tìm kiếm</button>
+          </div>
+
+          <!-- Table -->
+          <div class="overflow-x-auto border border-slate-200 rounded-2xl">
+            <table class="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr class="bg-slate-50 border-b border-slate-200 text-slate-500 text-xs font-bold uppercase">
+                  <th class="p-4">Họ Tên</th>
+                  <th class="p-4">Email</th>
+                  <th class="p-4">Số điện thoại</th>
+                  <th class="p-4 text-center">Trạng thái</th>
+                  <th class="p-4">Ghi chú</th>
+                  <th class="p-4">Ngày tạo</th>
+                  <th class="p-4 text-center">Hành động</th>
+                </tr>
+              </thead>
+              <tbody id="studentsTableBody">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ── TAB: ENROLLMENTS ── -->
+        <div id="tabContent-enrollments" class="tab-content hidden flex-grow bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 class="text-lg font-extrabold text-slate-800">Cấp Quyền Học Viên (Enrollments)</h2>
+              <p class="text-xs text-slate-500">Quản lý và kích hoạt quyền truy cập của học viên vào từng lớp học cụ thể.</p>
+            </div>
+            <button onclick="openEnrollModal()" class="bg-brandGreen hover:bg-brandGreenLight text-white text-sm font-bold px-4 py-2.5 rounded-xl transition shadow-md shrink-0">🔑 Cấp quyền mới</button>
+          </div>
+
+          <!-- Search & Filters -->
+          <div class="grid sm:grid-cols-[1fr_200px_100px] gap-2">
+            <input id="enrollSearchInput" type="text" placeholder="Tìm kiếm theo email..." class="border border-slate-200 rounded-xl px-4 py-2.5 text-sm"/>
+            <select id="enrollCourseFilter" class="border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium bg-slate-50">
+              <option value="">-- Tất cả khóa học --</option>
+            </select>
+            <button onclick="searchEnrollments()" class="bg-slate-800 hover:bg-slate-750 text-white text-sm font-bold py-2.5 rounded-xl transition">Lọc</button>
+          </div>
+
+          <!-- Table -->
+          <div class="overflow-x-auto border border-slate-200 rounded-2xl">
+            <table class="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr class="bg-slate-50 border-b border-slate-200 text-slate-500 text-xs font-bold uppercase">
+                  <th class="p-4">Email</th>
+                  <th class="p-4">Khóa Học</th>
+                  <th class="p-4">Họ Tên</th>
+                  <th class="p-4">Số điện thoại</th>
+                  <th class="p-4 text-center">Trạng thái</th>
+                  <th class="p-4">Hết hạn</th>
+                  <th class="p-4">Ngày cấp</th>
+                  <th class="p-4 text-center">Hành động</th>
+                </tr>
+              </thead>
+              <tbody id="enrollmentsTableBody">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MODAL: ADD/EDIT STUDENT ── -->
+  <div id="studentModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[50] flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl p-6 shadow-xl border border-slate-100 max-w-md w-full">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+        <h3 id="studentModalTitle" class="text-base font-extrabold text-slate-800">Thêm Học Viên Mới</h3>
+        <button onclick="closeStudentModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button>
+      </div>
+      <input type="hidden" id="modalStudentId"/>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-500 mb-1">Email học viên *</label>
+          <input id="modalStudentEmail" type="email" placeholder="example@gmail.com" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"/>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-500 mb-1">Họ tên</label>
+          <input id="modalStudentName" type="text" placeholder="Nguyễn Văn A" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"/>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-500 mb-1">Số điện thoại</label>
+          <input id="modalStudentPhone" type="tel" placeholder="0987654321" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"/>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-500 mb-1">Trạng thái</label>
+          <select id="modalStudentStatus" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm">
+            <option value="active">Hoạt động (active)</option>
+            <option value="disabled">Khóa (disabled)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-500 mb-1">Ghi chú admin</label>
+          <textarea id="modalStudentNote" rows="2" placeholder="Ghi chú thêm..." class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"></textarea>
+        </div>
+        <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+          <button onclick="closeStudentModal()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl transition">Hủy</button>
+          <button onclick="saveStudent()" class="bg-brandGreen hover:bg-brandGreenLight text-white text-xs font-bold px-4 py-2.5 rounded-xl transition shadow-md">Lưu học viên</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MODAL: GRANT ENROLLMENT ── -->
+  <div id="enrollModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[50] flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl p-6 shadow-xl border border-slate-100 max-w-md w-full">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+        <h3 class="text-base font-extrabold text-slate-800">Cấp Quyền Truy Cập Khóa Học</h3>
+        <button onclick="closeEnrollModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button>
+      </div>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-500 mb-1">Email học viên *</label>
+          <input id="modalEnrollEmail" type="email" placeholder="example@gmail.com" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"/>
+          <p class="text-[10px] text-slate-400 mt-1">Hệ thống sẽ tự động tạo học viên mới nếu email chưa tồn tại.</p>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-500 mb-1">Khóa học (Course)*</label>
+          <select id="modalEnrollCourse" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium bg-slate-50">
+            <!-- Populated dynamically -->
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-500 mb-1">Hạn dùng (Bỏ trống = Vĩnh viễn)</label>
+          <input id="modalEnrollExpiry" type="datetime-local" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"/>
+        </div>
+        <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+          <button onclick="closeEnrollModal()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl transition">Hủy</button>
+          <button onclick="grantAccessSubmit()" class="bg-brandGreen hover:bg-brandGreenLight text-white text-xs font-bold px-4 py-2.5 rounded-xl transition shadow-md">Cấp quyền học</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="bg-white py-4 border-t border-slate-200 text-center text-xs text-slate-400 shrink-0">
+    Culinary CMS Panel &nbsp;|&nbsp; Version 2026-Supabase
+  </footer>
+
+  <!-- JAVASCRIPT LOGIC -->
+  <script>
+    // Config variables
+    let googleClientId = "";
+    let activeTab = "lessons";
+
+    // Application state
+    const STATE = {
+      adminEmail: "",
+      sessionToken: "",
+      driveAccessToken: "",
+      driveTokenExpiry: 0,
+      driveTokenClient: null,
+      courses: [],
+      globalConfig: {},
+      lessons: [],
+      isEditMode: false,
+      originalCourse: "",
+      originalLesson: "",
+      recipeFileBase64: "",
+      recipeFileName: "",
+      students: [],
+      enrollments: []
+    };
+
+    // ── Toast messaging ────────────────────────────────────────────────────
+    function toast(msg, type = "success") {
+      const container = document.getElementById("toastContainer");
+      const div = document.createElement("div");
+      const bg = type === "success" ? "bg-emerald-600" : type === "error" ? "bg-red-700" : "bg-blue-600";
+      div.className = `${bg} text-white px-4 py-3 rounded-xl shadow-lg text-xs font-bold transition duration-200 transform translate-y-2`;
+      div.innerText = msg;
+      container.appendChild(div);
+      setTimeout(() => {
+        div.remove();
+      }, 4000);
+    }
+
+    // ── Loader Overlay ─────────────────────────────────────────────────────
+    function showLoader(msg = "Đang xử lý...") {
+      document.getElementById("loaderMsg").innerText = msg;
+      document.getElementById("loader").classList.remove("hidden");
+    }
+    function hideLoader() {
+      document.getElementById("loader").classList.add("hidden");
+    }
+
+    // ── Switch Tabs ────────────────────────────────────────────────────────
+    function switchTab(tabId) {
+      activeTab = tabId;
+      document.querySelectorAll(".tab-btn").forEach(btn => {
+        btn.classList.remove("border-brandGreen", "text-brandGreen", "bg-slate-50", "lg:border-l-4");
+        btn.classList.add("border-transparent", "text-slate-500");
+      });
+      document.querySelectorAll(".tab-content").forEach(el => el.classList.add("hidden"));
+
+      const activeBtn = document.getElementById(`tabBtn-${tabId}`);
+      if (activeBtn) {
+        activeBtn.classList.remove("border-transparent", "text-slate-500");
+        activeBtn.classList.add("border-brandGreen", "text-brandGreen", "bg-slate-50", "lg:border-l-4");
+      }
+      
+      const content = document.getElementById(`tabContent-${tabId}`);
+      if (content) {
+        content.classList.remove("hidden");
+        if (tabId === "lessons") {
+          content.classList.add("grid");
+        } else {
+          content.classList.add("block");
+        }
+      }
+
+      // Load specific tab data
+      if (tabId === "students") {
+        loadStudents();
+      } else if (tabId === "enrollments") {
+        loadEnrollments();
+      }
+    }
+
+    // ── Auth Headers ───────────────────────────────────────────────────────
+    function authHeaders() {
+      const headers = { "Content-Type": "application/json" };
+      if (STATE.sessionToken) {
+        headers["Authorization"] = `Bearer ${STATE.sessionToken}`;
+      }
+      return headers;
+    }
+
+    // ── Load Course list ───────────────────────────────────────────────────
+    async function loadCoursesAndMeta() {
+      try {
+        const response = await fetch("/api/lms/admin?endpoint=courses", {
+          method: "GET",
+          headers: authHeaders()
+        });
+        const d = await response.json();
+        
+        if (!response.ok || !d.success) {
+          toast(d.error || "Không thể tải danh sách khóa học", "error");
+          return;
+        }
+
+        STATE.courses = d.courses || [];
+        STATE.globalConfig = d.config || {};
+
+        // Populate course dropdowns
+        const courseSelect = document.getElementById("courseSelect");
+        const modalEnrollCourse = document.getElementById("modalEnrollCourse");
+        const enrollCourseFilter = document.getElementById("enrollCourseFilter");
+
+        const courseOptions = STATE.courses.map(c => `<option value="${c}">${c.toUpperCase()}</option>`).join("");
+
+        courseSelect.innerHTML = `<option value="">-- Chọn khóa học --</option>` + courseOptions;
+        modalEnrollCourse.innerHTML = courseOptions;
+        enrollCourseFilter.innerHTML = `<option value="">-- Tất cả khóa học --</option>` + courseOptions;
+
+      } catch (err) {
+        toast("Lỗi kết nối khi tải danh sách khóa học", "error");
+      }
+    }
+
+    // ── Course Selection Changes ───────────────────────────────────────────
+    async function onCourseChange() {
+      const course = document.getElementById("courseSelect").value;
+      if (!course) {
+        document.getElementById("lessonList").innerHTML = "";
+        initNewLesson();
+        return;
+      }
+
+      // Fill configs
+      document.getElementById("metaTitle").value = STATE.globalConfig[`${course}_title`] || "";
+      document.getElementById("metaSubtitle").value = STATE.globalConfig[`${course}_subtitle`] || "";
+      document.getElementById("metaHeroImage").value = STATE.globalConfig[`${course}_heroImage`] || "";
+
+      // Load lessons list
+      await loadLessonsList(course);
+    }
+
+    // ── Save Course Meta Config ────────────────────────────────────────────
+    async function saveCourseMeta() {
+      const course = document.getElementById("courseSelect").value;
+      if (!course) {
+        toast("Vui lòng chọn một khóa học trước", "error");
+        return;
+      }
+
+      const payload = {
+        action: "updateConfig",
+        course,
+        config: {
+          title: document.getElementById("metaTitle").value.trim(),
+          subtitle: document.getElementById("metaSubtitle").value.trim(),
+          heroImage: document.getElementById("metaHeroImage").value.trim()
+        }
+      };
+
+      showLoader("Đang lưu cấu hình...");
+      try {
+        const res = await fetch("/api/lms/admin?endpoint=courses", {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify(payload)
+        });
+        const d = await res.json();
+
+        if (res.ok && d.success) {
+          toast("Lưu cấu hình khóa học thành công!");
+          // Refresh globalConfig
+          STATE.globalConfig[`${course}_title`] = payload.config.title;
+          STATE.globalConfig[`${course}_subtitle`] = payload.config.subtitle;
+          STATE.globalConfig[`${course}_heroImage`] = payload.config.heroImage;
+        } else {
+          toast(d.error || "Lỗi lưu cấu hình", "error");
+        }
+      } catch {
+        toast("Lỗi kết nối khi lưu cấu hình", "error");
+      } finally {
+        hideLoader();
+      }
+    }
+
+    // ── Add New Course Slug ────────────────────────────────────────────────
+    function showNewCourseInput() {
+      const row = document.getElementById("newCourseRow");
+      row.classList.toggle("hidden");
+    }
+
+    async function addCourseSlug() {
+      const val = document.getElementById("newCourseInput").value.trim().toLowerCase();
+      if (!val) {
+        toast("Vui lòng nhập slug khóa học mới", "error");
+        return;
+      }
+      if (!/^[a-z0-9-]+$/.test(val)) {
+        toast("Slug chỉ chứa chữ thường, số và dấu gạch ngang", "error");
+        return;
+      }
+
+      // In this database architecture, creating a course means upserting its configuration or adding a row in the courses table.
+      // Let's call /api/lms/admin-courses with a metadata save to register it.
+      const payload = {
+        action: "updateConfig",
+        course: val,
+        config: { title: val.toUpperCase() }
+      };
+
+      showLoader("Đang thêm lớp học mới...");
+      try {
+        const res = await fetch("/api/lms/admin?endpoint=courses", {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify(payload)
+        });
+        const d = await res.json();
+
+        if (res.ok && d.success) {
+          toast(`Đã thêm lớp ${val.toUpperCase()} thành công!`);
+          document.getElementById("newCourseInput").value = "";
+          document.getElementById("newCourseRow").classList.add("hidden");
+          
+          // Reload
+          await loadCoursesAndMeta();
+          document.getElementById("courseSelect").value = val;
+          onCourseChange();
+        } else {
+          toast(d.error || "Thêm khóa học thất bại", "error");
+        }
+      } catch {
+        toast("Lỗi kết nối khi thêm khóa học", "error");
+      } finally {
+        hideLoader();
+      }
+    }
+
+    // ── Load Lessons List ──────────────────────────────────────────────────
+    async function loadLessonsList(course) {
+      if (!course) return;
+      showLoader("Đang tải danh sách bài học...");
+      try {
+        const res = await fetch(`/api/lms/admin?endpoint=lessons&course=${encodeURIComponent(course)}`, {
+          method: "GET",
+          headers: authHeaders()
+        });
+        const d = await res.json();
+
+        if (res.ok && d.success) {
+          STATE.lessons = d.lessons || [];
+          renderLessonsList();
+          initNewLesson();
+        } else {
+          toast(d.error || "Lỗi tải bài học", "error");
+        }
+      } catch {
+        toast("Lỗi kết nối khi tải danh sách bài học", "error");
+      } finally {
+        hideLoader();
+      }
+    }
+
+    function renderLessonsList() {
+      const listContainer = document.getElementById("lessonList");
+      if (STATE.lessons.length === 0) {
+        listContainer.innerHTML = `<p class="text-xs text-slate-400 text-center py-4">Chưa có bài học nào.</p>`;
+        return;
+      }
+
+      listContainer.innerHTML = STATE.lessons.map((l, idx) => {
+        const isHidden = l.status === "hidden";
+        return `
+          <div onclick="loadLessonToEditor(${idx})" class="lesson-item flex items-center justify-between p-2 rounded-xl border border-transparent hover:bg-slate-50 cursor-pointer transition ${isHidden ? 'opacity-40' : ''}">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-brandGreen/10 text-brandGreen">Bài ${l.lesson}</span>
+              <span class="text-xs font-semibold truncate text-slate-700">${escapeHtml(l.title)}</span>
+            </div>
+            <button onclick="event.stopPropagation(); deleteLesson('${l.course}', ${l.lesson})" class="text-xs text-red-500 hover:text-red-700 font-bold px-2 py-1">Ẩn</button>
+          </div>
+        `;
+      }).join("");
+    }
+
+    // ── Lesson Form Initialization ─────────────────────────────────────────
+    function initNewLesson() {
+      STATE.isEditMode = false;
+      STATE.originalCourse = "";
+      STATE.originalLesson = "";
+      STATE.recipeFileBase64 = "";
+      STATE.recipeFileName = "";
+
+      document.getElementById("formTitle").innerText = "Thêm Bài Học Mới";
+      const badge = document.getElementById("formModeBadge");
+      badge.innerText = "TẠO MỚI";
+      badge.className = "text-[9px] font-black tracking-wider px-2.5 py-1 rounded-full bg-blue-50 text-blue-600 uppercase";
+
+      const course = document.getElementById("courseSelect").value;
+      document.getElementById("fCourse").value = course;
+      document.getElementById("fLesson").value = STATE.lessons.length + 1;
+      document.getElementById("fTitle").value = "";
+      document.getElementById("fDescription").value = "";
+      document.getElementById("fDuration").value = "";
+      document.getElementById("fLevel").value = "Cơ bản";
+      document.getElementById("fStatus").value = "active";
+      document.getElementById("fThumbnailUrl").value = "";
+      document.getElementById("fVideoUrl").value = "";
+      document.getElementById("fRecipeUrl").value = "";
+      document.getElementById("recipeText").value = "";
+      document.getElementById("recipeFileInput").value = "";
+      document.getElementById("recipeOpenLink").classList.add("hidden");
+      document.getElementById("mainVideoStatus").innerHTML = "";
+      document.getElementById("mediaBlocksContainer").innerHTML = "";
+    }
+
+    function loadLessonToEditor(idx) {
+      const l = STATE.lessons[idx];
+      if (!l) return;
+
+      STATE.isEditMode = true;
+      STATE.originalCourse = l.course;
+      STATE.originalLesson = l.lesson;
+      STATE.recipeFileBase64 = "";
+      STATE.recipeFileName = "";
+
+      document.getElementById("formTitle").innerText = `Sửa: ${l.title || "Bài " + l.lesson}`;
+      const badge = document.getElementById("formModeBadge");
+      badge.innerText = "CHỈNH SỬA";
+      badge.className = "text-[9px] font-black tracking-wider px-2.5 py-1 rounded-full bg-orange-50 text-brandOrange uppercase";
+
+      document.getElementById("fCourse").value = l.course;
+      document.getElementById("fLesson").value = l.lesson;
+      document.getElementById("fTitle").value = l.title || "";
+      document.getElementById("fDescription").value = l.description || "";
+      document.getElementById("fDuration").value = l.duration || "";
+      document.getElementById("fLevel").value = l.level || "Cơ bản";
+      document.getElementById("fStatus").value = l.status || "active";
+      document.getElementById("fThumbnailUrl").value = l.thumbnailUrl || "";
+      document.getElementById("fVideoUrl").value = l.videoUrl || "";
+      document.getElementById("fRecipeUrl").value = l.recipeUrl || "";
+      document.getElementById("recipeText").value = "";
+      document.getElementById("recipeFileInput").value = "";
+      document.getElementById("mainVideoStatus").innerHTML = "";
+
+      const link = document.getElementById("recipeOpenLink");
+      if (l.recipeUrl) {
+        link.href = l.recipeUrl;
+        link.classList.remove("hidden");
+      } else {
+        link.classList.add("hidden");
+      }
+
+      // Populate mediaBlocks
+      const container = document.getElementById("mediaBlocksContainer");
+      container.innerHTML = "";
+      if (l.mediaUrls) {
+        l.mediaUrls.split("\n").filter(Boolean).forEach(line => {
+          const firstPipe = line.indexOf("|");
+          const secondPipe = line.indexOf("|", firstPipe + 1);
+          if (firstPipe === -1 || secondPipe === -1) return;
+          const type = line.slice(0, firstPipe).trim();
+          const title = line.slice(firstPipe + 1, secondPipe).trim();
+          const url = line.slice(secondPipe + 1).trim();
+          addMediaBlock(type, title, url);
+        });
+      }
+    }
+
+    // ── Save Lesson (Supabase CRUD) ────────────────────────────────────────
+    async function saveLesson() {
+      const course = document.getElementById("fCourse").value;
+      const lesson = document.getElementById("fLesson").value.trim();
+      const title = document.getElementById("fTitle").value.trim();
+      const description = document.getElementById("fDescription").value.trim();
+      const duration = document.getElementById("fDuration").value.trim();
+      const level = document.getElementById("fLevel").value;
+      const status = document.getElementById("fStatus").value;
+      const thumbnailUrl = document.getElementById("fThumbnailUrl").value.trim();
+      const videoUrl = document.getElementById("fVideoUrl").value.trim();
+      const recipeUrl = document.getElementById("fRecipeUrl").value.trim();
+
+      const mediaUrls = buildMediaUrls();
+
+      if (!course) { toast("Chọn hoặc tạo khóa học trước.", "error"); return; }
+      if (!lesson) { toast("Nhập số bài học.", "error"); return; }
+      if (!title) { toast("Nhập tiêu đề bài học.", "error"); return; }
+
+      const lessonData = { course, lesson, title, description, duration, level, status, thumbnailUrl, videoUrl, recipeUrl, mediaUrls };
+
+      const payload = {
+        action: STATE.isEditMode ? "update" : "create",
+        course,
+        lesson,
+        originalCourse: STATE.isEditMode ? STATE.originalCourse : undefined,
+        originalLesson: STATE.isEditMode ? STATE.originalLesson : undefined,
+        lessonData
+      };
+
+      showLoader("Đang lưu bài học...");
+      try {
+        const res = await fetch("/api/lms/admin?endpoint=lessons", {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify(payload)
+        });
+        const d = await res.json();
+
+        if (res.ok && d.success) {
+          toast(STATE.isEditMode ? "Cập nhật bài học thành công!" : "Tạo bài học thành công!");
+          await loadLessonsList(course);
+        } else {
+          toast(d.error || "Lỗi khi lưu bài học", "error");
+        }
+      } catch {
+        toast("Lỗi kết nối khi lưu bài học", "error");
+      } finally {
+        hideLoader();
+      }
+    }
+
+    // ── Hide/Delete Lesson ─────────────────────────────────────────────────
+    async function deleteLesson(course, lesson) {
+      if (!confirm(`Bạn có chắc chắn muốn ẩn bài học ${lesson} của lớp ${course.toUpperCase()}?`)) return;
+      
+      showLoader("Đang ẩn bài học...");
+      try {
+        const res = await fetch("/api/lms/admin?endpoint=lessons", {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify({ action: "delete", course, lesson })
+        });
+        const d = await res.json();
+
+        if (res.ok && d.success) {
+          toast("Ẩn bài học thành công");
+          await loadLessonsList(course);
+        } else {
+          toast(d.error || "Ẩn bài học thất bại", "error");
+        }
+      } catch {
+        toast("Lỗi kết nối khi ẩn bài học", "error");
+      } finally {
+        hideLoader();
+      }
+    }
+
+    // ── Media Blocks construction ──────────────────────────────────────────
+    let blockIdCounter = 0;
+    function addMediaBlock(type, titleVal = "", urlVal = "") {
+      const id = `mb_${++blockIdCounter}`;
+      const color = type === "video" ? "bg-blue-50 text-blue-600" : type === "youtube" ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600";
+      const label = type === "video" ? "Bunny Stream" : type === "youtube" ? "YouTube" : "Ảnh/Tài liệu";
+
+      const container = document.getElementById("mediaBlocksContainer");
+      const div = document.createElement("div");
+      div.className = "bg-white p-3 rounded-xl border border-slate-200 relative space-y-2";
+      div.id = id;
+      div.setAttribute("data-media-block", "");
+      div.setAttribute("data-media-type", type);
+
+      div.innerHTML = `
+        <div class="flex items-center justify-between">
+          <span class="text-[10px] font-black px-2 py-0.5 rounded ${color}">${label}</span>
+          <button onclick="document.getElementById('${id}').remove()" class="text-xs text-red-500 font-bold hover:underline">Xóa</button>
+        </div>
+        <div class="grid grid-cols-[120px_1fr] gap-2">
+          <input data-media-title type="text" placeholder="Tiêu đề..." value="${escapeHtml(titleVal)}" class="border border-slate-200 rounded-lg px-2.5 py-1 text-xs"/>
+          <div class="flex gap-1">
+            <input data-media-url type="text" placeholder="Dán link hoặc mã nhúng..." value="${escapeHtml(urlVal)}" class="flex-grow border border-slate-200 rounded-lg px-2.5 py-1 text-xs"/>
+            ${type === "image" ? `
+              <label class="bg-brandOrange text-white text-[10px] font-bold px-2 py-1 rounded-lg cursor-pointer hover:bg-orange-600 transition shrink-0 flex items-center justify-center">
+                Tải
+                <input type="file" accept="image/*" class="hidden" onchange="handleImageUploadForBlock('${id}', this)"/>
+              </label>` : ''}
+          </div>
+        </div>
+      `;
+      container.appendChild(div);
+    }
+
+    function buildMediaUrls() {
+      const blocks = Array.from(document.querySelectorAll("[data-media-block]"));
+      return blocks.map(block => {
+        const type = block.getAttribute("data-media-type") || block.dataset.mediaType;
+        const title = String(block.querySelector("[data-media-title]")?.value || "").trim().replace(/[|\n\r]/g, "-");
+        const url = String(block.querySelector("[data-media-url]")?.value || "").trim().replace(/[|\n\r]/g, "");
+        if (!type || !url) return "";
+        return `${type}|${title || "Tài liệu"}|${url}`;
+      }).filter(Boolean).join("\n");
+    }
+
+    function previewMediaUrls() {
+      const built = buildMediaUrls();
+      if (!built) {
+        alert("Chưa có media block nào.");
+        return;
+      }
+      alert("Nội dung mediaUrls:\n\n" + built);
+    }
+
+    // ── Video URLs checking ────────────────────────────────────────────────
+    function parseBunnyUrl(input) {
+      let src = extractIframeSrc(input).replace(/&amp;/g, "&").trim();
+      if (!src) return { ok: false };
+      try {
+        const url = new URL(src);
+        const host = url.hostname.replace(/^www\./, "");
+        if (["player.mediadelivery.net","iframe.mediadelivery.net","video.bunnycdn.com"].includes(host)) {
+          const parts = url.pathname.split("/").filter(Boolean);
+          const mode = parts[0], libraryId = parts[1], videoId = parts[2];
+          if ((mode === "embed" || mode === "play") && libraryId && videoId) {
+            return { ok: true, url: `https://iframe.mediadelivery.net/embed/${libraryId}/${videoId}`, libraryId, videoId };
+          }
+        }
+      } catch {}
+      const m = src.match(/(?:player|iframe)\.mediadelivery\.net\/(?:embed|play)\/([^/]+)\/([^/?#\s]+)/);
+      if (m) return { ok: true, url: `https://iframe.mediadelivery.net/embed/${m[1]}/${m[2]}`, libraryId: m[1], videoId: m[2] };
+      return { ok: false };
+    }
+
+    function parseYouTubeUrl(input) {
+      let text = extractIframeSrc(input).replace(/&amp;/g, "&").trim();
+      const extractId = (u) => {
+        try {
+          const parsed = new URL(u);
+          const host = parsed.hostname.replace(/^www\./, "");
+          if (host === "youtu.be") { const id = parsed.pathname.split("/").filter(Boolean)[0]; if (id) return id; }
+          if (["youtube.com","m.youtube.com","youtube-nocookie.com"].includes(host)) {
+            if (parsed.searchParams.get("v")) return parsed.searchParams.get("v");
+            const parts = parsed.pathname.split("/").filter(Boolean);
+            if (["embed","shorts","live"].includes(parts[0]) && parts[1]) return parts[1];
+          }
+        } catch {}
+        return "";
+      };
+      let videoId = extractId(text);
+      if (!videoId) {
+        const m = text.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+        if (m) videoId = m[1];
+      }
+      if (videoId) return { ok: true, url: `https://www.youtube.com/watch?v=${videoId}`, videoId };
+      return { ok: false };
+    }
+
+    function extractIframeSrc(input) {
+      const text = String(input || "").trim();
+      const m = text.match(/<iframe[^>]+src=["']([^"']+)["']/i);
+      return m ? m[1].trim() : text;
+    }
+
+    function testMainVideoUrl() {
+      const val = document.getElementById("fVideoUrl").value.trim();
+      const statusEl = document.getElementById("mainVideoStatus");
+      if (!val) { statusEl.innerHTML = ""; return; }
+
+      const bunny = parseBunnyUrl(val);
+      if (bunny.ok) {
+        document.getElementById("fVideoUrl").value = bunny.url;
+        statusEl.innerHTML = `<span class="text-xs text-emerald-600 font-bold">✓ Bunny Video hợp lệ (Library: ${bunny.libraryId}, Video: ${bunny.videoId})</span>`;
+        return;
+      }
+      const yt = parseYouTubeUrl(val);
+      if (yt.ok) {
+        document.getElementById("fVideoUrl").value = yt.url;
+        statusEl.innerHTML = `<span class="text-xs text-emerald-600 font-bold">✓ YouTube Video hợp lệ (ID: ${yt.videoId})</span>`;
+        return;
+      }
+      statusEl.innerHTML = `<span class="text-xs text-red-500 font-bold">⚠ Không nhận diện được cấu trúc Bunny Stream hoặc YouTube.</span>`;
+    }
+
+    // ── Drive connection & Upload functions ────────────────────────────────
+    function connectDrive() {
+      if (!googleClientId) {
+        toast("Chưa tải được cấu hình Google Client ID", "error");
+        return;
+      }
+      if (!STATE.driveTokenClient) {
+        STATE.driveTokenClient = google.accounts.oauth2.initTokenClient({
+          client_id: googleClientId,
+          scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/documents',
+          callback: (tokenResponse) => {
+            if (tokenResponse && tokenResponse.access_token) {
+              STATE.driveAccessToken = tokenResponse.access_token;
+              STATE.driveTokenExpiry = Date.now() + tokenResponse.expires_in * 1000;
+              
+              const badge = document.getElementById("driveBadge");
+              badge.className = "text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-950 text-emerald-400";
+              badge.innerText = "Drive: Đã kết nối";
+              
+              toast("Kết nối Google Drive thành công");
+            }
+          }
+        });
+      }
+      STATE.driveTokenClient.requestAccessToken();
+    }
+
+    async function ensureDriveAccess() {
+      if (STATE.driveAccessToken && Date.now() < STATE.driveTokenExpiry) {
+        return STATE.driveAccessToken;
+      }
+      return new Promise((resolve, reject) => {
+        if (!googleClientId) {
+          reject(new Error("Missing client_id"));
+          return;
+        }
+        const client = google.accounts.oauth2.initTokenClient({
+          client_id: googleClientId,
+          scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/documents',
+          callback: (tokenResponse) => {
+            if (tokenResponse && tokenResponse.access_token) {
+              STATE.driveAccessToken = tokenResponse.access_token;
+              STATE.driveTokenExpiry = Date.now() + tokenResponse.expires_in * 1000;
+              
+              const badge = document.getElementById("driveBadge");
+              badge.className = "text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-950 text-emerald-400";
+              badge.innerText = "Drive: Đã kết nối";
+              
+              resolve(tokenResponse.access_token);
+            } else {
+              reject(new Error("Drive OAuth approval rejected"));
+            }
+          }
+        });
+        client.requestAccessToken();
+      });
+    }
+
+    // Recipe Docs upload txt
+    function handleRecipeFile(input) {
+      const file = input.files[0];
+      if (!file) return;
+      STATE.recipeFileName = file.name;
+      const reader = new FileReader();
+      reader.onload = () => {
+        STATE.recipeFileBase64 = reader.result.split(",")[1] || reader.result;
+        toast(`Đã chọn file công thức: ${file.name}`);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    async function createGoogleDoc() {
+      const course = document.getElementById("fCourse").value;
+      const lesson = document.getElementById("fLesson").value;
+      const title = document.getElementById("fTitle").value.trim();
+      const text = document.getElementById("recipeText").value.trim();
+
+      if (!course || !lesson || !title) {
+        toast("Vui lòng nhập slug khóa học, số bài và tiêu đề bài trước", "error");
+        return;
+      }
+      if (!text && !STATE.recipeFileBase64) {
+        toast("Nhập nội dung công thức hoặc chọn file đính kèm .txt", "error");
+        return;
+      }
+
+      let driveToken;
+      try {
+        driveToken = await ensureDriveAccess();
+      } catch {
+        toast("Chưa cấp quyền Google Drive để tạo Docs.", "error");
+        return;
+      }
+
+      showLoader("Đang tạo Google Docs...");
+      try {
+        const body = { course, lesson, title, accessToken: driveToken };
+        if (STATE.recipeFileBase64) {
+          body.fileData = STATE.recipeFileBase64;
+          body.fileName = STATE.recipeFileName;
+        } else {
+          body.text = text;
+        }
+
+        const res = await fetch("/api/lms/admin?endpoint=upload-recipe", {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify(body)
+        });
+        const d = await res.json();
+
+        if (!res.ok || !d.success) {
+          const detail = d.message ? `: ${d.message}` : "";
+          toast((d.error || "Lỗi tạo Google Document") + detail, "error");
+          return;
+        }
+
+        document.getElementById("fRecipeUrl").value = d.recipeUrl;
+        const link = document.getElementById("recipeOpenLink");
+        link.href = d.recipeUrl;
+        link.classList.remove("hidden");
+
+        // Clear files
+        STATE.recipeFileBase64 = "";
+        STATE.recipeFileName = "";
+        document.getElementById("recipeFileInput").value = "";
+
+        if (d.warning) {
+          toast(d.warning, "warning");
+        } else {
+          toast("Tạo Google Docs và đồng bộ bài học thành công!");
+        }
+      } catch {
+        toast("Lỗi kết nối khi tạo Google Docs", "error");
+      } finally {
+        hideLoader();
+      }
+    }
+
+    // Thumbnail uploads
+    async function handleThumbnailUpload(input) {
+      const file = input.files[0];
+      if (!file) return;
+      const url = await uploadImageFile(file);
+      if (url) {
+        document.getElementById("fThumbnailUrl").value = url;
+      }
+    }
+
+    async function handleImageUploadForBlock(blockId, input) {
+      const file = input.files[0];
+      if (!file) return;
+      const url = await uploadImageFile(file);
+      if (url) {
+        const block = document.getElementById(blockId);
+        if (block) {
+          block.querySelector("[data-media-url]").value = url;
+        }
+      }
+    }
+
+    async function uploadImageFile(file) {
+      let driveToken;
+      try {
+        driveToken = await ensureDriveAccess();
+      } catch {
+        toast("Vui lòng cấp quyền Google Drive để tải tệp lên.", "error");
+        return null;
+      }
+
+      const course = document.getElementById("fCourse").value;
+      const lesson = document.getElementById("fLesson").value;
+      const title = document.getElementById("fTitle").value.trim() || file.name;
+
+      showLoader("Đang tải ảnh lên Google Drive...");
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = async () => {
+          try {
+            const res = await fetch("/api/lms/admin?endpoint=upload-image", {
+              method: "POST",
+              headers: authHeaders(),
+              body: JSON.stringify({
+                fileData: reader.result,
+                fileName: file.name,
+                mimeType: file.type,
+                course,
+                lesson,
+                title,
+                accessToken: driveToken
+              })
+            });
+            const d = await res.json();
+
+            if (res.ok && d.success) {
+              if (d.warning) {
+                toast(d.warning, "warning");
+              } else {
+                toast("Tải ảnh lên Drive thành công!");
+              }
+              resolve(d.directUrl);
+            } else {
+              const detail = d.message ? `: ${d.message}` : "";
+              toast((d.error || "Tải ảnh lên Drive thất bại") + detail, "error");
+              resolve(null);
+            }
+          } catch {
+            toast("Lỗi kết nối tải ảnh lên Drive", "error");
+            resolve(null);
+          } finally {
+            hideLoader();
+          }
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // ── TAB: STUDENTS (CRUD) ───────────────────────────────────────────────
+    async function loadStudents(search = "") {
+      showLoader("Đang tải danh sách học viên...");
+      try {
+        const url = `/api/lms/admin?endpoint=students` + (search ? `&search=${encodeURIComponent(search)}` : "");
+        const res = await fetch(url, {
+          method: "GET",
+          headers: authHeaders()
+        });
+        const d = await res.json();
+
+        if (res.ok && d.success) {
+          STATE.students = d.students || [];
+          renderStudentsTable();
+        } else {
+          toast(d.error || "Không thể tải danh sách học viên", "error");
+        }
+      } catch {
+        toast("Lỗi kết nối khi tải danh sách học viên", "error");
+      } finally {
+        hideLoader();
+      }
+    }
+
+    function renderStudentsTable() {
+      const tbody = document.getElementById("studentsTableBody");
+      if (STATE.students.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="p-6 text-center text-slate-400">Không tìm thấy học viên nào.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = STATE.students.map(s => {
+        const isAct = s.status === "active";
+        const dateStr = s.created_at ? new Date(s.created_at).toLocaleDateString("vi-VN") : "N/A";
+        return `
+          <tr class="border-b border-slate-100 hover:bg-slate-50 transition">
+            <td class="p-4 font-bold text-slate-700">${escapeHtml(s.full_name || "")}</td>
+            <td class="p-4 font-semibold text-slate-500">${escapeHtml(s.email)}</td>
+            <td class="p-4 text-xs font-semibold text-slate-500">${escapeHtml(s.phone || "")}</td>
+            <td class="p-4 text-center">
+              <span class="text-[10px] font-black px-2 py-0.5 rounded-full ${isAct ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}">
+                ${s.status || 'active'}
+              </span>
+            </td>
+            <td class="p-4 text-xs text-slate-400 truncate max-w-[150px]" title="${escapeHtml(s.note || '')}">${escapeHtml(s.note || "")}</td>
+            <td class="p-4 text-xs text-slate-400">${dateStr}</td>
+            <td class="p-4 text-center">
+              <div class="flex justify-center gap-2">
+                <button onclick="editStudent('${s.id}')" class="text-xs font-bold text-blue-600 hover:underline">Sửa</button>
+                <button onclick="deleteStudent('${s.id}')" class="text-xs font-bold text-red-500 hover:underline">Xóa</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    function searchStudents() {
+      const val = document.getElementById("studentSearchInput").value.trim();
+      loadStudents(val);
+    }
+
+    function openStudentModal(id = "") {
+      const modal = document.getElementById("studentModal");
+      const title = document.getElementById("studentModalTitle");
+      
+      document.getElementById("modalStudentId").value = id;
+      document.getElementById("modalStudentEmail").value = "";
+      document.getElementById("modalStudentName").value = "";
+      document.getElementById("modalStudentPhone").value = "";
+      document.getElementById("modalStudentStatus").value = "active";
+      document.getElementById("modalStudentNote").value = "";
+
+      if (id) {
+        title.innerText = "Chỉnh Sửa Thông Tin Học Viên";
+        const student = STATE.students.find(s => s.id === id);
+        if (student) {
+          document.getElementById("modalStudentEmail").value = student.email || "";
+          document.getElementById("modalStudentName").value = student.full_name || "";
+          document.getElementById("modalStudentPhone").value = student.phone || "";
+          document.getElementById("modalStudentStatus").value = student.status || "active";
+          document.getElementById("modalStudentNote").value = student.note || "";
+        }
+      } else {
+        title.innerText = "Thêm Học Viên Mới";
+      }
+
+      modal.classList.remove("hidden");
+    }
+
+    function closeStudentModal() {
+      document.getElementById("studentModal").classList.add("hidden");
+    }
+
+    async function saveStudent() {
+      const id = document.getElementById("modalStudentId").value;
+      const email = document.getElementById("modalStudentEmail").value.trim();
+      const name = document.getElementById("modalStudentName").value.trim();
+      const phone = document.getElementById("modalStudentPhone").value.trim();
+      const status = document.getElementById("modalStudentStatus").value;
+      const note = document.getElementById("modalStudentNote").value.trim();
+
+      if (!email) {
+        toast("Vui lòng nhập email học viên", "error");
+        return;
+      }
+
+      const payload = { email, full_name: name, phone, status, note };
+      let method = "POST";
+      
+      if (id) {
+        payload.id = id;
+        method = "PUT";
+      }
+
+      showLoader("Đang lưu học viên...");
+      try {
+        const res = await fetch("/api/lms/admin?endpoint=students", {
+          method,
+          headers: authHeaders(),
+          body: JSON.stringify(payload)
+        });
+        const d = await res.json();
+
+        if (res.ok && d.success) {
+          toast(id ? "Cập nhật học viên thành công!" : "Thêm học viên thành công!");
+          closeStudentModal();
+          // Reload search
+          searchStudents();
+        } else {
+          toast(d.error || "Lỗi lưu học viên", "error");
+        }
+      } catch {
+        toast("Lỗi kết nối khi lưu học viên", "error");
+      } finally {
+        hideLoader();
+      }
+    }
+
+    async function deleteStudent(id) {
+      if (!confirm("Xóa học viên sẽ xóa vĩnh viễn quyền truy cập khóa học và lịch sử học tập của họ. Bạn có chắc chắn?")) return;
+
+      showLoader("Đang xóa học viên...");
+      try {
+        const res = await fetch(`/api/lms/admin?endpoint=students&id=${id}`, {
+          method: "DELETE",
+          headers: authHeaders()
+        });
+        const d = await res.json();
+
+        if (res.ok && d.success) {
+          toast("Đã xóa học viên thành công!");
+          searchStudents();
+        } else {
+          toast(d.error || "Xóa học viên thất bại", "error");
+        }
+      } catch {
+        toast("Lỗi kết nối khi xóa học viên", "error");
+      } finally {
+        hideLoader();
+      }
+    }
+
+
+    // ── TAB: ENROLLMENTS (GRANT/REVOKE) ────────────────────────────────────
+    async function loadEnrollments(course = "", search = "") {
+      showLoader("Đang tải danh sách phân quyền...");
+      try {
+        let url = `/api/lms/admin?endpoint=enrollments&`;
+        if (course) url += `course=${encodeURIComponent(course)}&`;
+        if (search) url += `search=${encodeURIComponent(search)}&`;
+
+        const res = await fetch(url, {
+          method: "GET",
+          headers: authHeaders()
+        });
+        const d = await res.json();
+
+        if (res.ok && d.success) {
+          STATE.enrollments = d.enrollments || [];
+          renderEnrollmentsTable();
+        } else {
+          toast(d.error || "Không thể tải danh sách phân quyền", "error");
+        }
+      } catch {
+        toast("Lỗi kết nối khi tải danh sách phân quyền", "error");
+      } finally {
+        hideLoader();
+      }
+    }
+
+    function renderEnrollmentsTable() {
+      const tbody = document.getElementById("enrollmentsTableBody");
+      if (STATE.enrollments.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="p-6 text-center text-slate-400">Chưa có phân quyền học viên nào thỏa mãn.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = STATE.enrollments.map(e => {
+        const isAct = e.status === "active";
+        const dateStr = e.created_at ? new Date(e.created_at).toLocaleDateString("vi-VN") : "N/A";
+        const expStr = e.expired_at ? new Date(e.expired_at).toLocaleString("vi-VN") : "Vĩnh viễn";
+        const studentName = e.student?.full_name || "N/A";
+        const studentPhone = e.student?.phone || "N/A";
+        
+        return `
+          <tr class="border-b border-slate-100 hover:bg-slate-50 transition">
+            <td class="p-4 font-bold text-slate-700">${escapeHtml(e.email)}</td>
+            <td class="p-4 text-xs font-bold text-brandGreen"><span class="px-2 py-0.5 bg-brandGreen/10 rounded">${escapeHtml(e.course_slug).toUpperCase()}</span></td>
+            <td class="p-4 text-slate-500 font-semibold">${escapeHtml(studentName)}</td>
+            <td class="p-4 text-xs text-slate-500 font-semibold">${escapeHtml(studentPhone)}</td>
+            <td class="p-4 text-center">
+              <select onchange="updateEnrollmentStatus('${e.id}', this.value)" class="bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5 text-xs font-bold ${isAct ? 'text-emerald-600' : 'text-red-500'}">
+                <option value="active" ${isAct ? 'selected' : ''}>Active</option>
+                <option value="inactive" ${!isAct ? 'selected' : ''}>Inactive</option>
+              </select>
+            </td>
+            <td class="p-4 text-xs text-slate-500 font-semibold">${expStr}</td>
+            <td class="p-4 text-xs text-slate-400">${dateStr}</td>
+            <td class="p-4 text-center">
+              <button onclick="revokeAccess('${e.id}')" class="text-xs font-bold text-red-500 hover:underline">Thu hồi</button>
+            </td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    function searchEnrollments() {
+      const course = document.getElementById("enrollCourseFilter").value;
+      const search = document.getElementById("enrollSearchInput").value.trim();
+      loadEnrollments(course, search);
+    }
+
+    function openEnrollModal() {
+      document.getElementById("modalEnrollEmail").value = "";
+      document.getElementById("modalEnrollExpiry").value = "";
+      
+      const course = document.getElementById("courseSelect").value;
+      document.getElementById("modalEnrollCourse").value = course || (STATE.courses[0] || "");
+      
+      document.getElementById("enrollModal").classList.remove("hidden");
+    }
+
+    function closeEnrollModal() {
+      document.getElementById("enrollModal").classList.add("hidden");
+    }
+
+    async function grantAccessSubmit() {
+      const email = document.getElementById("modalEnrollEmail").value.trim();
+      const courseSlug = document.getElementById("modalEnrollCourse").value;
+      const expiryVal = document.getElementById("modalEnrollExpiry").value;
+
+      if (!email || !courseSlug) {
+        toast("Vui lòng điền đầy đủ email và lớp học", "error");
+        return;
+      }
+
+      const payload = {
+        email,
+        courseSlug,
+        expiredAt: expiryVal ? new Date(expiryVal).toISOString() : null
+      };
+
+      showLoader("Đang cấp quyền học...");
+      try {
+        const res = await fetch("/api/lms/admin?endpoint=enrollments", {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify(payload)
+        });
+        const d = await res.json();
+
+        if (res.ok && d.success) {
+          toast(`Đã phân quyền lớp ${courseSlug.toUpperCase()} cho học viên ${email}!`);
+          closeEnrollModal();
+          searchEnrollments();
+        } else {
+          toast(d.error || "Không thể cấp quyền", "error");
+        }
+      } catch {
+        toast("Lỗi kết nối khi cấp quyền", "error");
+      } finally {
+        hideLoader();
+      }
+    }
+
+    async function updateEnrollmentStatus(id, status) {
+      showLoader("Đang cập nhật trạng thái...");
+      try {
+        const res = await fetch("/api/lms/admin?endpoint=enrollments", {
+          method: "PUT",
+          headers: authHeaders(),
+          body: JSON.stringify({ id, status })
+        });
+        const d = await res.json();
+
+        if (res.ok && d.success) {
+          toast("Cập nhật trạng thái thành công!");
+          searchEnrollments();
+        } else {
+          toast(d.error || "Cập nhật thất bại", "error");
+        }
+      } catch {
+        toast("Lỗi kết nối cập nhật phân quyền", "error");
+      } finally {
+        hideLoader();
+      }
+    }
+
+    async function revokeAccess(id) {
+      if (!confirm("Bạn có chắc chắn muốn thu hồi quyền truy cập lớp học này của học viên?")) return;
+
+      showLoader("Đang thu hồi quyền học...");
+      try {
+        const res = await fetch(`/api/lms/admin?endpoint=enrollments&id=${id}`, {
+          method: "DELETE",
+          headers: authHeaders()
+        });
+        const d = await res.json();
+
+        if (res.ok && d.success) {
+          toast("Đã thu hồi quyền học thành công!");
+          searchEnrollments();
+        } else {
+          toast(d.error || "Thu hồi quyền học thất bại", "error");
+        }
+      } catch {
+        toast("Lỗi kết nối khi thu hồi quyền học", "error");
+      } finally {
+        hideLoader();
+      }
+    }
+
+    // ── HTML Escape ────────────────────────────────────────────────────────
+    function escapeHtml(s) {
+      return String(s || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    // ── Admin Authorization (Google Sign-In) ───────────────────────────────
+    async function loadAdminSession(authPayload) {
+      showLoader("Xác thực admin...");
+      try {
+        const res = await fetch("/api/lms/admin?endpoint=auth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(authPayload)
+        });
+        const d = await res.json();
+
+        if (res.ok && d.success) {
+          STATE.sessionToken = d.sessionToken;
+          STATE.adminEmail = d.email;
+
+          document.cookie = `admin_session_token=${encodeURIComponent(d.sessionToken)}; path=/; samesite=lax; max-age=${30 * 24 * 60 * 60}`;
+          
+          document.getElementById("hdrEmail").innerText = d.email;
+          
+          // Show shell, hide login
+          document.getElementById("loginScreen").classList.add("hidden");
+          document.getElementById("appShell").classList.remove("hidden");
+          
+          // Load default tab
+          switchTab("lessons");
+          await loadCoursesAndMeta();
+
+          toast("Chào mừng Admin quay lại!");
+        } else {
+          document.getElementById("loginStatusMsg").innerText = d.error || "Không có quyền quản trị.";
+          logoutAdmin();
+        }
+      } catch (err) {
+        console.error(err);
+        document.getElementById("loginStatusMsg").innerText = "Lỗi kết nối đến máy chủ xác thực.";
+      } finally {
+        hideLoader();
+      }
+    }
+
+    function initGoogleSignIn() {
+      // 1. Check cookies for existing session
+      const getCookie = (name) => {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return decodeURIComponent(parts.pop().split(';').shift());
+        return null;
+      };
+      const savedToken = getCookie("admin_session_token");
+      
+      fetch("/api/lms/portal?endpoint=public-config").then(res => res.json()).then(async config => {
+        googleClientId = config.googleClientId;
+        if (!googleClientId) {
+          document.getElementById("loginStatusMsg").innerHTML = `Lỗi: Chưa thiết lập biến môi trường <b>GOOGLE_CLIENT_ID</b>`;
+          return;
+        }
+
+        if (savedToken) {
+          await loadAdminSession({ sessionToken: savedToken });
+          return;
+        }
+
+        // Render Google Sign-in button
+        google.accounts.id.initialize({
+          client_id: googleClientId,
+          callback: (response) => loadAdminSession({ credential: response.credential })
+        });
+
+        google.accounts.id.renderButton(
+          document.getElementById("googleSignInBtn"),
+          { theme: "outline", size: "large", text: "signin_with", shape: "pill" }
+        );
+      }).catch(err => {
+        console.error(err);
+        document.getElementById("loginStatusMsg").innerText = "Lỗi tải cấu hình Google Client.";
+      });
+    }
+
+    function logoutAdmin() {
+      document.cookie = "admin_session_token=; path=/; max-age=0; samesite=lax";
+      STATE.sessionToken = "";
+      STATE.adminEmail = "";
+      location.reload();
+    }
+
+    window.onload = () => {
+      initGoogleSignIn();
+    };
+  </script>
+</body>
+</html>
