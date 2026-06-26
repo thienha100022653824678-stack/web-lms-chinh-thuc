@@ -121,13 +121,56 @@ export default async function handler(req, res) {
     }
 
     let cleanBase64 = fileData;
-    let cleanMimeType = mimeType || "video/mp4";
+    let cleanMimeType = mimeType || "";
 
     if (fileData.includes(";base64,")) {
       const parts = fileData.split(";base64,");
       const mimeMatch = parts[0].match(/data:([^;]+)/);
       if (mimeMatch) cleanMimeType = mimeMatch[1];
       cleanBase64 = parts[1];
+    }
+
+    // Normalize MIME type: browsers on Windows often report "" or
+    // "application/octet-stream" for video files like .mkv, .avi, .mov.
+    // We map from file extension to avoid Google Drive "invalid media type" error.
+    const VIDEO_MIME_MAP = {
+      "mp4":  "video/mp4",
+      "m4v":  "video/mp4",
+      "mov":  "video/quicktime",
+      "qt":   "video/quicktime",
+      "avi":  "video/x-msvideo",
+      "mkv":  "video/x-matroska",
+      "webm": "video/webm",
+      "wmv":  "video/x-ms-wmv",
+      "flv":  "video/x-flv",
+      "3gp":  "video/3gpp",
+      "3g2":  "video/3gpp2",
+      "mpeg": "video/mpeg",
+      "mpg":  "video/mpeg",
+      "ts":   "video/mp2t",
+      "mts":  "video/mp2t",
+      "m2ts": "video/mp2t",
+      "ogv":  "video/ogg",
+      "vob":  "video/dvd",
+    };
+
+    const isValidVideoMime = cleanMimeType && cleanMimeType.startsWith("video/")
+      && cleanMimeType !== "video/x-generic";
+    const isGenericMime = !cleanMimeType
+      || cleanMimeType === "application/octet-stream"
+      || cleanMimeType === "application/x-www-form-urlencoded"
+      || cleanMimeType === "";
+
+    if (!isValidVideoMime || isGenericMime) {
+      // Try to detect from the file name extension
+      const ext = String(fileName || "").split(".").pop().toLowerCase().trim();
+      if (ext && VIDEO_MIME_MAP[ext]) {
+        cleanMimeType = VIDEO_MIME_MAP[ext];
+        console.log(`[upload-video] Normalized MIME type from extension ".${ext}" → ${cleanMimeType}`);
+      } else {
+        cleanMimeType = "video/mp4"; // safe fallback
+        console.log(`[upload-video] Could not detect MIME from ext "${ext}", defaulting to video/mp4`);
+      }
     }
 
     let buffer;
@@ -145,6 +188,7 @@ export default async function handler(req, res) {
     }
 
     const drive = getDriveClientWithToken(accessToken);
+
 
     // 1. Resolve / Create folders recursively
     // A. "Culinary LMS"
@@ -183,7 +227,18 @@ export default async function handler(req, res) {
     const targetFolderId = await getOrCreateFolder(drive, targetFolderName, lessonFolderId);
 
     // 2. Upload file to target folder (Keep it restricted/private by default)
-    const ext = cleanMimeType.split("/")[1] || "mp4";
+    // Use original file extension from filename; avoid mime-type-derived "x-matroska" etc.
+    const origExt = String(fileName || "").split(".").pop().toLowerCase().trim();
+    const mimeExt = cleanMimeType.split("/")[1]?.replace("x-msvideo", "avi")
+      .replace("x-matroska", "mkv")
+      .replace("quicktime", "mov")
+      .replace("x-ms-wmv", "wmv")
+      .replace("x-flv", "flv")
+      .replace("3gpp", "3gp")
+      .replace("3gpp2", "3g2")
+      .replace("mp2t", "ts")
+      .replace("ogg", "ogv") || "mp4";
+    const ext = origExt || mimeExt;
     const finalFileName = fileName || `${media_type}_${Date.now()}.${ext}`;
 
     const fileMetadata = {
