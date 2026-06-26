@@ -6,6 +6,7 @@ import adminStudentsHandler from "../../utils/lms-handlers/admin-students.js";
 import adminEnrollmentsHandler from "../../utils/lms-handlers/admin-enrollments.js";
 import adminUploadImageHandler from "../../utils/lms-handlers/admin-upload-image.js";
 import adminUploadRecipeHandler from "../../utils/lms-handlers/admin-upload-recipe.js";
+import adminBulkEnrollHandler from "../../utils/lms-handlers/admin-bulk-enroll.js";
 
 export const config = {
   api: {
@@ -41,6 +42,9 @@ export default async function handler(req, res) {
   }
   if (endpoint === "upload-recipe") {
     return adminUploadRecipeHandler(req, res);
+  }
+  if (endpoint === "bulk-enroll") {
+    return adminBulkEnrollHandler(req, res);
   }
 
   return res.status(404).json({ success: false, error: "LMS Admin Endpoint not found" });

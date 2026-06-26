@@ -326,7 +326,10 @@
               <h2 class="text-lg font-extrabold text-slate-800">Cấp Quyền Học Viên (Enrollments)</h2>
               <p class="text-xs text-slate-500">Quản lý và kích hoạt quyền truy cập của học viên vào từng lớp học cụ thể.</p>
             </div>
-            <button onclick="openEnrollModal()" class="bg-brandGreen hover:bg-brandGreenLight text-white text-sm font-bold px-4 py-2.5 rounded-xl transition shadow-md shrink-0">🔑 Cấp quyền mới</button>
+            <div class="flex gap-2 shrink-0">
+              <button onclick="openBulkEnrollModal()" class="bg-brandOrange hover:bg-orange-600 text-white text-sm font-bold px-4 py-2.5 rounded-xl transition shadow-md shadow-brandOrange/10">+ Cấp quyền hàng loạt</button>
+              <button onclick="openEnrollModal()" class="bg-brandGreen hover:bg-brandGreenLight text-white text-sm font-bold px-4 py-2.5 rounded-xl transition shadow-md">🔑 Cấp quyền mới</button>
+            </div>
           </div>
 
           <!-- Search & Filters -->
@@ -431,6 +434,129 @@
           <button onclick="closeEnrollModal()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl transition">Hủy</button>
           <button onclick="grantAccessSubmit()" class="bg-brandGreen hover:bg-brandGreenLight text-white text-xs font-bold px-4 py-2.5 rounded-xl transition shadow-md">Cấp quyền học</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MODAL: BULK ENROLLMENT ── -->
+  <div id="bulkEnrollModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[50] flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl p-6 shadow-xl border border-slate-100 max-w-4xl w-full max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4 shrink-0">
+        <h3 class="text-base font-extrabold text-slate-800">Cấp Quyền Hàng Loạt (Bulk Enrollments)</h3>
+        <button onclick="closeBulkEnrollModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button>
+      </div>
+
+      <div class="flex-grow overflow-y-auto space-y-4 pr-1">
+        <!-- Fields Grid -->
+        <div class="grid sm:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-500 mb-1">Khóa học (Course) *</label>
+            <select id="bulkEnrollCourse" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium bg-slate-50">
+              <!-- Populated dynamically -->
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-500 mb-1">Trạng thái (Status) *</label>
+            <select id="bulkEnrollStatus" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm">
+              <option value="active">Active (Hoạt động)</option>
+              <option value="inactive">Inactive (Tạm khóa)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-500 mb-1">Hạn dùng (Bỏ trống = Vĩnh viễn)</label>
+            <input id="bulkEnrollExpiry" type="datetime-local" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"/>
+          </div>
+        </div>
+
+        <!-- CSV / Excel upload or raw paste -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="block text-xs font-bold text-slate-500">Danh sách email học viên (Mỗi dòng một email) *</label>
+            <label class="bg-blue-50 text-blue-600 hover:bg-blue-100 text-xs font-bold px-3 py-1.5 rounded-xl cursor-pointer transition">
+              📂 Nhập từ tệp CSV/Text
+              <input type="file" id="bulkCsvFileInput" accept=".csv,.txt" onchange="importBulkEmailsFromFile(this)" class="hidden"/>
+            </label>
+          </div>
+          <textarea id="bulkEnrollEmails" rows="6" placeholder="abc@gmail.com&#10;xyz@gmail.com&#10;..." class="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-mono"></textarea>
+          <p class="text-[10px] text-slate-400">Có thể dán trực tiếp danh sách email hoặc tải lên file văn bản/csv (hệ thống sẽ tự động quét và lọc email).</p>
+        </div>
+
+        <!-- Buttons for Action -->
+        <div class="flex gap-2 shrink-0">
+          <button onclick="checkBulkEmails()" class="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition">🔍 Kiểm tra danh sách</button>
+          <button id="btnSubmitBulkEnroll" onclick="submitBulkEnroll()" disabled class="bg-brandGreen hover:bg-brandGreenLight text-white text-xs font-bold px-4 py-2.5 rounded-xl transition shadow-md disabled:opacity-40 disabled:cursor-not-allowed">🚀 Cấp quyền</button>
+        </div>
+
+        <!-- Preview Result Section -->
+        <div id="bulkPreviewSection" class="hidden space-y-2">
+          <h4 class="text-xs font-black text-slate-400 uppercase tracking-wider">Kết quả kiểm tra</h4>
+          <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-xs font-bold">
+            <div class="bg-slate-100 p-2 rounded-xl text-slate-600">
+              <div id="previewCountTotal" class="text-sm font-black">0</div>
+              Tổng số dòng
+            </div>
+            <div class="bg-emerald-50 p-2 rounded-xl text-emerald-700">
+              <div id="previewCountNew" class="text-sm font-black">0</div>
+              Cần cấp mới
+            </div>
+            <div class="bg-blue-50 p-2 rounded-xl text-blue-700">
+              <div id="previewCountExists" class="text-sm font-black">0</div>
+              Đã có quyền
+            </div>
+            <div class="bg-yellow-50 p-2 rounded-xl text-yellow-700">
+              <div id="previewCountDuplicate" class="text-sm font-black">0</div>
+              Trùng lặp
+            </div>
+            <div class="bg-red-50 p-2 rounded-xl text-red-700">
+              <div id="previewCountInvalid" class="text-sm font-black">0</div>
+              Sai định dạng
+            </div>
+          </div>
+
+          <!-- Preview Table -->
+          <div class="overflow-x-auto border border-slate-200 rounded-2xl max-h-[250px] custom-scrollbar">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr class="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase sticky top-0">
+                  <th class="p-2.5">Email</th>
+                  <th class="p-2.5 text-center">Phân Loại</th>
+                  <th class="p-2.5">Chi Tiết</th>
+                </tr>
+              </thead>
+              <tbody id="bulkPreviewTableBody">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Report Result Section -->
+        <div id="bulkReportSection" class="hidden space-y-2 bg-slate-50 p-4 border border-slate-200 rounded-2xl">
+          <h4 class="text-xs font-black text-slate-400 uppercase tracking-wider">Báo cáo kết quả cấp quyền</h4>
+          <div class="grid grid-cols-3 gap-2 text-center text-xs font-bold">
+            <div class="bg-emerald-100 p-2.5 rounded-xl text-emerald-800">
+              <div id="reportCountSuccess" class="text-sm font-black">0</div>
+              Cấp mới thành công
+            </div>
+            <div class="bg-red-100 p-2.5 rounded-xl text-red-800">
+              <div id="reportCountFailed" class="text-sm font-black">0</div>
+              Lỗi / Thất bại
+            </div>
+            <div class="bg-yellow-100 p-2.5 rounded-xl text-yellow-800">
+              <div id="reportCountSkipped" class="text-sm font-black">0</div>
+              Bỏ qua (Trùng/Lỗi dòng)
+            </div>
+          </div>
+          <div class="flex justify-end pt-2">
+            <button id="btnDownloadBulkReport" onclick="downloadBulkReportCsv()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition flex items-center gap-1">
+              📥 Tải File CSV Báo Cáo
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-3 border-t border-slate-100 shrink-0">
+        <button onclick="closeBulkEnrollModal()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl transition">Đóng</button>
       </div>
     </div>
   </div>
@@ -1480,6 +1606,234 @@
 
     function closeEnrollModal() {
       document.getElementById("enrollModal").classList.add("hidden");
+    }
+
+    // ── TAB: BULK ENROLLMENTS (CẤP QUYỀN HÀNG LOẠT) ────────────────────────
+    let lastBulkReport = null;
+
+    function openBulkEnrollModal() {
+      document.getElementById("bulkEnrollEmails").value = "";
+      document.getElementById("bulkEnrollExpiry").value = "";
+      document.getElementById("bulkCsvFileInput").value = "";
+      
+      const course = document.getElementById("courseSelect").value;
+      document.getElementById("bulkEnrollCourse").innerHTML = STATE.courses.map(c => `<option value="${c}">${c.toUpperCase()}</option>`).join("");
+      document.getElementById("bulkEnrollCourse").value = course || (STATE.courses[0] || "");
+      
+      document.getElementById("bulkPreviewSection").classList.add("hidden");
+      document.getElementById("bulkReportSection").classList.add("hidden");
+      document.getElementById("btnSubmitBulkEnroll").disabled = true;
+      lastBulkReport = null;
+
+      document.getElementById("bulkEnrollModal").classList.remove("hidden");
+    }
+
+    function closeBulkEnrollModal() {
+      document.getElementById("bulkEnrollModal").classList.add("hidden");
+    }
+
+    function extractEmailsFromString(str) {
+      const re = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+      return str.match(re) || [];
+    }
+
+    function importBulkEmailsFromFile(input) {
+      const file = input.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const content = e.target.result;
+        const emails = extractEmailsFromString(content);
+        if (emails.length === 0) {
+          toast("Không tìm thấy email nào trong tệp tin!", "error");
+          return;
+        }
+        
+        const textarea = document.getElementById("bulkEnrollEmails");
+        textarea.value = emails.join("\n");
+        toast(`Đã tải ${emails.length} email từ tệp ${file.name}`);
+        input.value = "";
+      };
+      reader.readAsText(file);
+    }
+
+    async function checkBulkEmails() {
+      const courseSlug = document.getElementById("bulkEnrollCourse").value;
+      const emailsStr = document.getElementById("bulkEnrollEmails").value;
+      
+      const emails = emailsStr.split("\n")
+        .map(e => e.trim())
+        .filter(Boolean);
+
+      if (emails.length === 0) {
+        toast("Vui lòng nhập hoặc dán ít nhất một email", "error");
+        return;
+      }
+
+      showLoader("Đang kiểm tra danh sách email...");
+      try {
+        const payload = {
+          action: "check",
+          courseSlug,
+          emails
+        };
+
+        const res = await fetch("/api/lms/admin?endpoint=bulk-enroll", {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify(payload)
+        });
+        const d = await res.json();
+
+        if (res.ok && d.success) {
+          const { summary, details } = d;
+          
+          document.getElementById("previewCountTotal").innerText = emails.length;
+          document.getElementById("previewCountNew").innerText = summary.new;
+          document.getElementById("previewCountExists").innerText = summary.exists;
+          document.getElementById("previewCountDuplicate").innerText = summary.duplicate;
+          document.getElementById("previewCountInvalid").innerText = summary.invalid;
+
+          const tbody = document.getElementById("bulkPreviewTableBody");
+          tbody.innerHTML = details.map(item => {
+            let badgeColor = "bg-slate-100 text-slate-700";
+            let typeLabel = item.type;
+            if (item.type === "new") {
+              badgeColor = "bg-emerald-100 text-emerald-800";
+              typeLabel = "Cần cấp mới";
+            } else if (item.type === "exists") {
+              badgeColor = "bg-blue-100 text-blue-800";
+              typeLabel = "Đã có quyền";
+            } else if (item.type === "duplicate") {
+              badgeColor = "bg-yellow-100 text-yellow-800";
+              typeLabel = "Trùng lặp";
+            } else if (item.type === "invalid") {
+              badgeColor = "bg-red-100 text-red-800";
+              typeLabel = "Sai định dạng";
+            }
+
+            return `
+              <tr class="border-b border-slate-100">
+                <td class="p-2.5 font-medium">${escapeHtml(item.email)}</td>
+                <td class="p-2.5 text-center">
+                  <span class="px-2 py-0.5 rounded-full font-bold text-[10px] ${badgeColor}">
+                    ${typeLabel}
+                  </span>
+                </td>
+                <td class="p-2.5 text-slate-500">${escapeHtml(item.detail || "")}</td>
+              </tr>
+            `;
+          }).join("");
+
+          document.getElementById("bulkPreviewSection").classList.remove("hidden");
+          document.getElementById("bulkReportSection").classList.add("hidden");
+          document.getElementById("btnSubmitBulkEnroll").disabled = (summary.new === 0);
+          
+          toast("Kiểm tra danh sách thành công!");
+        } else {
+          toast(d.error || "Kiểm tra danh sách thất bại", "error");
+        }
+      } catch (err) {
+        console.error(err);
+        toast("Lỗi kết nối khi kiểm tra danh sách", "error");
+      } finally {
+        hideLoader();
+      }
+    }
+
+    async function submitBulkEnroll() {
+      const courseSlug = document.getElementById("bulkEnrollCourse").value;
+      const status = document.getElementById("bulkEnrollStatus").value;
+      const expiryVal = document.getElementById("bulkEnrollExpiry").value;
+      const emailsStr = document.getElementById("bulkEnrollEmails").value;
+      
+      const emails = emailsStr.split("\n")
+        .map(e => e.trim())
+        .filter(Boolean);
+
+      if (emails.length === 0) {
+        toast("Không có danh sách email để cấp quyền", "error");
+        return;
+      }
+
+      if (!confirm(`Bạn có chắc muốn cấp quyền học khóa ${courseSlug.toUpperCase()} cho danh sách học viên này?`)) {
+        return;
+      }
+
+      showLoader("Đang tiến hành cấp quyền hàng loạt...");
+      try {
+        const payload = {
+          action: "enroll",
+          courseSlug,
+          status,
+          expiresAt: expiryVal ? new Date(expiryVal).toISOString() : null,
+          emails
+        };
+
+        const res = await fetch("/api/lms/admin?endpoint=bulk-enroll", {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify(payload)
+        });
+        const d = await res.json();
+
+        if (res.ok && d.success) {
+          const { report, details } = d;
+          
+          lastBulkReport = {
+            courseSlug,
+            details
+          };
+
+          document.getElementById("reportCountSuccess").innerText = report.success;
+          document.getElementById("reportCountFailed").innerText = report.failed;
+          document.getElementById("reportCountSkipped").innerText = report.skipped;
+
+          document.getElementById("bulkReportSection").classList.remove("hidden");
+          document.getElementById("btnSubmitBulkEnroll").disabled = true;
+
+          searchEnrollments();
+
+          toast("Đã hoàn tất cấp quyền hàng loạt!");
+        } else {
+          toast(d.error || "Cấp quyền hàng loạt thất bại", "error");
+        }
+      } catch (err) {
+        console.error(err);
+        toast("Lỗi kết nối khi cấp quyền", "error");
+      } finally {
+        hideLoader();
+      }
+    }
+
+    function downloadBulkReportCsv() {
+      if (!lastBulkReport || !lastBulkReport.details) {
+        toast("Không có dữ liệu báo cáo để tải", "error");
+        return;
+      }
+
+      const { courseSlug, details } = lastBulkReport;
+      
+      let csvContent = "\uFEFF";
+      csvContent += "Email,Trạng thái cấp,Ghi chú\n";
+      
+      details.forEach(item => {
+        const email = item.email || "";
+        const status = item.status === "success" ? "Thành công" : "Thất bại";
+        const error = item.error ? item.error.replace(/"/g, '""') : "";
+        csvContent += `"${email}","${status}","${error}"\n`;
+      });
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `bao-cao-cap-quyen-${courseSlug}-${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
     }
 
     async function grantAccessSubmit() {
