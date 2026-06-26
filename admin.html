@@ -420,11 +420,17 @@
           <input id="modalEnrollEmail" type="email" placeholder="example@gmail.com" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"/>
           <p class="text-[10px] text-slate-400 mt-1">Hệ thống sẽ tự động tạo học viên mới nếu email chưa tồn tại.</p>
         </div>
-        <div>
-          <label class="block text-xs font-bold text-slate-500 mb-1">Khóa học (Course)*</label>
-          <select id="modalEnrollCourse" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium bg-slate-50">
-            <!-- Populated dynamically -->
-          </select>
+        <div class="relative" id="enrollCourseContainer">
+          <label class="block text-xs font-bold text-slate-500 mb-1">Khóa học (Course) *</label>
+          <input type="hidden" id="modalEnrollCourse" value=""/>
+          <div class="relative">
+            <input id="enrollCourseSearch" type="text" placeholder="Tìm theo tên hoặc mã khóa học..." class="w-full border border-slate-200 rounded-xl pl-3 pr-8 py-2.5 text-sm font-medium bg-slate-50 focus:bg-white" onfocus="showEnrollCourseDropdown()" oninput="filterEnrollCourses()"/>
+            <span class="absolute right-3 top-3 text-slate-400 pointer-events-none text-xs">▼</span>
+          </div>
+          <!-- Dropdown Options list -->
+          <div id="enrollCourseDropdown" class="hidden absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-y-auto z-[60] custom-scrollbar">
+            <!-- Items populated dynamically -->
+          </div>
         </div>
         <div>
           <label class="block text-xs font-bold text-slate-500 mb-1">Hạn dùng (Bỏ trống = Vĩnh viễn)</label>
@@ -449,11 +455,17 @@
       <div class="flex-grow overflow-y-auto space-y-4 pr-1">
         <!-- Fields Grid -->
         <div class="grid sm:grid-cols-3 gap-4">
-          <div>
+          <div class="relative" id="bulkCourseContainer">
             <label class="block text-xs font-bold text-slate-500 mb-1">Khóa học (Course) *</label>
-            <select id="bulkEnrollCourse" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium bg-slate-50">
-              <!-- Populated dynamically -->
-            </select>
+            <input type="hidden" id="bulkEnrollCourse" value=""/>
+            <div class="relative">
+              <input id="bulkCourseSearch" type="text" placeholder="Tìm theo tên hoặc mã khóa học..." class="w-full border border-slate-200 rounded-xl pl-3 pr-8 py-2.5 text-sm font-medium bg-slate-50 focus:bg-white" onfocus="showBulkCourseDropdown()" oninput="filterBulkCourses()"/>
+              <span class="absolute right-3 top-3 text-slate-400 pointer-events-none text-xs">▼</span>
+            </div>
+            <!-- Dropdown Options list -->
+            <div id="bulkCourseDropdown" class="hidden absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-y-auto z-[60] custom-scrollbar">
+              <!-- Items populated dynamically -->
+            </div>
           </div>
           <div>
             <label class="block text-xs font-bold text-slate-500 mb-1">Trạng thái (Status) *</label>
@@ -673,13 +685,11 @@
 
         // Populate course dropdowns
         const courseSelect = document.getElementById("courseSelect");
-        const modalEnrollCourse = document.getElementById("modalEnrollCourse");
         const enrollCourseFilter = document.getElementById("enrollCourseFilter");
 
         const courseOptions = STATE.courses.map(c => `<option value="${c}">${c.toUpperCase()}</option>`).join("");
 
         courseSelect.innerHTML = `<option value="">-- Chọn khóa học --</option>` + courseOptions;
-        modalEnrollCourse.innerHTML = courseOptions;
         enrollCourseFilter.innerHTML = `<option value="">-- Tất cả khóa học --</option>` + courseOptions;
 
       } catch (err) {
@@ -1598,14 +1608,66 @@
       document.getElementById("modalEnrollEmail").value = "";
       document.getElementById("modalEnrollExpiry").value = "";
       
-      const course = document.getElementById("courseSelect").value;
-      document.getElementById("modalEnrollCourse").value = course || (STATE.courses[0] || "");
+      const course = document.getElementById("courseSelect").value || STATE.courses[0] || "";
+      document.getElementById("modalEnrollCourse").value = course;
+      
+      const title = STATE.globalConfig[`${course}_title`] || course.toUpperCase();
+      document.getElementById("enrollCourseSearch").value = course ? `${title} (${course.toUpperCase()})` : "";
       
       document.getElementById("enrollModal").classList.remove("hidden");
     }
 
     function closeEnrollModal() {
       document.getElementById("enrollModal").classList.add("hidden");
+      document.getElementById("enrollCourseDropdown").classList.add("hidden");
+    }
+
+    // Custom Searchable Dropdown state for Single Enroll
+    let enrollCourseQuery = "";
+    
+    function initEnrollCourseDropdown() {
+      const dropdown = document.getElementById("enrollCourseDropdown");
+      const currentSelected = document.getElementById("modalEnrollCourse").value;
+      
+      const filtered = STATE.courses.filter(c => {
+        const query = enrollCourseQuery.toLowerCase();
+        const title = (STATE.globalConfig[`${c}_title`] || "").toLowerCase();
+        return c.toLowerCase().includes(query) || title.includes(query);
+      });
+
+      if (filtered.length === 0) {
+        dropdown.innerHTML = `<div class="p-3 text-xs text-slate-400 text-center">Không tìm thấy khóa học</div>`;
+        return;
+      }
+
+      dropdown.innerHTML = filtered.map(c => {
+        const isSelected = c === currentSelected;
+        const title = STATE.globalConfig[`${c}_title`] || c.toUpperCase();
+        return `
+          <div onclick="selectEnrollCourse('${escapeHtml(c)}', '${escapeHtml(title)}')" class="p-2.5 text-xs font-semibold cursor-pointer hover:bg-slate-50 text-slate-700 flex justify-between items-center ${isSelected ? 'bg-slate-50 text-brandGreen font-bold' : ''}">
+            <span>${escapeHtml(title)} <span class="text-[10px] text-slate-400 font-normal">(${escapeHtml(c)})</span></span>
+            ${isSelected ? '<span class="text-brandGreen text-xs">✓</span>' : ''}
+          </div>
+        `;
+      }).join("");
+    }
+
+    function showEnrollCourseDropdown() {
+      document.getElementById("enrollCourseDropdown").classList.remove("hidden");
+      initEnrollCourseDropdown();
+    }
+
+    // Exported helper to type search
+    function filterEnrollCourses() {
+      enrollCourseQuery = document.getElementById("enrollCourseSearch").value;
+      initEnrollCourseDropdown();
+    }
+
+    function selectEnrollCourse(slug, title) {
+      document.getElementById("modalEnrollCourse").value = slug;
+      document.getElementById("enrollCourseSearch").value = `${title} (${slug.toUpperCase()})`;
+      document.getElementById("enrollCourseDropdown").classList.add("hidden");
+      enrollCourseQuery = "";
     }
 
     // ── TAB: BULK ENROLLMENTS (CẤP QUYỀN HÀNG LOẠT) ────────────────────────
@@ -1616,9 +1678,11 @@
       document.getElementById("bulkEnrollExpiry").value = "";
       document.getElementById("bulkCsvFileInput").value = "";
       
-      const course = document.getElementById("courseSelect").value;
-      document.getElementById("bulkEnrollCourse").innerHTML = STATE.courses.map(c => `<option value="${c}">${c.toUpperCase()}</option>`).join("");
-      document.getElementById("bulkEnrollCourse").value = course || (STATE.courses[0] || "");
+      const course = document.getElementById("courseSelect").value || STATE.courses[0] || "";
+      document.getElementById("bulkEnrollCourse").value = course;
+      
+      const title = STATE.globalConfig[`${course}_title`] || course.toUpperCase();
+      document.getElementById("bulkCourseSearch").value = course ? `${title} (${course.toUpperCase()})` : "";
       
       document.getElementById("bulkPreviewSection").classList.add("hidden");
       document.getElementById("bulkReportSection").classList.add("hidden");
@@ -1630,7 +1694,68 @@
 
     function closeBulkEnrollModal() {
       document.getElementById("bulkEnrollModal").classList.add("hidden");
+      document.getElementById("bulkCourseDropdown").classList.add("hidden");
     }
+
+    // Custom Searchable Dropdown state for Bulk Enroll
+    let bulkCourseQuery = "";
+    
+    function initBulkCourseDropdown() {
+      const dropdown = document.getElementById("bulkCourseDropdown");
+      const currentSelected = document.getElementById("bulkEnrollCourse").value;
+      
+      const filtered = STATE.courses.filter(c => {
+        const query = bulkCourseQuery.toLowerCase();
+        const title = (STATE.globalConfig[`${c}_title`] || "").toLowerCase();
+        return c.toLowerCase().includes(query) || title.includes(query);
+      });
+
+      if (filtered.length === 0) {
+        dropdown.innerHTML = `<div class="p-3 text-xs text-slate-400 text-center">Không tìm thấy khóa học</div>`;
+        return;
+      }
+
+      dropdown.innerHTML = filtered.map(c => {
+        const isSelected = c === currentSelected;
+        const title = STATE.globalConfig[`${c}_title`] || c.toUpperCase();
+        return `
+          <div onclick="selectBulkCourse('${escapeHtml(c)}', '${escapeHtml(title)}')" class="p-2.5 text-xs font-semibold cursor-pointer hover:bg-slate-50 text-slate-700 flex justify-between items-center ${isSelected ? 'bg-slate-50 text-brandGreen font-bold' : ''}">
+            <span>${escapeHtml(title)} <span class="text-[10px] text-slate-400 font-normal">(${escapeHtml(c)})</span></span>
+            ${isSelected ? '<span class="text-brandGreen text-xs">✓</span>' : ''}
+          </div>
+        `;
+      }).join("");
+    }
+
+    function showBulkCourseDropdown() {
+      document.getElementById("bulkCourseDropdown").classList.remove("hidden");
+      initBulkCourseDropdown();
+    }
+
+    function filterBulkCourses() {
+      bulkCourseQuery = document.getElementById("bulkCourseSearch").value;
+      initBulkCourseDropdown();
+    }
+
+    function selectBulkCourse(slug, title) {
+      document.getElementById("bulkEnrollCourse").value = slug;
+      document.getElementById("bulkCourseSearch").value = `${title} (${slug.toUpperCase()})`;
+      document.getElementById("bulkCourseDropdown").classList.add("hidden");
+      bulkCourseQuery = "";
+    }
+
+    // Close searchable select dropdowns on click outside
+    document.addEventListener("click", function(e) {
+      const containerBulk = document.getElementById("bulkCourseContainer");
+      if (containerBulk && !containerBulk.contains(e.target)) {
+        document.getElementById("bulkCourseDropdown").classList.add("hidden");
+      }
+      
+      const containerSingle = document.getElementById("enrollCourseContainer");
+      if (containerSingle && !containerSingle.contains(e.target)) {
+        document.getElementById("enrollCourseDropdown").classList.add("hidden");
+      }
+    });
 
     function extractEmailsFromString(str) {
       const re = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
