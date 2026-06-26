@@ -1,5 +1,5 @@
 import { supabase } from "../supabase.js";
-import { getAdminFromRequest, normalizeEmail } from "../lms.js";
+import { getAdminFromRequest, normalizeEmail, getCourseDriveFolderId, addDriveFolderPermission, removeDriveFolderPermission } from "../lms.js";
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -105,6 +105,20 @@ export default async function handler(req, res) {
         .single();
 
       if (error) throw error;
+
+      // Sync Google Drive permissions if token is provided
+      const driveAccessToken = req.headers["x-drive-access-token"];
+      if (driveAccessToken) {
+        try {
+          const folderId = await getCourseDriveFolderId(supabase, courseSlug);
+          if (folderId) {
+            await addDriveFolderPermission(driveAccessToken, folderId, cleanEmail);
+          }
+        } catch (e) {
+          console.error("Google Drive sync failed inside enrollments POST:", e);
+        }
+      }
+
       return res.status(200).json({ success: true, enrollment: data });
     }
 
@@ -137,12 +151,33 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Thiếu ID quyền học viên để xóa" });
       }
 
+      // Fetch enrollment details before deleting to revoke Drive folder permission
+      const { data: enroll } = await supabase
+        .from("student_enrollments")
+        .select("email, course_slug")
+        .eq("id", id)
+        .maybeSingle();
+
       const { error } = await supabase
         .from("student_enrollments")
         .delete()
         .eq("id", id);
 
       if (error) throw error;
+
+      // Sync Google Drive permissions revocation
+      const driveAccessToken = req.headers["x-drive-access-token"];
+      if (driveAccessToken && enroll) {
+        try {
+          const folderId = await getCourseDriveFolderId(supabase, enroll.course_slug);
+          if (folderId) {
+            await removeDriveFolderPermission(driveAccessToken, folderId, enroll.email);
+          }
+        } catch (e) {
+          console.error("Google Drive sync failed inside enrollments DELETE:", e);
+        }
+      }
+
       return res.status(200).json({ success: true, message: "Đã thu hồi quyền học thành công" });
     }
 

@@ -449,3 +449,58 @@ export function getDocsClientWithToken(accessToken) {
   auth.setCredentials({ access_token: accessToken });
   return google.docs({ version: "v1", auth });
 }
+
+export async function getCourseDriveFolderId(supabase, courseSlug) {
+  const { data } = await supabase
+    .from("site_config")
+    .select("value")
+    .eq("key", `${courseSlug}_gdrive_folder_id`)
+    .maybeSingle();
+  if (data) {
+    const val = data.value;
+    return (val && typeof val === "object" && val.val !== undefined) ? val.val : val;
+  }
+  return null;
+}
+
+export async function addDriveFolderPermission(accessToken, folderId, emailAddress) {
+  if (!accessToken || !folderId || !emailAddress) return;
+  const drive = getDriveClientWithToken(accessToken);
+  try {
+    await drive.permissions.create({
+      fileId: folderId,
+      requestBody: {
+        role: "reader",
+        type: "user",
+        emailAddress: emailAddress
+      },
+      supportsAllDrives: true,
+      sendNotificationEmail: false
+    });
+  } catch (err) {
+    console.error(`[addDriveFolderPermission] Failed for ${emailAddress} on ${folderId}:`, err.message);
+  }
+}
+
+export async function removeDriveFolderPermission(accessToken, folderId, emailAddress) {
+  if (!accessToken || !folderId || !emailAddress) return;
+  const drive = getDriveClientWithToken(accessToken);
+  try {
+    const listRes = await drive.permissions.list({
+      fileId: folderId,
+      fields: "permissions(id, emailAddress)",
+      supportsAllDrives: true
+    });
+    const permissions = listRes.data.permissions || [];
+    const matched = permissions.find(p => p.emailAddress && p.emailAddress.toLowerCase() === emailAddress.toLowerCase());
+    if (matched) {
+      await drive.permissions.delete({
+        fileId: folderId,
+        permissionId: matched.id,
+        supportsAllDrives: true
+      });
+    }
+  } catch (err) {
+    console.error(`[removeDriveFolderPermission] Failed for ${emailAddress} on ${folderId}:`, err.message);
+  }
+}

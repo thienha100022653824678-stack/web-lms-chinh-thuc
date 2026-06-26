@@ -251,6 +251,23 @@
                   <input id="fVideoUrl" type="text" placeholder="Dán link chia sẻ hoặc ID video Google Drive..." class="flex-grow border border-slate-200 rounded-xl px-3 py-2 text-sm"/>
                   <button onclick="testMainVideoUrl()" class="bg-slate-200 hover:bg-slate-350 text-slate-700 text-xs font-bold px-4 py-2 rounded-xl transition shrink-0">Kiểm tra</button>
                 </div>
+                <!-- Main video drag/drop upload zone -->
+                <div id="mainVideoUploadZone" class="mt-2 border-2 border-dashed border-slate-200 rounded-xl p-3 bg-slate-50/50 hover:bg-slate-50 hover:border-brandGreen transition cursor-pointer flex flex-col items-center justify-center text-center gap-1.5" onclick="triggerMainVideoUpload()">
+                  <span class="text-xs text-slate-500 font-medium">📥 Kéo thả video vào đây hoặc bấm để chọn file</span>
+                  <span class="text-[10px] text-slate-400">Tối đa 500 MB. Định dạng hỗ trợ: .mp4, .mov, .avi, .mkv...</span>
+                </div>
+                <input type="file" id="mainVideoFileInput" accept="video/*" class="hidden" onchange="handleVideoUpload(this, 'main_video')"/>
+                
+                <!-- Progress bar / Status -->
+                <div id="mainVideoUploadProgressWrapper" class="hidden mt-2 space-y-1">
+                  <div class="flex items-center justify-between text-[11px] font-bold">
+                    <span id="mainVideoUploadStatus" class="text-slate-600">Đang tải video lên Google Drive...</span>
+                    <span id="mainVideoUploadPercent" class="text-brandGreen">0%</span>
+                  </div>
+                  <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                    <div id="mainVideoUploadProgressBar" class="bg-brandGreen h-1.5 transition-all duration-100" style="width: 0%;"></div>
+                  </div>
+                </div>
                 <div id="mainVideoStatus" class="mt-1"></div>
               </div>
 
@@ -1244,8 +1261,17 @@
       const duration = document.getElementById("fDuration").value.trim();
       const level = document.getElementById("fLevel").value;
       const status = document.getElementById("fStatus").value;
-      const thumbnailUrl = document.getElementById("fThumbnailUrl").value.trim();
+      let thumbnailUrl = document.getElementById("fThumbnailUrl").value.trim();
       const videoUrl = document.getElementById("fVideoUrl").value.trim();
+
+      // Default thumbnail to Hero URL if empty
+      if (!thumbnailUrl) {
+        const heroUrl = document.getElementById("metaHeroImage") ? document.getElementById("metaHeroImage").value.trim() : "";
+        if (heroUrl) {
+          thumbnailUrl = heroUrl;
+          document.getElementById("fThumbnailUrl").value = heroUrl;
+        }
+      }
       
       const recipeTextInput = document.getElementById("recipeText").value.trim();
       const recipeUrlInput = document.getElementById("fRecipeUrl").value.trim();
@@ -1348,17 +1374,42 @@
         </div>
         <div class="grid grid-cols-[120px_1fr] gap-2">
           <input data-media-title type="text" placeholder="Tiêu đề..." value="${escapeHtml(titleVal)}" class="border border-slate-200 rounded-lg px-2.5 py-1 text-xs"/>
-          <div class="flex gap-1">
-            <input data-media-url type="text" placeholder="Dán link hoặc mã nhúng..." value="${escapeHtml(urlVal)}" class="flex-grow border border-slate-200 rounded-lg px-2.5 py-1 text-xs"/>
-            ${type === "image" ? `
-              <label class="bg-brandOrange text-white text-[10px] font-bold px-2 py-1 rounded-lg cursor-pointer hover:bg-orange-600 transition shrink-0 flex items-center justify-center">
-                Tải
-                <input type="file" accept="image/*" class="hidden" onchange="handleImageUploadForBlock('${id}', this)"/>
-              </label>` : ''}
+          <div class="flex flex-col gap-1.5">
+            <div class="flex gap-1">
+              <input data-media-url type="text" placeholder="Dán link hoặc mã nhúng..." value="${escapeHtml(urlVal)}" class="flex-grow border border-slate-200 rounded-lg px-2.5 py-1 text-xs"/>
+              ${type === "image" ? `
+                <label class="bg-brandOrange text-white text-[10px] font-bold px-2 py-1 rounded-lg cursor-pointer hover:bg-orange-600 transition shrink-0 flex items-center justify-center">
+                  Tải
+                  <input type="file" accept="image/*" class="hidden" onchange="handleImageUploadForBlock('${id}', this)"/>
+                </label>` : ''}
+            </div>
+            ${type === "video" ? `
+              <!-- Supplementary video drag/drop upload zone -->
+              <div id="${id}_uploadZone" class="border border-dashed border-slate-200 rounded-lg p-2 bg-slate-50/50 hover:bg-slate-50 hover:border-brandGreen transition cursor-pointer flex flex-col items-center justify-center text-center gap-1" onclick="triggerBlockVideoUpload('${id}')">
+                <span class="text-[10px] text-slate-500 font-medium">📥 Kéo thả video vào đây hoặc bấm để chọn file</span>
+              </div>
+              <input type="file" id="${id}_videoFile" accept="video/*" class="hidden" onchange="handleVideoUpload(this, 'media_video', '${id}')"/>
+              
+              <!-- Progress bar / Status -->
+              <div id="${id}_progressWrapper" class="hidden space-y-1">
+                <div class="flex items-center justify-between text-[9px] font-bold">
+                  <span id="${id}_uploadStatus" class="text-slate-600">Đang tải...</span>
+                  <span id="${id}_uploadPercent" class="text-brandGreen">0%</span>
+                </div>
+                <div class="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
+                  <div id="${id}_uploadProgressBar" class="bg-brandGreen h-1 transition-all duration-100" style="width: 0%;"></div>
+                </div>
+              </div>
+            ` : ''}
           </div>
         </div>
       `;
       container.appendChild(div);
+
+      // If it is a video block, initialize its drag & drop area
+      if (type === "video") {
+        setupVideoDragAndDrop(`${id}_uploadZone`, `${id}_videoFile`, "media_video", id);
+      }
     }
 
     function buildMediaUrls() {
@@ -1669,6 +1720,203 @@
         };
         reader.readAsDataURL(file);
       });
+    }
+
+    // Google Drive Video Upload and Drag/Drop functions
+    function triggerMainVideoUpload() {
+      const fileInput = document.getElementById("mainVideoFileInput");
+      if (fileInput) {
+        fileInput.click();
+      }
+    }
+
+    function triggerBlockVideoUpload(blockId) {
+      const fileInput = document.getElementById(`${blockId}_videoFile`);
+      if (fileInput) {
+        fileInput.click();
+      }
+    }
+
+    function setupVideoDragAndDrop(zoneId, inputId, type, blockId = "") {
+      const zone = document.getElementById(zoneId);
+      if (!zone) return;
+
+      // Prevent default drag behaviors
+      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        zone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }, false);
+      });
+
+      // Highlight drop area when item is dragged over it
+      ['dragenter', 'dragover'].forEach(eventName => {
+        zone.addEventListener(eventName, () => zone.classList.add('border-brandGreen', 'bg-slate-100/50'), false);
+      });
+
+      ['dragleave', 'drop'].forEach(eventName => {
+        zone.addEventListener(eventName, () => zone.classList.remove('border-brandGreen', 'bg-slate-100/50'), false);
+      });
+
+      // Handle dropped files
+      zone.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        if (files.length) {
+          const input = document.getElementById(inputId);
+          if (input) {
+            input.files = files;
+            handleVideoUpload(input, type, blockId);
+          }
+        }
+      }, false);
+    }
+
+    async function handleVideoUpload(input, type, blockId = "") {
+      const file = input.files[0];
+      if (!file) return;
+
+      const resetInput = () => { input.value = ""; };
+
+      const courseEl = document.getElementById("fCourse");
+      const course_slug = courseEl ? courseEl.value.trim() : "";
+      if (!course_slug) {
+        toast("Vui lòng chọn hoặc tạo khóa học trước khi upload video.", "error");
+        resetInput();
+        return;
+      }
+
+      const lessonEl = document.getElementById("fLesson");
+      const lesson_no = lessonEl ? lessonEl.value.trim() : "1";
+      const titleEl = document.getElementById("fTitle");
+      const lesson_title = titleEl ? titleEl.value.trim() : "Chưa đặt tên";
+
+      const course_title = (STATE.globalConfig && STATE.globalConfig[`${course_slug}_title`]) || course_slug.toUpperCase();
+
+      // Check Google Drive token
+      let driveToken;
+      try {
+        driveToken = await ensureDriveAccess();
+      } catch (err) {
+        toast("Vui lòng kết nối Google Drive để upload video.", "error");
+        resetInput();
+        return;
+      }
+
+      // Show progress wrapper
+      const wrapperId = type === "main_video" ? "mainVideoUploadProgressWrapper" : `${blockId}_progressWrapper`;
+      const statusId = type === "main_video" ? "mainVideoUploadStatus" : `${blockId}_uploadStatus`;
+      const percentId = type === "main_video" ? "mainVideoUploadPercent" : `${blockId}_uploadPercent`;
+      const progressElId = type === "main_video" ? "mainVideoUploadProgressBar" : `${blockId}_uploadProgressBar`;
+
+      const wrapper = document.getElementById(wrapperId);
+      const statusText = document.getElementById(statusId);
+      const percentText = document.getElementById(percentId);
+      const progressBar = document.getElementById(progressElId);
+
+      if (wrapper) wrapper.classList.remove("hidden");
+      if (statusText) statusText.innerText = "Đang đọc file video...";
+      if (percentText) percentText.innerText = "0%";
+      if (progressBar) progressBar.style.width = "0%";
+
+      // FileReader to read file as DataURL (Base64)
+      const reader = new FileReader();
+      reader.onerror = () => {
+        toast("Lỗi đọc file video từ thiết bị.", "error");
+        if (wrapper) wrapper.classList.add("hidden");
+        resetInput();
+      };
+
+      reader.onload = function() {
+        if (statusText) statusText.innerText = "Đang tải video lên Google Drive...";
+
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", "/api/lms/admin?endpoint=upload-gdrive-video", true);
+        xhr.setRequestHeader("Content-Type", "application/json");
+
+        // Forward headers
+        const headers = authHeaders();
+        for (const [key, val] of Object.entries(headers)) {
+          xhr.setRequestHeader(key, val);
+        }
+        
+        if (driveToken) {
+          xhr.setRequestHeader("x-drive-access-token", driveToken);
+        }
+
+        // Track progress of the upload
+        xhr.upload.onprogress = function(e) {
+          if (e.lengthComputable) {
+            const percentComplete = Math.round((e.loaded / e.total) * 100);
+            if (percentText) percentText.innerText = `${percentComplete}%`;
+            if (progressBar) progressBar.style.width = `${percentComplete}%`;
+            if (statusText) statusText.innerText = `Đang tải video lên Google Drive... ${percentComplete}%`;
+          }
+        };
+
+        xhr.onload = function() {
+          let resData;
+          try {
+            resData = JSON.parse(xhr.responseText);
+          } catch (e) {
+            resData = { success: false, error: "Định dạng phản hồi không hợp lệ" };
+          }
+
+          if (xhr.status === 200 && resData.success) {
+            if (statusText) statusText.innerText = "Upload xong";
+            if (percentText) percentText.innerText = "100%";
+            if (progressBar) progressBar.style.width = "100%";
+
+            toast("Upload video lên Google Drive thành công!");
+            
+            if (type === "main_video") {
+              const urlInput = document.getElementById("fVideoUrl");
+              if (urlInput) {
+                urlInput.value = resData.directUrl;
+                urlInput.dispatchEvent(new Event("change"));
+                urlInput.dispatchEvent(new Event("input"));
+              }
+            } else {
+              const block = document.getElementById(blockId);
+              if (block) {
+                const urlInput = block.querySelector("[data-media-url]");
+                if (urlInput) {
+                  urlInput.value = resData.directUrl;
+                  urlInput.dispatchEvent(new Event("change"));
+                  urlInput.dispatchEvent(new Event("input"));
+                }
+              }
+            }
+          } else {
+            const errText = resData.error || "Tải video lên Drive thất bại";
+            toast(errText, "error");
+            if (statusText) statusText.innerText = `Lỗi: ${errText}`;
+          }
+          resetInput();
+        };
+
+        xhr.onerror = function() {
+          toast("Lỗi kết nối khi tải video lên Drive.", "error");
+          if (statusText) statusText.innerText = "Lỗi kết nối mạng";
+          resetInput();
+        };
+
+        const payload = {
+          fileData: reader.result,
+          fileName: file.name,
+          mimeType: file.type,
+          course_slug,
+          course_title,
+          lesson_no,
+          lesson_title,
+          media_type: type,
+          accessToken: driveToken
+        };
+
+        xhr.send(JSON.stringify(payload));
+      };
+
+      reader.readAsDataURL(file);
     }
 
     // ── TAB: STUDENTS (CRUD) ───────────────────────────────────────────────
@@ -2443,6 +2691,7 @@
 
     window.onload = () => {
       initGoogleSignIn();
+      setupVideoDragAndDrop("mainVideoUploadZone", "mainVideoFileInput", "main_video");
     };
   </script>
 </body>

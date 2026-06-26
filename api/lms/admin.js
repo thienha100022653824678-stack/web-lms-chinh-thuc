@@ -7,11 +7,12 @@ import adminEnrollmentsHandler from "../../utils/lms-handlers/admin-enrollments.
 import adminUploadImageHandler from "../../utils/lms-handlers/admin-upload-image.js";
 import adminUploadRecipeHandler from "../../utils/lms-handlers/admin-upload-recipe.js";
 import adminBulkEnrollHandler from "../../utils/lms-handlers/admin-bulk-enroll.js";
+import adminUploadGDriveVideoHandler from "../../utils/lms-handlers/admin-upload-gdrive-video.js";
 
 export const config = {
   api: {
     bodyParser: {
-      sizeLimit: "4.5mb",
+      sizeLimit: "500mb",
     },
   },
 };
@@ -45,6 +46,9 @@ export default async function handler(req, res) {
   }
   if (endpoint === "bulk-enroll") {
     return adminBulkEnrollHandler(req, res);
+  }
+  if (endpoint === "upload-gdrive-video") {
+    return adminUploadGDriveVideoHandler(req, res);
   }
 
   return res.status(404).json({ success: false, error: "LMS Admin Endpoint not found" });

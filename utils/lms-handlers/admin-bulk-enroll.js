@@ -1,5 +1,5 @@
 import { supabase } from "../supabase.js";
-import { getAdminFromRequest, normalizeEmail } from "../lms.js";
+import { getAdminFromRequest, normalizeEmail, getCourseDriveFolderId, addDriveFolderPermission } from "../lms.js";
 
 // Helper to validate email format
 function isValidEmail(email) {
@@ -217,6 +217,21 @@ export default async function handler(req, res) {
         });
       } catch (e) {
         // silent fail if audit_logs table doesn't exist
+      }
+
+      // Sync Google Drive permissions for all uniqueValidEmails
+      const driveAccessToken = req.headers["x-drive-access-token"];
+      if (driveAccessToken && successCount > 0) {
+        try {
+          const folderId = await getCourseDriveFolderId(supabase, courseSlug);
+          if (folderId) {
+            for (const email of uniqueValidEmails) {
+              await addDriveFolderPermission(driveAccessToken, folderId, email);
+            }
+          }
+        } catch (e) {
+          console.error("Google Drive bulk sync failed:", e);
+        }
       }
 
       return res.status(200).json({
