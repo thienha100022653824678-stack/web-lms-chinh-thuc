@@ -8,6 +8,7 @@ import adminUploadImageHandler from "../../utils/lms-handlers/admin-upload-image
 import adminUploadRecipeHandler from "../../utils/lms-handlers/admin-upload-recipe.js";
 import adminBulkEnrollHandler from "../../utils/lms-handlers/admin-bulk-enroll.js";
 import adminUploadGDriveVideoHandler from "../../utils/lms-handlers/admin-upload-gdrive-video.js";
+import adminSubPostsHandler from "../../utils/lms-handlers/admin-sub-posts.js";
 
 export const config = {
   api: {
@@ -49,6 +50,9 @@ export default async function handler(req, res) {
   }
   if (endpoint === "upload-gdrive-video") {
     return adminUploadGDriveVideoHandler(req, res);
+  }
+  if (endpoint === "sub-posts") {
+    return adminSubPostsHandler(req, res);
   }
 
   return res.status(404).json({ success: false, error: "LMS Admin Endpoint not found" });
