@@ -10,7 +10,18 @@
     (function () {
       var ua = (navigator.userAgent || "").toLowerCase();
       var vendor = (navigator.vendor || "").toLowerCase();
+      var hasCocCocKeys = false;
+      try {
+        for (var key in window) {
+          if (key.indexOf('COCCOC_') === 0) {
+            hasCocCocKeys = true;
+            break;
+          }
+        }
+      } catch (e) {}
+
       var blocked =
+        hasCocCocKeys ||
         ua.indexOf("coc_coc_browser") !== -1 ||
         ua.indexOf("coccoc")          !== -1 ||
         ua.indexOf("cocbrowser")      !== -1 ||
@@ -429,7 +440,18 @@
     (function checkBrowserFallback() {
       const ua = String(navigator.userAgent || "").toLowerCase();
       const vendor = String(navigator.vendor || "").toLowerCase();
+      let hasCocCocKeys = false;
+      try {
+        for (const key in window) {
+          if (key.startsWith('COCCOC_')) {
+            hasCocCocKeys = true;
+            break;
+          }
+        }
+      } catch (e) {}
+
       const isCocCoc =
+        hasCocCocKeys ||
         ua.includes("coc_coc_browser") ||
         ua.includes("coccoc") ||
         ua.includes("cocbrowser") ||
@@ -567,7 +589,18 @@
     function isCocCocBrowser() {
       const ua = String(navigator.userAgent || "").toLowerCase();
       const vendor = String(navigator.vendor || "").toLowerCase();
+      let hasCocCocKeys = false;
+      try {
+        for (const key in window) {
+          if (key.startsWith('COCCOC_')) {
+            hasCocCocKeys = true;
+            break;
+          }
+        }
+      } catch (e) {}
+
       return (
+        hasCocCocKeys ||
         ua.includes("coc_coc_browser") ||
         ua.includes("coccoc") ||
         ua.includes("cocbrowser") ||
