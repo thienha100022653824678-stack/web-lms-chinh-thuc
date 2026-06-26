@@ -333,11 +333,9 @@
           </div>
 
           <!-- Search & Filters -->
-          <div class="grid sm:grid-cols-[1fr_200px_100px] gap-2">
+          <div class="grid sm:grid-cols-[1fr_300px_100px] gap-2">
             <input id="enrollSearchInput" type="text" placeholder="Tìm kiếm theo email..." class="border border-slate-200 rounded-xl px-4 py-2.5 text-sm"/>
-            <select id="enrollCourseFilter" class="border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium bg-slate-50">
-              <option value="">-- Tất cả khóa học --</option>
-            </select>
+            <div id="enrollCourseAutocompleteContainer" class="w-full"></div>
             <button onclick="searchEnrollments()" class="bg-slate-800 hover:bg-slate-750 text-white text-sm font-bold py-2.5 rounded-xl transition">Lọc</button>
           </div>
 
@@ -422,15 +420,7 @@
         </div>
         <div class="relative" id="enrollCourseContainer">
           <label class="block text-xs font-bold text-slate-500 mb-1">Khóa học (Course) *</label>
-          <input type="hidden" id="modalEnrollCourse" value=""/>
-          <div class="relative">
-            <input id="enrollCourseSearch" type="text" placeholder="Tìm theo tên hoặc mã khóa học..." class="w-full border border-slate-200 rounded-xl pl-3 pr-8 py-2.5 text-sm font-medium bg-slate-50 focus:bg-white" onfocus="showEnrollCourseDropdown()" oninput="filterEnrollCourses()"/>
-            <span class="absolute right-3 top-3 text-slate-400 pointer-events-none text-xs">▼</span>
-          </div>
-          <!-- Dropdown Options list -->
-          <div id="enrollCourseDropdown" class="hidden absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-y-auto z-[60] custom-scrollbar">
-            <!-- Items populated dynamically -->
-          </div>
+          <div id="enrollCourseAutocompleteContainerModal" class="w-full"></div>
         </div>
         <div>
           <label class="block text-xs font-bold text-slate-500 mb-1">Hạn dùng (Bỏ trống = Vĩnh viễn)</label>
@@ -453,30 +443,22 @@
       </div>
 
       <div class="flex-grow overflow-y-auto space-y-4 pr-1">
-        <!-- Fields Grid -->
-        <div class="grid sm:grid-cols-3 gap-4">
-          <div class="relative" id="bulkCourseContainer">
-            <label class="block text-xs font-bold text-slate-500 mb-1">Khóa học (Course) *</label>
-            <input type="hidden" id="bulkEnrollCourse" value=""/>
-            <div class="relative">
-              <input id="bulkCourseSearch" type="text" placeholder="Tìm theo tên hoặc mã khóa học..." class="w-full border border-slate-200 rounded-xl pl-3 pr-8 py-2.5 text-sm font-medium bg-slate-50 focus:bg-white" onfocus="showBulkCourseDropdown()" oninput="filterBulkCourses()"/>
-              <span class="absolute right-3 top-3 text-slate-400 pointer-events-none text-xs">▼</span>
+        <!-- Fields Grid (Course Autocomplete Search only) -->
+        <div class="relative w-full mb-2" id="bulkCourseContainer">
+          <label class="block text-xs font-bold text-slate-500 mb-1">Khóa học (Course) *</label>
+          
+          <!-- Active selection state display -->
+          <div id="bulkSelectedCourseDisplay" class="hidden bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between">
+            <div class="text-xs font-semibold text-slate-700">
+              <span class="text-slate-400">Đã chọn:</span><br/>
+              <span id="bulkSelectedCourseInfo" class="text-brandGreen font-extrabold text-sm">🥖 BÁNH-MÌ — Khóa học bánh mì Việt Nam</span>
             </div>
-            <!-- Dropdown Options list -->
-            <div id="bulkCourseDropdown" class="hidden absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-y-auto z-[60] custom-scrollbar">
-              <!-- Items populated dynamically -->
-            </div>
+            <button type="button" onclick="clearBulkCourseSelection()" class="bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold px-3 py-1.5 rounded-lg transition">✕ Bỏ chọn</button>
           </div>
-          <div>
-            <label class="block text-xs font-bold text-slate-500 mb-1">Trạng thái (Status) *</label>
-            <select id="bulkEnrollStatus" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm">
-              <option value="active">Active (Hoạt động)</option>
-              <option value="inactive">Inactive (Tạm khóa)</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-xs font-bold text-slate-500 mb-1">Hạn dùng (Bỏ trống = Vĩnh viễn)</label>
-            <input id="bulkEnrollExpiry" type="datetime-local" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"/>
+          
+          <!-- Search input (hidden when selection is active) -->
+          <div id="bulkCourseSearchWrapper" class="relative">
+            <div id="bulkCourseAutocompleteContainer" class="w-full"></div>
           </div>
         </div>
 
@@ -495,7 +477,7 @@
 
         <!-- Buttons for Action -->
         <div class="flex gap-2 shrink-0">
-          <button onclick="checkBulkEmails()" class="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition">🔍 Kiểm tra danh sách</button>
+          <button id="btnCheckBulkEmails" onclick="checkBulkEmails()" disabled class="bg-slate-800 hover:bg-slate-750 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed">🔍 Kiểm tra danh sách</button>
           <button id="btnSubmitBulkEnroll" onclick="submitBulkEnroll()" disabled class="bg-brandGreen hover:bg-brandGreenLight text-white text-xs font-bold px-4 py-2.5 rounded-xl transition shadow-md disabled:opacity-40 disabled:cursor-not-allowed">🚀 Cấp quyền</button>
         </div>
 
@@ -602,6 +584,212 @@
       enrollments: []
     };
 
+    // ── Reusable Course Autocomplete Component ──────────────────────────────
+    class CourseAutocomplete {
+      constructor({ containerId, placeholder, onSelect, onClear, hiddenInputId, showAllOption = false }) {
+        this.container = document.getElementById(containerId);
+        this.placeholder = placeholder;
+        this.onSelect = onSelect;
+        this.onClear = onClear;
+        this.hiddenInputId = hiddenInputId;
+        this.showAllOption = showAllOption;
+        this.selectedSlug = "";
+        this.query = "";
+        this.dropdownVisible = false;
+
+        this.init();
+      }
+
+      init() {
+        if (!this.container) return;
+        this.container.classList.add("relative");
+        this.container.innerHTML = `
+          <input type="hidden" id="${escapeHtml(this.hiddenInputId)}" value=""/>
+          <div class="relative">
+            <input type="text" class="autocomplete-input w-full border border-slate-200 rounded-xl pl-8 pr-8 py-2.5 text-sm font-medium bg-slate-50 focus:bg-white focus:border-brandGreen" placeholder="${escapeHtml(this.placeholder)}"/>
+            <span class="absolute left-2.5 top-3.5 text-slate-400 text-xs">🔍</span>
+            <button type="button" class="autocomplete-clear hidden absolute right-3 top-3 text-slate-400 hover:text-slate-600 text-xs">✕</button>
+          </div>
+          <div class="autocomplete-dropdown hidden absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-y-auto z-[60] custom-scrollbar">
+          </div>
+        `;
+
+        this.hiddenInput = this.container.querySelector("input[type='hidden']");
+        this.input = this.container.querySelector(".autocomplete-input");
+        this.clearBtn = this.container.querySelector(".autocomplete-clear");
+        this.dropdown = this.container.querySelector(".autocomplete-dropdown");
+
+        this.input.addEventListener("focus", () => this.showDropdown());
+        this.input.addEventListener("input", () => {
+          this.query = this.input.value;
+          this.showDropdown();
+        });
+
+        this.clearBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this.clearSelection();
+        });
+
+        // Close dropdown when clicking outside
+        document.addEventListener("click", (e) => {
+          if (!this.container.contains(e.target)) {
+            this.hideDropdown();
+          }
+        });
+      }
+
+      removeVietnameseTones(str) {
+        str = String(str || "");
+        str = str.replace(/à|á|ạ|ả|ã|â|ầ|ấ|ậ|ẩ|ẫ|ă|ằ|ắ|ặ|ẳ|ẵ/g, "a");
+        str = str.replace(/è|é|ẹ|ẻ|ẽ|ê|ề|ế|ệ|ể|ễ/g, "e");
+        str = str.replace(/ì|í|ị|ỉ|ĩ/g, "i");
+        str = str.replace(/ò|ó|ọ|ỏ|õ|ô|ồ|ố|ộ|ổ|ỗ|ơ|ờ|ớ|ợ|ở|ỡ/g, "o");
+        str = str.replace(/ù|ú|ụ|ủ|ũ|ư|ừ|ứ|ự|ử|ữ/g, "u");
+        str = str.replace(/ỳ|ý|ỵ|ỷ|ỹ/g, "y");
+        str = str.replace(/đ/g, "d");
+        str = str.replace(/À|Á|Ạ|Ả|Ã|Â|Ầ|Ấ|Ậ|Ẩ|Ẫ|Ă|Ằ|Ắ|Ặ|Ẳ|Ẵ/g, "A");
+        str = str.replace(/È|É|Ẹ|Ẻ|Ẽ|Ê|Ề|Ế|Ệ|Ể|Ễ/g, "E");
+        str = str.replace(/Ì|Í|Ị|R|Ĩ/g, "I");
+        str = str.replace(/Ò|Ó|Ọ|Ỏ|Õ|Ô|Ồ|Ố|Ộ|Ổ|Ỗ|Ơ|Ờ|Ớ|Ợ|Ở|Ỡ/g, "O");
+        str = str.replace(/Ù|Ú|Ụ|Ủ|Ũ|Ư|Ừ|Ứ|Ự|Ử|Ữ/g, "U");
+        str = str.replace(/Ỳ|Ý|Ỵ|Ỷ|Ỹ/g, "Y");
+        str = str.replace(/Đ/g, "D");
+        // Some system encode accents separately
+        str = str.replace(/\u0300|\u0301|\u0303|\u0309|\u0323/g, "");
+        str = str.replace(/\u02C6|\u0306|\u031B/g, "");
+        return str;
+      }
+
+      matches(slug, title, query) {
+        const normQuery = this.removeVietnameseTones(query.toLowerCase().trim());
+        const normSlug = this.removeVietnameseTones(slug.toLowerCase());
+        const normTitle = this.removeVietnameseTones(title.toLowerCase());
+
+        return normSlug.includes(normQuery) || normTitle.includes(normQuery);
+      }
+
+      getFilteredCourses() {
+        const query = this.query;
+        let list = STATE.courses || [];
+
+        if (query) {
+          list = list.filter(c => {
+            const title = STATE.globalConfig[`${c}_title`] || c.toUpperCase();
+            return this.matches(c, title, query);
+          });
+        }
+
+        return list.slice(0, 20); // Limit suggestion count to 20
+      }
+
+      renderDropdown() {
+        const filtered = this.getFilteredCourses();
+        let html = "";
+
+        if (this.showAllOption && !this.query) {
+          html += `
+            <div class="autocomplete-item p-2.5 text-xs font-semibold cursor-pointer hover:bg-slate-50 text-slate-500 border-b border-slate-100 flex items-center gap-1.5" data-slug="" data-title="">
+              🌍 -- Tất cả khóa học --
+            </div>
+          `;
+        }
+
+        if (filtered.length === 0) {
+          html += `<div class="p-3 text-xs text-slate-400 text-center">Không tìm thấy khóa học</div>`;
+        } else {
+          html += filtered.map(c => {
+            const title = STATE.globalConfig[`${c}_title`] || c.toUpperCase();
+            const isSelected = c === this.selectedSlug;
+            return `
+              <div class="autocomplete-item p-2.5 text-xs font-semibold cursor-pointer hover:bg-slate-50 text-slate-700 flex justify-between items-center ${isSelected ? 'bg-slate-50 text-brandGreen font-bold' : ''}" data-slug="${escapeHtml(c)}" data-title="${escapeHtml(title)}">
+                <span>🥖 ${escapeHtml(title)} <span class="text-[10px] text-slate-400 font-normal">(${escapeHtml(c)})</span></span>
+                ${isSelected ? '<span class="text-brandGreen text-xs">✓</span>' : ''}
+              </div>
+            `;
+          }).join("");
+        }
+
+        this.dropdown.innerHTML = html;
+
+        // Add event listeners to select item
+        this.dropdown.querySelectorAll(".autocomplete-item").forEach(el => {
+          el.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const slug = el.getAttribute("data-slug");
+            const title = el.getAttribute("data-title") || "";
+            this.selectItem(slug, title);
+          });
+        });
+      }
+
+      selectItem(slug, title) {
+        this.selectedSlug = slug;
+        this.hiddenInput.value = slug;
+        
+        if (slug) {
+          this.input.value = `${title} (${slug.toUpperCase()})`;
+          this.clearBtn.classList.remove("hidden");
+        } else {
+          this.input.value = "";
+          this.clearBtn.classList.add("hidden");
+        }
+
+        this.query = "";
+        this.hideDropdown();
+
+        if (this.onSelect) {
+          this.onSelect(slug, title);
+        }
+      }
+
+      clearSelection() {
+        this.selectedSlug = "";
+        this.hiddenInput.value = "";
+        this.input.value = "";
+        this.clearBtn.classList.add("hidden");
+        this.query = "";
+        this.hideDropdown();
+
+        if (this.onClear) {
+          this.onClear();
+        }
+      }
+
+      setSelection(slug) {
+        if (!slug) {
+          this.clearSelection();
+          return;
+        }
+        const title = STATE.globalConfig[`${slug}_title`] || slug.toUpperCase();
+        this.selectedSlug = slug;
+        this.hiddenInput.value = slug;
+        this.input.value = `${title} (${slug.toUpperCase()})`;
+        this.clearBtn.classList.remove("hidden");
+        this.query = "";
+        this.renderDropdown();
+      }
+
+      showDropdown() {
+        this.dropdown.classList.remove("hidden");
+        this.renderDropdown();
+        this.dropdownVisible = true;
+      }
+
+      hideDropdown() {
+        // Delay hide to allow clicks to register
+        setTimeout(() => {
+          this.dropdown.classList.add("hidden");
+          this.dropdownVisible = false;
+        }, 200);
+      }
+    }
+
+    // ── Global Autocomplete Instances ───────────────────────────────────────
+    let enrollCourseFilterAutocomplete = null;
+    let bulkEnrollCourseAutocomplete = null;
+    let modalEnrollCourseAutocomplete = null;
+    let selectedCourseFilter = "";
+
     // ── Toast messaging ────────────────────────────────────────────────────
     function toast(msg, type = "success") {
       const container = document.getElementById("toastContainer");
@@ -653,7 +841,8 @@
       if (tabId === "students") {
         loadStudents();
       } else if (tabId === "enrollments") {
-        loadEnrollments();
+        const search = document.getElementById("enrollSearchInput") ? document.getElementById("enrollSearchInput").value.trim() : "";
+        loadEnrollments(selectedCourseFilter, search);
       }
     }
 
@@ -685,12 +874,58 @@
 
         // Populate course dropdowns
         const courseSelect = document.getElementById("courseSelect");
-        const enrollCourseFilter = document.getElementById("enrollCourseFilter");
-
         const courseOptions = STATE.courses.map(c => `<option value="${c}">${c.toUpperCase()}</option>`).join("");
-
         courseSelect.innerHTML = `<option value="">-- Chọn khóa học --</option>` + courseOptions;
-        enrollCourseFilter.innerHTML = `<option value="">-- Tất cả khóa học --</option>` + courseOptions;
+
+        // Initialize or update Course Autocompletes
+        if (!enrollCourseFilterAutocomplete) {
+          enrollCourseFilterAutocomplete = new CourseAutocomplete({
+            containerId: "enrollCourseAutocompleteContainer",
+            placeholder: "🔍 Tìm khóa học...",
+            hiddenInputId: "enrollCourseFilter",
+            showAllOption: true,
+            onSelect: (slug) => {
+              selectedCourseFilter = slug;
+              searchEnrollments();
+            },
+            onClear: () => {
+              selectedCourseFilter = "";
+              searchEnrollments();
+            }
+          });
+        } else {
+          enrollCourseFilterAutocomplete.renderDropdown();
+        }
+
+        if (!bulkEnrollCourseAutocomplete) {
+          bulkEnrollCourseAutocomplete = new CourseAutocomplete({
+            containerId: "bulkCourseAutocompleteContainer",
+            placeholder: "🔍 Tìm khóa học để cấp quyền...",
+            hiddenInputId: "bulkEnrollCourse",
+            showAllOption: false,
+            onSelect: (slug, title) => {
+              selectBulkCourseCallback(slug, title);
+            },
+            onClear: () => {
+              clearBulkCourseSelection();
+            }
+          });
+        } else {
+          bulkEnrollCourseAutocomplete.renderDropdown();
+        }
+
+        if (!modalEnrollCourseAutocomplete) {
+          modalEnrollCourseAutocomplete = new CourseAutocomplete({
+            containerId: "enrollCourseAutocompleteContainerModal",
+            placeholder: "🔍 Tìm khóa học...",
+            hiddenInputId: "modalEnrollCourse",
+            showAllOption: false,
+            onSelect: () => {},
+            onClear: () => {}
+          });
+        } else {
+          modalEnrollCourseAutocomplete.renderDropdown();
+        }
 
       } catch (err) {
         toast("Lỗi kết nối khi tải danh sách khóa học", "error");
@@ -1599,9 +1834,8 @@
     }
 
     function searchEnrollments() {
-      const course = document.getElementById("enrollCourseFilter").value;
       const search = document.getElementById("enrollSearchInput").value.trim();
-      loadEnrollments(course, search);
+      loadEnrollments(selectedCourseFilter, search);
     }
 
     function openEnrollModal() {
@@ -1609,187 +1843,67 @@
       document.getElementById("modalEnrollExpiry").value = "";
       
       const course = document.getElementById("courseSelect").value || STATE.courses[0] || "";
-      document.getElementById("modalEnrollCourse").value = course;
-      
-      const title = STATE.globalConfig[`${course}_title`] || course.toUpperCase();
-      document.getElementById("enrollCourseSearch").value = course ? `${title} (${course.toUpperCase()})` : "";
+      if (modalEnrollCourseAutocomplete) {
+        modalEnrollCourseAutocomplete.setSelection(course);
+      }
       
       document.getElementById("enrollModal").classList.remove("hidden");
     }
 
     function closeEnrollModal() {
       document.getElementById("enrollModal").classList.add("hidden");
-      document.getElementById("enrollCourseDropdown").classList.add("hidden");
-    }
-
-    // Custom Searchable Dropdown state for Single Enroll
-    let enrollCourseQuery = "";
-    
-    function initEnrollCourseDropdown() {
-      const dropdown = document.getElementById("enrollCourseDropdown");
-      const currentSelected = document.getElementById("modalEnrollCourse").value;
-      
-      const filtered = STATE.courses.filter(c => {
-        const query = enrollCourseQuery.toLowerCase();
-        const title = (STATE.globalConfig[`${c}_title`] || "").toLowerCase();
-        return c.toLowerCase().includes(query) || title.includes(query);
-      });
-
-      if (filtered.length === 0) {
-        dropdown.innerHTML = `<div class="p-3 text-xs text-slate-400 text-center">Không tìm thấy khóa học</div>`;
-        return;
+      if (modalEnrollCourseAutocomplete) {
+        modalEnrollCourseAutocomplete.hideDropdown();
       }
-
-      dropdown.innerHTML = filtered.map(c => {
-        const isSelected = c === currentSelected;
-        const title = STATE.globalConfig[`${c}_title`] || c.toUpperCase();
-        return `
-          <div onclick="selectEnrollCourse('${escapeHtml(c)}', '${escapeHtml(title)}')" class="p-2.5 text-xs font-semibold cursor-pointer hover:bg-slate-50 text-slate-700 flex justify-between items-center ${isSelected ? 'bg-slate-50 text-brandGreen font-bold' : ''}">
-            <span>${escapeHtml(title)} <span class="text-[10px] text-slate-400 font-normal">(${escapeHtml(c)})</span></span>
-            ${isSelected ? '<span class="text-brandGreen text-xs">✓</span>' : ''}
-          </div>
-        `;
-      }).join("");
-    }
-
-    function showEnrollCourseDropdown() {
-      document.getElementById("enrollCourseDropdown").classList.remove("hidden");
-      initEnrollCourseDropdown();
-    }
-
-    // Exported helper to type search
-    function filterEnrollCourses() {
-      enrollCourseQuery = document.getElementById("enrollCourseSearch").value;
-      initEnrollCourseDropdown();
-    }
-
-    function selectEnrollCourse(slug, title) {
-      document.getElementById("modalEnrollCourse").value = slug;
-      document.getElementById("enrollCourseSearch").value = `${title} (${slug.toUpperCase()})`;
-      document.getElementById("enrollCourseDropdown").classList.add("hidden");
-      enrollCourseQuery = "";
     }
 
     // ── TAB: BULK ENROLLMENTS (CẤP QUYỀN HÀNG LOẠT) ────────────────────────
     let lastBulkReport = null;
+    let bulkSelectedCourseSlug = "";
 
     function openBulkEnrollModal() {
       document.getElementById("bulkEnrollEmails").value = "";
-      document.getElementById("bulkEnrollExpiry").value = "";
       document.getElementById("bulkCsvFileInput").value = "";
       
       const course = document.getElementById("courseSelect").value || STATE.courses[0] || "";
-      document.getElementById("bulkEnrollCourse").value = course;
-      
-      const title = STATE.globalConfig[`${course}_title`] || course.toUpperCase();
-      document.getElementById("bulkCourseSearch").value = course ? `${title} (${course.toUpperCase()})` : "";
       
       document.getElementById("bulkPreviewSection").classList.add("hidden");
       document.getElementById("bulkReportSection").classList.add("hidden");
       document.getElementById("btnSubmitBulkEnroll").disabled = true;
       lastBulkReport = null;
 
+      if (course) {
+        const title = STATE.globalConfig[`${course}_title`] || course.toUpperCase();
+        selectBulkCourseCallback(course, title);
+        if (bulkEnrollCourseAutocomplete) {
+          bulkEnrollCourseAutocomplete.setSelection(course);
+        }
+      } else {
+        clearBulkCourseSelection();
+      }
+
       document.getElementById("bulkEnrollModal").classList.remove("hidden");
     }
 
     function closeBulkEnrollModal() {
       document.getElementById("bulkEnrollModal").classList.add("hidden");
-      document.getElementById("bulkCourseDropdown").classList.add("hidden");
-    }
-
-    // Custom Searchable Dropdown state for Bulk Enroll
-    let bulkCourseQuery = "";
-    
-    function initBulkCourseDropdown() {
-      const dropdown = document.getElementById("bulkCourseDropdown");
-      const currentSelected = document.getElementById("bulkEnrollCourse").value;
-      
-      const filtered = STATE.courses.filter(c => {
-        const query = bulkCourseQuery.toLowerCase();
-        const title = (STATE.globalConfig[`${c}_title`] || "").toLowerCase();
-        return c.toLowerCase().includes(query) || title.includes(query);
-      });
-
-      if (filtered.length === 0) {
-        dropdown.innerHTML = `<div class="p-3 text-xs text-slate-400 text-center">Không tìm thấy khóa học</div>`;
-        return;
+      if (bulkEnrollCourseAutocomplete) {
+        bulkEnrollCourseAutocomplete.hideDropdown();
       }
-
-      dropdown.innerHTML = filtered.map(c => {
-        const isSelected = c === currentSelected;
-        const title = STATE.globalConfig[`${c}_title`] || c.toUpperCase();
-        return `
-          <div onclick="selectBulkCourse('${escapeHtml(c)}', '${escapeHtml(title)}')" class="p-2.5 text-xs font-semibold cursor-pointer hover:bg-slate-50 text-slate-700 flex justify-between items-center ${isSelected ? 'bg-slate-50 text-brandGreen font-bold' : ''}">
-            <span>${escapeHtml(title)} <span class="text-[10px] text-slate-400 font-normal">(${escapeHtml(c)})</span></span>
-            ${isSelected ? '<span class="text-brandGreen text-xs">✓</span>' : ''}
-          </div>
-        `;
-      }).join("");
-    }
-
-    function showBulkCourseDropdown() {
-      document.getElementById("bulkCourseDropdown").classList.remove("hidden");
-      initBulkCourseDropdown();
-    }
-
-    function filterBulkCourses() {
-      bulkCourseQuery = document.getElementById("bulkCourseSearch").value;
-      initBulkCourseDropdown();
-    }
-
-    function selectBulkCourse(slug, title) {
-      document.getElementById("bulkEnrollCourse").value = slug;
-      document.getElementById("bulkCourseSearch").value = `${title} (${slug.toUpperCase()})`;
-      document.getElementById("bulkCourseDropdown").classList.add("hidden");
-      bulkCourseQuery = "";
-    }
-
-    // Close searchable select dropdowns on click outside
-    document.addEventListener("click", function(e) {
-      const containerBulk = document.getElementById("bulkCourseContainer");
-      if (containerBulk && !containerBulk.contains(e.target)) {
-        document.getElementById("bulkCourseDropdown").classList.add("hidden");
-      }
-      
-      const containerSingle = document.getElementById("enrollCourseContainer");
-      if (containerSingle && !containerSingle.contains(e.target)) {
-        document.getElementById("enrollCourseDropdown").classList.add("hidden");
-      }
-    });
-
-    function extractEmailsFromString(str) {
-      const re = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-      return str.match(re) || [];
-    }
-
-    function importBulkEmailsFromFile(input) {
-      const file = input.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        const content = e.target.result;
-        const emails = extractEmailsFromString(content);
-        if (emails.length === 0) {
-          toast("Không tìm thấy email nào trong tệp tin!", "error");
-          return;
-        }
-        
-        const textarea = document.getElementById("bulkEnrollEmails");
-        textarea.value = emails.join("\n");
-        toast(`Đã tải ${emails.length} email từ tệp ${file.name}`);
-        input.value = "";
-      };
-      reader.readAsText(file);
     }
 
     async function checkBulkEmails() {
-      const courseSlug = document.getElementById("bulkEnrollCourse").value;
+      const courseSlug = bulkSelectedCourseSlug;
       const emailsStr = document.getElementById("bulkEnrollEmails").value;
       
       const emails = emailsStr.split("\n")
         .map(e => e.trim())
         .filter(Boolean);
+
+      if (!courseSlug) {
+        toast("Vui lòng chọn một khóa học trước", "error");
+        return;
+      }
 
       if (emails.length === 0) {
         toast("Vui lòng nhập hoặc dán ít nhất một email", "error");
@@ -1853,7 +1967,8 @@
 
           document.getElementById("bulkPreviewSection").classList.remove("hidden");
           document.getElementById("bulkReportSection").classList.add("hidden");
-          document.getElementById("btnSubmitBulkEnroll").disabled = (summary.new === 0);
+          
+          validateBulkActionsState();
           
           toast("Kiểm tra danh sách thành công!");
         } else {
@@ -1868,14 +1983,17 @@
     }
 
     async function submitBulkEnroll() {
-      const courseSlug = document.getElementById("bulkEnrollCourse").value;
-      const status = document.getElementById("bulkEnrollStatus").value;
-      const expiryVal = document.getElementById("bulkEnrollExpiry").value;
+      const courseSlug = bulkSelectedCourseSlug;
       const emailsStr = document.getElementById("bulkEnrollEmails").value;
       
       const emails = emailsStr.split("\n")
         .map(e => e.trim())
         .filter(Boolean);
+
+      if (!courseSlug) {
+        toast("Không có khóa học nào được chọn", "error");
+        return;
+      }
 
       if (emails.length === 0) {
         toast("Không có danh sách email để cấp quyền", "error");
@@ -1891,8 +2009,8 @@
         const payload = {
           action: "enroll",
           courseSlug,
-          status,
-          expiresAt: expiryVal ? new Date(expiryVal).toISOString() : null,
+          status: "active",
+          expiresAt: null,
           emails
         };
 
