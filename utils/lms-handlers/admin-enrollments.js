@@ -1,5 +1,5 @@
 import { supabase } from "../supabase.js";
-import { getAdminFromRequest, normalizeEmail, getCourseDriveFolderId, addDriveFolderPermission, removeDriveFolderPermission } from "../lms.js";
+import { getAdminFromRequest, normalizeEmail, getDriveClientWithToken, getCourseFolderIdOrDiscover, addDriveFolderPermission, removeDriveFolderPermission } from "../lms.js";
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -110,7 +110,8 @@ export default async function handler(req, res) {
       const driveAccessToken = req.headers["x-drive-access-token"];
       if (driveAccessToken) {
         try {
-          const folderId = await getCourseDriveFolderId(supabase, courseSlug);
+          const drive = getDriveClientWithToken(driveAccessToken);
+          const folderId = await getCourseFolderIdOrDiscover(supabase, drive, courseSlug);
           if (folderId) {
             await addDriveFolderPermission(driveAccessToken, folderId, cleanEmail);
           }
@@ -169,7 +170,8 @@ export default async function handler(req, res) {
       const driveAccessToken = req.headers["x-drive-access-token"];
       if (driveAccessToken && enroll) {
         try {
-          const folderId = await getCourseDriveFolderId(supabase, enroll.course_slug);
+          const drive = getDriveClientWithToken(driveAccessToken);
+          const folderId = await getCourseFolderIdOrDiscover(supabase, drive, enroll.course_slug);
           if (folderId) {
             await removeDriveFolderPermission(driveAccessToken, folderId, enroll.email);
           }

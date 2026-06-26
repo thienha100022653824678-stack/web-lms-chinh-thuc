@@ -504,3 +504,209 @@ export async function removeDriveFolderPermission(accessToken, folderId, emailAd
     console.error(`[removeDriveFolderPermission] Failed for ${emailAddress} on ${folderId}:`, err.message);
   }
 }
+
+export function sanitizeFolderName(name) {
+  return String(name || "")
+    .trim()
+    .replace(/[/\\?%*:|"<>']/g, "-")
+    .replace(/\s+/g, " ");
+}
+
+export async function getOrCreateFolder(drive, name, parentId = null) {
+  const cleanName = sanitizeFolderName(name);
+  let query = `mimeType = 'application/vnd.google-apps.folder' and name = '${cleanName}' and trashed = false`;
+  if (parentId) {
+    query += ` and '${parentId}' in parents`;
+  } else {
+    query += ` and 'root' in parents`;
+  }
+
+  let files = [];
+  try {
+    const res = await drive.files.list({
+      q: query,
+      fields: "files(id, name)",
+      spaces: "drive",
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true
+    });
+    files = res.data.files || [];
+  } catch {
+    try {
+      const res = await drive.files.list({
+        q: query,
+        fields: "files(id, name)",
+        spaces: "drive"
+      });
+      files = res.data.files || [];
+    } catch (fallbackErr) {
+      throw new Error(`Không thể liệt kê thư mục Drive: ${fallbackErr.message}`);
+    }
+  }
+
+  if (files.length > 0) return files[0].id;
+
+  const fileMetadata = {
+    name: cleanName,
+    mimeType: "application/vnd.google-apps.folder"
+  };
+  if (parentId) fileMetadata.parents = [parentId];
+
+  let folder;
+  try {
+    folder = await drive.files.create({
+      requestBody: fileMetadata,
+      fields: "id",
+      supportsAllDrives: true
+    });
+  } catch {
+    try {
+      folder = await drive.files.create({
+        requestBody: fileMetadata,
+        fields: "id"
+      });
+    } catch (fallbackErr) {
+      throw new Error(`Không thể tạo thư mục "${cleanName}": ${fallbackErr.message}`);
+    }
+  }
+
+  return folder.data.id;
+}
+
+export async function resolveCourseFolderTree(drive, { course_slug, course_title, lesson_no, lesson_title, type }) {
+  const culinaryLmsId = await getOrCreateFolder(drive, "Culinary LMS");
+  const coursesId = await getOrCreateFolder(drive, "Courses", culinaryLmsId);
+  
+  const slugUpper = String(course_slug).toUpperCase().trim();
+  const titleVal = String(course_title || slugUpper).trim();
+  const courseFolderName = `${slugUpper} - ${titleVal}`;
+  const courseFolderId = await getOrCreateFolder(drive, courseFolderName, coursesId);
+
+  if (type === "course_folder") {
+    return { courseFolderId, targetFolderId: courseFolderId };
+  }
+
+  if (type === "course_hero" || type === "course_poster" || type === "course_qr" || type === "course_other") {
+    const courseAssetsId = await getOrCreateFolder(drive, "Course Assets", courseFolderId);
+    let targetFolderName = "Other Course Images";
+    if (type === "course_hero") targetFolderName = "Hero Images";
+    else if (type === "course_poster") targetFolderName = "Poster Images";
+    else if (type === "course_qr") targetFolderName = "QR Images";
+    
+    const targetFolderId = await getOrCreateFolder(drive, targetFolderName, courseAssetsId);
+    return { courseFolderId, targetFolderId };
+  }
+
+  const lNo = String(lesson_no || "1").trim();
+  const lTitle = String(lesson_title || "Untitled").trim();
+  const lessonFolderName = `Lesson ${lNo} - ${lTitle}`;
+  const lessonFolderId = await getOrCreateFolder(drive, lessonFolderName, courseFolderId);
+
+  if (type === "main_video") {
+    const targetFolderId = await getOrCreateFolder(drive, "Main Video", lessonFolderId);
+    return { courseFolderId, targetFolderId };
+  }
+
+  if (type === "lesson_thumbnail" || type === "lesson_hero") {
+    const mainImagesId = await getOrCreateFolder(drive, "Main Images", lessonFolderId);
+    let targetFolderName = "Thumbnail Images";
+    if (type === "lesson_hero") targetFolderName = "Hero Images";
+    const targetFolderId = await getOrCreateFolder(drive, targetFolderName, mainImagesId);
+    return { courseFolderId, targetFolderId };
+  }
+
+  if (type === "lesson_media_image" || type === "lesson_media" || type === "lesson_media_video") {
+    const mediaId = await getOrCreateFolder(drive, "Media", lessonFolderId);
+    let targetFolderName = "Images";
+    if (type === "lesson_media_video") targetFolderName = "Videos";
+    const targetFolderId = await getOrCreateFolder(drive, targetFolderName, mediaId);
+    return { courseFolderId, targetFolderId };
+  }
+
+  return { courseFolderId, targetFolderId: courseFolderId };
+}
+
+export async function saveCourseFolderId(supabase, courseSlug, folderId) {
+  if (!courseSlug || !folderId) return;
+  const slug = courseSlug.trim().toLowerCase();
+  
+  try {
+    await supabase.from("site_config").upsert({
+      key: `${slug}_gdrive_folder_id`,
+      value: { val: folderId },
+      updated_at: new Date().toISOString()
+    }, { onConflict: "key" });
+  } catch (err) {
+    console.error(`[saveCourseFolderId] Failed to save to site_config:`, err.message);
+  }
+
+  try {
+    const { data: course } = await supabase
+      .from("courses")
+      .select("raw_data")
+      .eq("slug", courseSlug)
+      .maybeSingle();
+      
+    if (course) {
+      const rawData = course.raw_data || {};
+      rawData.course_folder_id = folderId;
+      await supabase
+        .from("courses")
+        .update({
+          raw_data: rawData,
+          updated_at: new Date().toISOString()
+        })
+        .eq("slug", courseSlug);
+    }
+  } catch (err) {
+    console.error(`[saveCourseFolderId] Failed to save to courses:`, err.message);
+  }
+}
+
+export async function getCourseFolderIdOrDiscover(supabase, drive, courseSlug, courseTitle = "") {
+  let folderId = await getCourseDriveFolderId(supabase, courseSlug);
+  if (folderId) return folderId;
+
+  try {
+    const { data: course } = await supabase
+      .from("courses")
+      .select("raw_data, title")
+      .eq("slug", courseSlug)
+      .maybeSingle();
+      
+    if (course && course.raw_data && course.raw_data.course_folder_id) {
+      folderId = course.raw_data.course_folder_id;
+      await saveCourseFolderId(supabase, courseSlug, folderId);
+      return folderId;
+    }
+    
+    if (drive) {
+      const title = courseTitle || course?.title || courseSlug.toUpperCase();
+      const resolved = await resolveCourseFolderTree(drive, {
+        course_slug: courseSlug,
+        course_title: title,
+        type: "course_folder"
+      });
+      if (resolved && resolved.courseFolderId) {
+        folderId = resolved.courseFolderId;
+        await saveCourseFolderId(supabase, courseSlug, folderId);
+        return folderId;
+      }
+    }
+  } catch (err) {
+    console.error(`[getCourseFolderIdOrDiscover] Error:`, err.message);
+  }
+  return null;
+}
+
+export function getDriveFileId(url) {
+  if (!url || typeof url !== "string") return null;
+  const match1 = url.match(/drive\.google\.com\/file\/d\/([^/?#]+)/);
+  if (match1) return match1[1];
+  const match2 = url.match(/[?&]id=([^&#]+)/);
+  if (match2) return match2[1];
+  
+  const cleanId = url.trim();
+  if (/^[a-zA-Z0-9_-]{25,50}$/.test(cleanId)) return cleanId;
+  return null;
+}

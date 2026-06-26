@@ -1,5 +1,5 @@
 import { supabase } from "../supabase.js";
-import { getAdminFromRequest, normalizeEmail, getCourseDriveFolderId, addDriveFolderPermission } from "../lms.js";
+import { getAdminFromRequest, normalizeEmail, getDriveClientWithToken, getCourseFolderIdOrDiscover, addDriveFolderPermission } from "../lms.js";
 
 // Helper to validate email format
 function isValidEmail(email) {
@@ -223,7 +223,8 @@ export default async function handler(req, res) {
       const driveAccessToken = req.headers["x-drive-access-token"];
       if (driveAccessToken && successCount > 0) {
         try {
-          const folderId = await getCourseDriveFolderId(supabase, courseSlug);
+          const drive = getDriveClientWithToken(driveAccessToken);
+          const folderId = await getCourseFolderIdOrDiscover(supabase, drive, courseSlug);
           if (folderId) {
             for (const email of uniqueValidEmails) {
               await addDriveFolderPermission(driveAccessToken, folderId, email);

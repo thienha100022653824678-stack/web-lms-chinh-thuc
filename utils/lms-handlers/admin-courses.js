@@ -77,6 +77,49 @@ export default async function handler(req, res) {
         if (upsertErr) throw upsertErr;
       }
 
+      // Synchronize back to 'courses' table
+      try {
+        const { data: courseRow } = await supabase
+          .from("courses")
+          .select("raw_data")
+          .eq("slug", course)
+          .maybeSingle();
+
+        if (courseRow) {
+          const rawData = courseRow.raw_data || {};
+          
+          if (newConfig.qrImage !== undefined) {
+            rawData.qrImageUrl = String(newConfig.qrImage || "").trim();
+          }
+          if (newConfig.posterImage !== undefined) {
+            rawData.posterImageUrl = String(newConfig.posterImage || "").trim();
+          }
+
+          const updatePayload = {
+            updated_at: new Date().toISOString()
+          };
+
+          if (newConfig.title !== undefined) {
+            updatePayload.title = String(newConfig.title || "").trim();
+          }
+          if (newConfig.subtitle !== undefined) {
+            updatePayload.subtitle = String(newConfig.subtitle || "").trim();
+          }
+          if (newConfig.heroImage !== undefined) {
+            updatePayload.image_url = String(newConfig.heroImage || "").trim();
+          }
+          
+          updatePayload.raw_data = rawData;
+
+          await supabase
+            .from("courses")
+            .update(updatePayload)
+            .eq("slug", course);
+        }
+      } catch (dbErr) {
+        console.error("[admin-courses] Sync to courses table failed:", dbErr.message);
+      }
+
       return res.status(200).json({ success: true });
     }
 

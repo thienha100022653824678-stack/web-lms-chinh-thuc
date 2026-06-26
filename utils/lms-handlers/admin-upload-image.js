@@ -1,5 +1,6 @@
 import { PassThrough } from "stream";
-import { getAdminFromRequest, getDriveClientWithToken } from "../lms.js";
+import { getAdminFromRequest, getDriveClientWithToken, resolveCourseFolderTree, saveCourseFolderId } from "../lms.js";
+import { supabase } from "../supabase.js";
 
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024; // 4 MB
 
@@ -36,7 +37,19 @@ export default async function handler(req, res) {
       return res.status(401).json({ success: false, error: "Chưa đăng nhập admin" });
     }
 
-    const { fileData, fileName, mimeType, course, lesson, title, accessToken } = req.body || {};
+    const {
+      fileData,
+      fileName,
+      mimeType,
+      course,
+      lesson,
+      title,
+      accessToken,
+      imageType,
+      courseTitle,
+      lessonNo,
+      lessonTitle
+    } = req.body || {};
 
     if (!accessToken || typeof accessToken !== "string" || !accessToken.trim()) {
       return res.status(200).json({
@@ -76,18 +89,61 @@ export default async function handler(req, res) {
 
     const ext = cleanMimeType.split("/")[1]?.replace("jpeg", "jpg") || "jpg";
     let finalFileName = fileName || `image_${Date.now()}.${ext}`;
-    if (course && lesson && title) {
-      finalFileName = `${course} - ${lesson} - ${title}.${ext}`.replace(/[/\\?%*:|"<>]/g, "-");
+    
+    // Resolve clean name for file
+    if (course) {
+      const lNo = String(lessonNo || lesson || "1").trim();
+      const lTitle = String(lessonTitle || title || "Untitled").trim();
+      const slugVal = String(course).toUpperCase().trim();
+      if (imageType && imageType.startsWith("course_")) {
+        finalFileName = `${slugVal} - ${imageType}.${ext}`;
+      } else {
+        finalFileName = `${slugVal} - Lesson ${lNo} - ${imageType || "image"}_${Date.now()}.${ext}`;
+      }
     }
+    // Sanitize filename to avoid drive issues
+    finalFileName = finalFileName.replace(/[/\\?%*:|"<>']/g, "-");
 
     const drive = getDriveClientWithToken(accessToken);
-    const folderId = (process.env.GOOGLE_DRIVE_IMAGE_FOLDER_ID || "").trim();
+    let targetFolderId = "";
+    let isFallback = false;
+
+    // Resolve structural destination folder
+    if (course) {
+      try {
+        const cTitle = courseTitle || (course ? String(course).toUpperCase() : "");
+        const lNo = lessonNo || lesson || "1";
+        const lTitle = lessonTitle || title || "Untitled";
+        const resolved = await resolveCourseFolderTree(drive, {
+          course_slug: course,
+          course_title: cTitle,
+          lesson_no: lNo,
+          lesson_title: lTitle,
+          type: imageType || "lesson_media"
+        });
+        
+        targetFolderId = resolved.targetFolderId;
+        
+        // Save course folder ID
+        if (resolved.courseFolderId) {
+          await saveCourseFolderId(supabase, course, resolved.courseFolderId);
+        }
+      } catch (err) {
+        console.error("[admin-upload-image] Failed to resolve target folder structure:", err.message);
+      }
+    }
+
+    // Fallback if targetFolderId cannot be resolved
+    if (!targetFolderId) {
+      targetFolderId = (process.env.GOOGLE_DRIVE_IMAGE_FOLDER_ID || "").trim();
+    }
 
     const fileMetadata = { name: finalFileName };
-    if (folderId) fileMetadata.parents = [folderId];
+    if (targetFolderId) {
+      fileMetadata.parents = [targetFolderId];
+    }
 
     let driveFile;
-    let isFallback = false;
     try {
       driveFile = await drive.files.create({
         requestBody: fileMetadata,
@@ -97,7 +153,8 @@ export default async function handler(req, res) {
       });
     } catch (err) {
       console.error("[admin-upload-image] Drive API error:", err);
-      if (folderId) {
+      // Fallback upload to root if it was using a preset folder and failed
+      if (targetFolderId) {
         console.log("[admin-upload-image] Attempting fallback to root folder...");
         try {
           const fallbackMetadata = { name: finalFileName };
@@ -130,16 +187,8 @@ export default async function handler(req, res) {
       return res.status(500).json({ success: false, error: "Google API không trả về ID file" });
     }
 
-    // Share publicly
-    try {
-      await drive.permissions.create({
-        fileId,
-        requestBody: { role: "reader", type: "anyone" },
-        supportsAllDrives: true,
-      });
-    } catch (err) {
-      console.warn("[admin-upload-image] Could not share file publicly:", err.message);
-    }
+    // SECURITY: WE DO NOT SHARE PUBLICLY ANYMORE!
+    // Permissions are inherited from the Course folder!
 
     const directUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
     const webViewLink = driveFile.data.webViewLink || `https://drive.google.com/file/d/${fileId}/view`;
@@ -149,7 +198,7 @@ export default async function handler(req, res) {
       fileId,
       directUrl,
       webViewLink,
-      warning: isFallback ? "Lưu ý: Không thể ghi vào thư mục cấu hình (do thiếu quyền hoặc sai ID). File đã được tải lên thư mục gốc Drive của bạn." : null
+      warning: isFallback ? "Lưu ý: Không thể ghi vào thư mục cấu hình. File đã được tải lên thư mục gốc Drive của bạn." : null
     });
   } catch (err) {
     console.error("[admin-upload-image] Unexpected error:", err);

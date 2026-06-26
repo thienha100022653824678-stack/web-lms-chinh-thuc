@@ -163,9 +163,42 @@
                 </div>
                 <div>
                   <label class="block text-[10px] font-bold text-slate-500 mb-1">Ảnh banner (Hero URL)</label>
-                  <input id="metaHeroImage" type="text" placeholder="https://..." class="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium"/>
+                  <div class="flex gap-2">
+                    <input id="metaHeroImage" type="text" placeholder="https://..." class="flex-grow border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium"/>
+                    <input type="file" accept="image/*" class="hidden" id="courseHeroUploadInput" onchange="handleCourseImageUpload(this, 'course_hero', 'metaHeroImage')"/>
+                    <button type="button" onclick="document.getElementById('courseHeroUploadInput').click()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold px-3 py-2 rounded-xl transition shrink-0 cursor-pointer">Tải ảnh</button>
+                  </div>
                 </div>
-                <button onclick="saveCourseMeta()" class="w-full bg-brandGreen hover:bg-brandGreenLight text-white text-xs font-bold py-2 rounded-xl transition">Lưu cấu hình</button>
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-500 mb-1">Ảnh poster khóa học</label>
+                  <div class="flex gap-2">
+                    <input id="metaPosterImage" type="text" placeholder="https://..." class="flex-grow border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium"/>
+                    <input type="file" accept="image/*" class="hidden" id="coursePosterUploadInput" onchange="handleCourseImageUpload(this, 'course_poster', 'metaPosterImage')"/>
+                    <button type="button" onclick="document.getElementById('coursePosterUploadInput').click()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold px-3 py-2 rounded-xl transition shrink-0 cursor-pointer">Tải ảnh</button>
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-500 mb-1">Ảnh QR ngân hàng</label>
+                  <div class="flex gap-2">
+                    <input id="metaQrImage" type="text" placeholder="https://..." class="flex-grow border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium"/>
+                    <input type="file" accept="image/*" class="hidden" id="courseQrUploadInput" onchange="handleCourseImageUpload(this, 'course_qr', 'metaQrImage')"/>
+                    <button type="button" onclick="document.getElementById('courseQrUploadInput').click()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold px-3 py-2 rounded-xl transition shrink-0 cursor-pointer">Tải ảnh</button>
+                  </div>
+                </div>
+                <button onclick="saveCourseMeta()" class="w-full bg-brandGreen hover:bg-brandGreenLight text-white text-xs font-bold py-2.5 rounded-xl transition shadow-sm">Lưu cấu hình</button>
+                
+                <div class="pt-3 border-t border-slate-100 space-y-2">
+                  <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tiện ích Google Drive</h4>
+                  <div class="grid grid-cols-2 gap-2">
+                    <button onclick="syncDrivePermissions()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold py-2 px-2.5 rounded-xl transition border border-indigo-100 flex items-center justify-center gap-1">
+                      <span>🔄 Đồng bộ quyền Drive</span>
+                    </button>
+                    <button onclick="repairDriveStructure()" class="bg-amber-50 hover:bg-amber-100 text-amber-700 text-[10px] font-bold py-2 px-2.5 rounded-xl transition border border-amber-100 flex items-center justify-center gap-1">
+                      <span>🛠️ Sửa cấu trúc Drive</span>
+                    </button>
+                  </div>
+                  <div id="driveUtilStatus" class="hidden text-[10px] text-slate-500 bg-slate-50 p-2 rounded-xl border border-slate-100 whitespace-pre-line font-medium leading-relaxed"></div>
+                </div>
               </div>
             </div>
 
@@ -1135,6 +1168,14 @@
       document.getElementById("metaTitle").value = STATE.globalConfig[`${course}_title`] || "";
       document.getElementById("metaSubtitle").value = STATE.globalConfig[`${course}_subtitle`] || "";
       document.getElementById("metaHeroImage").value = STATE.globalConfig[`${course}_heroImage`] || "";
+      document.getElementById("metaPosterImage").value = STATE.globalConfig[`${course}_posterImage`] || "";
+      document.getElementById("metaQrImage").value = STATE.globalConfig[`${course}_qrImage`] || "";
+      
+      const statusDiv = document.getElementById("driveUtilStatus");
+      if (statusDiv) {
+        statusDiv.classList.add("hidden");
+        statusDiv.innerHTML = "";
+      }
 
       // Load lessons list
       await loadLessonsList(course);
@@ -1154,7 +1195,9 @@
         config: {
           title: document.getElementById("metaTitle").value.trim(),
           subtitle: document.getElementById("metaSubtitle").value.trim(),
-          heroImage: document.getElementById("metaHeroImage").value.trim()
+          heroImage: document.getElementById("metaHeroImage").value.trim(),
+          posterImage: document.getElementById("metaPosterImage").value.trim(),
+          qrImage: document.getElementById("metaQrImage").value.trim()
         }
       };
 
@@ -1173,6 +1216,8 @@
           STATE.globalConfig[`${course}_title`] = payload.config.title;
           STATE.globalConfig[`${course}_subtitle`] = payload.config.subtitle;
           STATE.globalConfig[`${course}_heroImage`] = payload.config.heroImage;
+          STATE.globalConfig[`${course}_posterImage`] = payload.config.posterImage;
+          STATE.globalConfig[`${course}_qrImage`] = payload.config.qrImage;
         } else {
           toast(d.error || "Lỗi lưu cấu hình", "error");
         }
@@ -1798,7 +1843,7 @@
     async function handleThumbnailUpload(input) {
       const file = input.files[0];
       if (!file) return;
-      const url = await uploadImageFile(file);
+      const url = await uploadImageFile(file, "lesson_thumbnail");
       if (url) {
         document.getElementById("fThumbnailUrl").value = url;
       }
@@ -1807,7 +1852,7 @@
     async function handleImageUploadForBlock(blockId, input) {
       const file = input.files[0];
       if (!file) return;
-      const url = await uploadImageFile(file);
+      const url = await uploadImageFile(file, "lesson_media_image");
       if (url) {
         const block = document.getElementById(blockId);
         if (block) {
@@ -1816,7 +1861,7 @@
       }
     }
 
-    async function uploadImageFile(file) {
+    async function uploadImageFile(file, imageType = "") {
       let driveToken;
       try {
         driveToken = await ensureDriveAccess();
@@ -1828,9 +1873,10 @@
       const courseEl = document.getElementById("fCourse");
       const lessonEl = document.getElementById("fLesson");
       const titleEl = document.getElementById("fTitle");
-      const course = courseEl ? courseEl.value : "";
+      const course = (courseEl && courseEl.value) ? courseEl.value : (document.getElementById("courseSelect")?.value || "");
       const lesson = lessonEl ? lessonEl.value : "";
       const title = (titleEl && titleEl.value.trim()) || file.name;
+      const courseTitle = (STATE.globalConfig && STATE.globalConfig[`${course}_title`]) || "";
 
       showLoader("Đang tải ảnh lên Google Drive...");
       return new Promise((resolve) => {
@@ -1847,7 +1893,11 @@
                 course,
                 lesson,
                 title,
-                accessToken: driveToken
+                accessToken: driveToken,
+                imageType,
+                courseTitle,
+                lessonNo: lesson,
+                lessonTitle: title
               })
             });
             const d = await res.json();
@@ -1873,6 +1923,125 @@
         };
         reader.readAsDataURL(file);
       });
+    }
+
+    async function handleCourseImageUpload(input, imageType, targetInputId) {
+      const file = input.files[0];
+      if (!file) return;
+      const url = await uploadImageFile(file, imageType);
+      if (url) {
+        document.getElementById(targetInputId).value = url;
+        document.getElementById(targetInputId).dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      input.value = "";
+    }
+
+    async function syncDrivePermissions() {
+      const course = document.getElementById("courseSelect").value;
+      if (!course) {
+        toast("Vui lòng chọn một khóa học trước", "error");
+        return;
+      }
+      let driveToken;
+      try {
+        driveToken = await ensureDriveAccess();
+      } catch {
+        toast("Vui lòng kết nối Google Drive để đồng bộ quyền.", "error");
+        return;
+      }
+
+      const statusDiv = document.getElementById("driveUtilStatus");
+      statusDiv.classList.remove("hidden");
+      statusDiv.innerHTML = "⏳ Đang đồng bộ quyền học viên trên Google Drive...";
+
+      try {
+        const res = await fetch("/api/lms/admin?endpoint=sync-drive-permissions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeaders()
+          },
+          body: JSON.stringify({
+            courseSlug: course,
+            accessToken: driveToken
+          })
+        });
+        const d = await res.json();
+        if (res.ok && d.success) {
+          const { successCount, skippedCount, errorCount, errors } = d.report;
+          let msg = `✅ Đã đồng bộ quyền cho khóa học:
+- Đã cấp mới: ${successCount} học viên
+- Đã có quyền sẵn: ${skippedCount} học viên
+- Lỗi: ${errorCount} học viên`;
+          if (errors && errors.length > 0) {
+            msg += `\n\nChi tiết lỗi:\n` + errors.map(e => `- ${e.email || 'Khóa học'}: ${e.error}`).join("\n");
+          }
+          statusDiv.innerHTML = msg;
+          toast("Đồng bộ quyền Drive hoàn tất!");
+        } else {
+          statusDiv.innerHTML = `❌ Lỗi: ${d.error || "Không thể đồng bộ quyền"}`;
+          toast(d.error || "Đồng bộ quyền Drive thất bại", "error");
+        }
+      } catch (err) {
+        statusDiv.innerHTML = `❌ Lỗi kết nối server: ${err.message}`;
+        toast("Lỗi kết nối đồng bộ quyền Drive", "error");
+      }
+    }
+
+    async function repairDriveStructure() {
+      const course = document.getElementById("courseSelect").value;
+      if (!course) {
+        toast("Vui lòng chọn một khóa học trước", "error");
+        return;
+      }
+      let driveToken;
+      try {
+        driveToken = await ensureDriveAccess();
+      } catch {
+        toast("Vui lòng kết nối Google Drive để sửa cấu trúc.", "error");
+        return;
+      }
+
+      const statusDiv = document.getElementById("driveUtilStatus");
+      statusDiv.classList.remove("hidden");
+      statusDiv.innerHTML = "⏳ Đang di chuyển các file và sửa cấu trúc thư mục khóa học trên Drive...\n(Việc này có thể mất vài phút nếu khóa học có nhiều bài học)";
+
+      try {
+        const res = await fetch("/api/lms/admin?endpoint=repair-drive", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeaders()
+          },
+          body: JSON.stringify({
+            courseSlug: course,
+            accessToken: driveToken
+          })
+        });
+        const d = await res.json();
+        if (res.ok && d.success) {
+          const { movedCount, skippedCount, errorCount, syncedStudentsCount, syncError } = d.report;
+          let msg = `✅ Hoàn thành sửa cấu trúc Drive & di chuyển media:
+- Đã di chuyển: ${movedCount} tệp tin
+- Đúng vị trí sẵn: ${skippedCount} tệp tin
+- Lỗi di chuyển: ${errorCount} tệp tin
+- Đã cấp lại quyền Drive cho: ${syncedStudentsCount} học viên`;
+          if (syncError) {
+            msg += `\n- Lỗi cấp quyền: ${syncError}`;
+          }
+          if (d.details && d.details.filter(x => x.status === "error").length > 0) {
+            msg += `\n\nChi tiết lỗi di chuyển:\n` + d.details.filter(x => x.status === "error").map(e => `- ${e.name} (${e.type}): ${e.error}`).join("\n");
+          }
+          statusDiv.innerHTML = msg;
+          toast("Sửa cấu trúc Drive thành công!");
+        } else {
+          statusDiv.innerHTML = `❌ Lỗi: ${d.error || "Không thể sửa cấu trúc"}`;
+          toast(d.error || "Sửa cấu trúc Drive thất bại", "error");
+        }
+      } catch (err) {
+        statusDiv.innerHTML = `❌ Lỗi kết nối server: ${err.message}`;
+        toast("Lỗi kết nối sửa cấu trúc Drive", "error");
+      }
     }
 
     // Google Drive Video Upload and Drag/Drop functions
@@ -2862,6 +3031,8 @@
       // Check if this input is intended for image URLs
       const id = activeEl.id || "";
       const isImageInput = id === "metaHeroImage" || 
+                           id === "metaPosterImage" || 
+                           id === "metaQrImage" || 
                            id === "fThumbnailUrl" || 
                            activeEl.hasAttribute("data-media-url") ||
                            activeEl.placeholder.toLowerCase().includes("ảnh") ||
@@ -2896,7 +3067,14 @@
       activeEl.disabled = true;
 
       try {
-        const directUrl = await uploadImageFile(imageFile);
+        let imageType = "lesson_media_image";
+        if (id === "metaHeroImage") imageType = "course_hero";
+        else if (id === "metaPosterImage") imageType = "course_poster";
+        else if (id === "metaQrImage") imageType = "course_qr";
+        else if (id === "fThumbnailUrl") imageType = "lesson_thumbnail";
+        else if (activeEl.hasAttribute("data-media-url")) imageType = "lesson_media_image";
+
+        const directUrl = await uploadImageFile(imageFile, imageType);
         if (directUrl) {
           activeEl.value = directUrl;
           // Trigger input and change events so frameworks/bindings know about the update

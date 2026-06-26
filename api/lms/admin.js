@@ -9,6 +9,8 @@ import adminUploadRecipeHandler from "../../utils/lms-handlers/admin-upload-reci
 import adminBulkEnrollHandler from "../../utils/lms-handlers/admin-bulk-enroll.js";
 import adminUploadGDriveVideoHandler from "../../utils/lms-handlers/admin-upload-gdrive-video.js";
 import adminSubPostsHandler from "../../utils/lms-handlers/admin-sub-posts.js";
+import adminSyncDrivePermissionsHandler from "../../utils/lms-handlers/admin-sync-drive-permissions.js";
+import adminRepairDriveHandler from "../../utils/lms-handlers/admin-repair-drive.js";
 
 export const config = {
   api: {
@@ -53,6 +55,12 @@ export default async function handler(req, res) {
   }
   if (endpoint === "sub-posts") {
     return adminSubPostsHandler(req, res);
+  }
+  if (endpoint === "sync-drive-permissions") {
+    return adminSyncDrivePermissionsHandler(req, res);
+  }
+  if (endpoint === "repair-drive") {
+    return adminRepairDriveHandler(req, res);
   }
 
   return res.status(404).json({ success: false, error: "LMS Admin Endpoint not found" });
