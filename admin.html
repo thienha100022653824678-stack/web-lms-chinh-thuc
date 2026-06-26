@@ -1847,12 +1847,26 @@
         const folderId = folderData.folderId;
         if (statusText) statusText.innerText = "Khởi tạo phiên tải lên Google Drive...";
 
+        // Normalize non-standard MIME types that Google Drive API rejects
+        let uploadMime = file.type || "";
+        const unacceptedMimes = [
+          "video/x-matroska",
+          "video/x-msvideo",
+          "video/x-ms-wmv",
+          "video/x-flv",
+          "video/x-ms-vob",
+          "video/x-generic"
+        ];
+        if (!uploadMime || unacceptedMimes.includes(uploadMime)) {
+          uploadMime = "video/mp4";
+        }
+
         // Step 2: Initiate Resumable Upload on Google Drive API
         const initXhr = new XMLHttpRequest();
         initXhr.open("POST", "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable", true);
         initXhr.setRequestHeader("Authorization", `Bearer ${driveToken}`);
         initXhr.setRequestHeader("Content-Type", "application/json; charset=UTF-8");
-        initXhr.setRequestHeader("X-Upload-Content-Type", file.type || "video/mp4");
+        initXhr.setRequestHeader("X-Upload-Content-Type", uploadMime);
         initXhr.setRequestHeader("X-Upload-Content-Length", file.size);
 
         initXhr.onload = function() {
@@ -1875,7 +1889,7 @@
             putXhr.open("PUT", sessionUrl, true);
             
             // Set required headers for resumable upload PUT request
-            putXhr.setRequestHeader("Content-Type", file.type || "video/mp4");
+            putXhr.setRequestHeader("Content-Type", uploadMime);
             putXhr.setRequestHeader("Content-Range", `bytes 0-${file.size - 1}/${file.size}`);
 
             // Track upload progress

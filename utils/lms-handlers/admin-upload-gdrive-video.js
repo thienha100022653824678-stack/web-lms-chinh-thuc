@@ -6,16 +6,18 @@ const MAX_VIDEO_BYTES = 500 * 1024 * 1024; // 500 MB limit
 
 // Map extension → correct IANA video MIME type
 // Windows often reports "" or "application/octet-stream" for .mkv, .avi, .mov etc.
+// Note: Google Drive API throws "invalid media type" for non-standard MIME types like video/x-matroska
+// or video/x-msvideo, so we map them to video/mp4 as a safe, universally accepted video container.
 const VIDEO_MIME_MAP = {
   "mp4":  "video/mp4",
   "m4v":  "video/mp4",
   "mov":  "video/quicktime",
   "qt":   "video/quicktime",
-  "avi":  "video/x-msvideo",
-  "mkv":  "video/x-matroska",
+  "avi":  "video/mp4",
+  "mkv":  "video/mp4",
   "webm": "video/webm",
-  "wmv":  "video/x-ms-wmv",
-  "flv":  "video/x-flv",
+  "wmv":  "video/mp4",
+  "flv":  "video/mp4",
   "3gp":  "video/3gpp",
   "3g2":  "video/3gpp2",
   "mpeg": "video/mpeg",
@@ -24,24 +26,19 @@ const VIDEO_MIME_MAP = {
   "mts":  "video/mp2t",
   "m2ts": "video/mp2t",
   "ogv":  "video/ogg",
-  "vob":  "video/x-ms-vob",
+  "vob":  "video/mp4",
 };
 
 // Map x-* subtype to human-readable extension for safe filename generation
 const MIME_TO_EXT = {
   "video/mp4":          "mp4",
   "video/quicktime":    "mov",
-  "video/x-msvideo":   "avi",
-  "video/x-matroska":  "mkv",
   "video/webm":         "webm",
-  "video/x-ms-wmv":    "wmv",
-  "video/x-flv":       "flv",
   "video/3gpp":         "3gp",
   "video/3gpp2":        "3g2",
   "video/mpeg":         "mpg",
   "video/mp2t":         "ts",
   "video/ogg":          "ogv",
-  "video/x-ms-vob":    "vob",
 };
 
 /**
@@ -49,22 +46,34 @@ const MIME_TO_EXT = {
  * from the data URL mime (if detected by the browser).
  */
 function resolveVideoMime(rawMimeFromBrowser, fileName) {
-  // 1. Start with what the browser reported
   let mime = (rawMimeFromBrowser || "").trim();
 
-  // 2. If it looks like a real video/* MIME (not generic), accept it
+  // Normalize non-standard MIME types that Google Drive API rejects
+  const unacceptedMimes = [
+    "video/x-matroska",
+    "video/x-msvideo",
+    "video/x-ms-wmv",
+    "video/x-flv",
+    "video/x-ms-vob",
+    "video/x-generic"
+  ];
+  if (unacceptedMimes.includes(mime)) {
+    mime = "video/mp4";
+  }
+
+  // 1. If it looks like a real, accepted video/* MIME, accept it
   if (mime && mime.startsWith("video/") && mime !== "video/x-generic") {
     return mime;
   }
 
-  // 3. Otherwise, infer from file extension
+  // 2. Otherwise, infer from file extension
   const ext = String(fileName || "").split(".").pop().toLowerCase().trim();
   if (ext && VIDEO_MIME_MAP[ext]) {
     console.log(`[upload-video] Inferred MIME from .${ext} → ${VIDEO_MIME_MAP[ext]}`);
     return VIDEO_MIME_MAP[ext];
   }
 
-  // 4. Final fallback
+  // 3. Final fallback
   console.log(`[upload-video] Could not infer MIME for "${fileName}", defaulting to video/mp4`);
   return "video/mp4";
 }
