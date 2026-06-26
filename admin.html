@@ -195,20 +195,20 @@
                 <input id="fTitle" type="text" placeholder="Ví dụ: Tổng quan lý thuyết nhào bột" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"/>
               </div>
 
-              <div>
+              <div class="hidden">
                 <label class="block text-xs font-bold text-slate-500 mb-1">Mô tả ngắn</label>
                 <textarea id="fDescription" rows="2" placeholder="Tóm tắt nội dung bài học..." class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"></textarea>
               </div>
 
               <div class="grid sm:grid-cols-3 gap-4">
-                <div>
-                  <label class="block text-xs font-bold text-slate-500 mb-1">Thời lượng (ví dụ: 12:45)</label>
+                <div class="hidden">
+                  <label class="block text-xs font-bold text-slate-500 mb-1">Thời lượng</label>
                   <input id="fDuration" type="text" placeholder="12:45" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"/>
                 </div>
-                <div>
+                <div class="hidden">
                   <label class="block text-xs font-bold text-slate-500 mb-1">Cấp độ</label>
                   <select id="fLevel" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm">
-                    <option>Cơ bản</option>
+                    <option selected>Cơ bản</option>
                     <option>Trung cấp</option>
                     <option>Nâng cao</option>
                     <option>Chuyên nghiệp</option>
@@ -234,10 +234,10 @@
                 </div>
               </div>
 
-              <div>
-                <label class="block text-xs font-bold text-slate-500 mb-1">Video bài giảng chính (Bunny / YouTube)</label>
+               <div>
+                <label class="block text-xs font-bold text-slate-500 mb-1">Video bài giảng chính (Google Drive)</label>
                 <div class="flex gap-2">
-                  <input id="fVideoUrl" type="text" placeholder="Dán URL phát video hoặc iframe Bunny/YouTube..." class="flex-grow border border-slate-200 rounded-xl px-3 py-2 text-sm"/>
+                  <input id="fVideoUrl" type="text" placeholder="Dán link chia sẻ hoặc ID video Google Drive..." class="flex-grow border border-slate-200 rounded-xl px-3 py-2 text-sm"/>
                   <button onclick="testMainVideoUrl()" class="bg-slate-200 hover:bg-slate-350 text-slate-700 text-xs font-bold px-4 py-2 rounded-xl transition shrink-0">Kiểm tra</button>
                 </div>
                 <div id="mainVideoStatus" class="mt-1"></div>
@@ -245,20 +245,15 @@
 
               <!-- RECIPE -->
               <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
-                <label class="block text-xs font-black text-slate-500">📄 CÔNG THỨC CHI TIẾT (GOOGLE DOCS)</label>
-                <textarea id="recipeText" rows="3" placeholder="Viết hoặc dán công thức bằng văn bản vào đây..." class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"></textarea>
-                <div class="flex items-center gap-2 text-xs text-slate-500">
-                  <span>Hoặc tải tệp .txt:</span>
-                  <input type="file" id="recipeFileInput" accept=".txt" onchange="handleRecipeFile(this)" class="text-xs"/>
-                </div>
-                <button onclick="createGoogleDoc()" class="bg-brandGreen hover:bg-brandGreenLight text-white text-xs font-bold px-4 py-2 rounded-xl transition">📝 Tạo Google Docs</button>
+                <label class="block text-xs font-black text-slate-500">📄 CÔNG THỨC CHI TIẾT</label>
+                <textarea id="recipeText" rows="6" placeholder="Viết hoặc dán công thức bằng văn bản vào đây..." class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"></textarea>
                 
-                <div>
-                  <label class="block text-[10px] font-bold text-slate-500 mb-1">Đường dẫn Google Docs (recipeUrl)</label>
-                  <div class="flex gap-2">
-                    <input id="fRecipeUrl" type="text" placeholder="https://docs.google.com/document/..." class="flex-grow border border-slate-200 rounded-xl px-3 py-2 text-xs"/>
-                    <a id="recipeOpenLink" href="#" target="_blank" class="hidden bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold px-4 py-2 rounded-xl transition flex items-center">Mở</a>
-                  </div>
+                <!-- Hidden components to keep JS working without errors -->
+                <div class="hidden">
+                  <input type="file" id="recipeFileInput" accept=".txt" onchange="handleRecipeFile(this)" class="text-xs"/>
+                  <button onclick="createGoogleDoc()"></button>
+                  <input id="fRecipeUrl" type="text" value=""/>
+                  <a id="recipeOpenLink" href="#" target="_blank">Mở</a>
                 </div>
               </div>
 
@@ -272,8 +267,7 @@
                   <!-- Dynamic media blocks populated here -->
                 </div>
                 <div class="flex flex-wrap gap-2 pt-2 border-t border-slate-200">
-                  <button onclick="addMediaBlock('video')" class="bg-blue-50 text-blue-600 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-blue-100 transition">+ Video Bunny</button>
-                  <button onclick="addMediaBlock('youtube')" class="bg-red-50 text-red-600 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-red-100 transition">+ YouTube</button>
+                  <button onclick="addMediaBlock('video')" class="bg-blue-50 text-blue-600 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-blue-100 transition">+ Video (GDrive)</button>
                   <button onclick="addMediaBlock('image')" class="bg-emerald-50 text-emerald-600 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-emerald-100 transition">+ Thêm Ảnh</button>
                 </div>
               </div>
@@ -780,16 +774,24 @@
       document.getElementById("fDuration").value = l.duration || "";
       document.getElementById("fLevel").value = l.level || "Cơ bản";
       document.getElementById("fStatus").value = l.status || "active";
-      document.getElementById("fThumbnailUrl").value = l.thumbnailUrl || "";
+       document.getElementById("fThumbnailUrl").value = l.thumbnailUrl || "";
       document.getElementById("fVideoUrl").value = l.videoUrl || "";
-      document.getElementById("fRecipeUrl").value = l.recipeUrl || "";
-      document.getElementById("recipeText").value = "";
+      
+      const recipeVal = l.recipeUrl || "";
+      if (recipeVal && !/^https?:\/\//i.test(recipeVal)) {
+        document.getElementById("recipeText").value = recipeVal;
+        document.getElementById("fRecipeUrl").value = "";
+      } else {
+        document.getElementById("recipeText").value = "";
+        document.getElementById("fRecipeUrl").value = recipeVal;
+      }
+      
       document.getElementById("recipeFileInput").value = "";
       document.getElementById("mainVideoStatus").innerHTML = "";
 
       const link = document.getElementById("recipeOpenLink");
-      if (l.recipeUrl) {
-        link.href = l.recipeUrl;
+      if (recipeVal && /^https?:\/\//i.test(recipeVal)) {
+        link.href = recipeVal;
         link.classList.remove("hidden");
       } else {
         link.classList.add("hidden");
@@ -822,7 +824,10 @@
       const status = document.getElementById("fStatus").value;
       const thumbnailUrl = document.getElementById("fThumbnailUrl").value.trim();
       const videoUrl = document.getElementById("fVideoUrl").value.trim();
-      const recipeUrl = document.getElementById("fRecipeUrl").value.trim();
+      
+      const recipeTextInput = document.getElementById("recipeText").value.trim();
+      const recipeUrlInput = document.getElementById("fRecipeUrl").value.trim();
+      const recipeUrl = recipeTextInput ? recipeTextInput : recipeUrlInput;
 
       const mediaUrls = buildMediaUrls();
 
@@ -889,12 +894,12 @@
       }
     }
 
-    // ── Media Blocks construction ──────────────────────────────────────────
+     // ── Media Blocks construction ──────────────────────────────────────────
     let blockIdCounter = 0;
     function addMediaBlock(type, titleVal = "", urlVal = "") {
       const id = `mb_${++blockIdCounter}`;
-      const color = type === "video" ? "bg-blue-50 text-blue-600" : type === "youtube" ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600";
-      const label = type === "video" ? "Bunny Stream" : type === "youtube" ? "YouTube" : "Ảnh/Tài liệu";
+      const color = type === "video" ? "bg-blue-50 text-blue-600" : "bg-emerald-50 text-emerald-600";
+      const label = type === "video" ? "Video (GDrive)" : "Ảnh";
 
       const container = document.getElementById("mediaBlocksContainer");
       const div = document.createElement("div");

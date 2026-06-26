@@ -216,14 +216,18 @@ async function fetchRecipeTextFromPublicUrl(recipeUrl) {
 
 async function fetchRecipeText(recipeUrl) {
   if (!recipeUrl) return "";
+  const trimmed = recipeUrl.trim();
+  if (!/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
   try {
-    const text = await fetchRecipeTextFromGoogleApi(recipeUrl);
+    const text = await fetchRecipeTextFromGoogleApi(trimmed);
     if (text) return text;
   } catch (err) {
     console.warn("[course-data] Google API recipe fetch failed, trying public fallback:", err.message);
   }
   try {
-    return await fetchRecipeTextFromPublicUrl(recipeUrl);
+    return await fetchRecipeTextFromPublicUrl(trimmed);
   } catch (err) {
     console.error("[course-data] Public recipe fetch failed:", err.message);
     return "";
