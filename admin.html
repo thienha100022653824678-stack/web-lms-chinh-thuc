@@ -1815,111 +1815,154 @@
       const progressBar = document.getElementById(progressElId);
 
       if (wrapper) wrapper.classList.remove("hidden");
-      if (statusText) statusText.innerText = "Đang đọc file video...";
+      if (statusText) statusText.innerText = "Đang chuẩn bị thư mục Google Drive...";
       if (percentText) percentText.innerText = "0%";
       if (progressBar) progressBar.style.width = "0%";
 
-      // FileReader to read file as DataURL (Base64)
-      const reader = new FileReader();
-      reader.onerror = () => {
-        toast("Lỗi đọc file video từ thiết bị.", "error");
+      // Step 1: Request backend to resolve/create the folder structure
+      try {
+        const folderRes = await fetch("/api/lms/admin?endpoint=upload-gdrive-video", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeaders(),
+            "x-drive-access-token": driveToken
+          },
+          body: JSON.stringify({
+            action: "get-folder",
+            course_slug,
+            course_title,
+            lesson_no,
+            lesson_title,
+            media_type: type,
+            accessToken: driveToken
+          })
+        });
+
+        const folderData = await folderRes.json();
+        if (!folderRes.ok || !folderData.success) {
+          throw new Error(folderData.error || "Không thể khởi tạo thư mục tải lên");
+        }
+
+        const folderId = folderData.folderId;
+        if (statusText) statusText.innerText = "Khởi tạo phiên tải lên Google Drive...";
+
+        // Step 2: Initiate Resumable Upload on Google Drive API
+        const initXhr = new XMLHttpRequest();
+        initXhr.open("POST", "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable", true);
+        initXhr.setRequestHeader("Authorization", `Bearer ${driveToken}`);
+        initXhr.setRequestHeader("Content-Type", "application/json; charset=UTF-8");
+        initXhr.setRequestHeader("X-Upload-Content-Type", file.type || "video/mp4");
+        initXhr.setRequestHeader("X-Upload-Content-Length", file.size);
+
+        initXhr.onload = function() {
+          if (initXhr.status === 200 || initXhr.status === 201) {
+            const sessionUrl = initXhr.getResponseHeader("Location");
+            if (!sessionUrl) {
+              toast("Lỗi khởi tạo phiên upload: Không tìm thấy Session URL", "error");
+              if (wrapper) wrapper.classList.add("hidden");
+              resetInput();
+              return;
+            }
+
+            if (statusText) statusText.innerText = "Đang tải video trực tiếp lên Drive...";
+
+            // Step 3: PUT the file binary data directly to Google Drive sessionUrl
+            const putXhr = new XMLHttpRequest();
+            putXhr.open("PUT", sessionUrl, true);
+
+            // Track upload progress
+            putXhr.upload.onprogress = function(e) {
+              if (e.lengthComputable) {
+                const percentComplete = Math.round((e.loaded / e.total) * 100);
+                if (percentText) percentText.innerText = `${percentComplete}%`;
+                if (progressBar) progressBar.style.width = `${percentComplete}%`;
+                if (statusText) statusText.innerText = `Đang tải video trực tiếp lên Drive... ${percentComplete}%`;
+              }
+            };
+
+            putXhr.onload = function() {
+              if (putXhr.status === 200 || putXhr.status === 201) {
+                let driveFileData;
+                try {
+                  driveFileData = JSON.parse(putXhr.responseText);
+                } catch (e) {
+                  driveFileData = {};
+                }
+
+                const fileId = driveFileData.id;
+                if (!fileId) {
+                  toast("Lỗi: Không nhận được ID file từ Google Drive.", "error");
+                  if (statusText) statusText.innerText = "Lỗi nhận file ID";
+                  resetInput();
+                  return;
+                }
+
+                if (statusText) statusText.innerText = "Upload xong";
+                if (percentText) percentText.innerText = "100%";
+                if (progressBar) progressBar.style.width = "100%";
+
+                toast("Upload video lên Google Drive thành công!");
+                const directUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+
+                if (type === "main_video") {
+                  const urlInput = document.getElementById("fVideoUrl");
+                  if (urlInput) {
+                    urlInput.value = directUrl;
+                    urlInput.dispatchEvent(new Event("change"));
+                    urlInput.dispatchEvent(new Event("input"));
+                  }
+                } else {
+                  const block = document.getElementById(blockId);
+                  if (block) {
+                    const urlInput = block.querySelector("[data-media-url]");
+                    if (urlInput) {
+                      urlInput.value = directUrl;
+                      urlInput.dispatchEvent(new Event("change"));
+                      urlInput.dispatchEvent(new Event("input"));
+                    }
+                  }
+                }
+              } else {
+                toast(`Tải video thất bại (PUT: ${putXhr.status})`, "error");
+                if (statusText) statusText.innerText = `Lỗi upload: code ${putXhr.status}`;
+              }
+              resetInput();
+            };
+
+            putXhr.onerror = function() {
+              toast("Lỗi kết nối khi tải video trực tiếp lên Drive.", "error");
+              if (statusText) statusText.innerText = "Lỗi kết nối mạng (PUT)";
+              resetInput();
+            };
+
+            // Send raw binary File object directly!
+            putXhr.send(file);
+
+          } else {
+            toast(`Khởi tạo upload thất bại: code ${initXhr.status}`, "error");
+            if (statusText) statusText.innerText = `Lỗi khởi tạo: code ${initXhr.status}`;
+            resetInput();
+          }
+        };
+
+        initXhr.onerror = function() {
+          toast("Lỗi kết nối khi khởi tạo upload với Google Drive.", "error");
+          if (statusText) statusText.innerText = "Lỗi kết nối mạng (POST)";
+          resetInput();
+        };
+
+        initXhr.send(JSON.stringify({
+          name: file.name,
+          parents: [folderId]
+        }));
+
+      } catch (err) {
+        toast(`Lỗi: ${err.message}`, "error");
+        if (statusText) statusText.innerText = `Lỗi: ${err.message}`;
         if (wrapper) wrapper.classList.add("hidden");
         resetInput();
-      };
-
-      reader.onload = function() {
-        if (statusText) statusText.innerText = "Đang tải video lên Google Drive...";
-
-        const xhr = new XMLHttpRequest();
-        xhr.open("POST", "/api/lms/admin?endpoint=upload-gdrive-video", true);
-        xhr.setRequestHeader("Content-Type", "application/json");
-
-        // Forward headers
-        const headers = authHeaders();
-        for (const [key, val] of Object.entries(headers)) {
-          xhr.setRequestHeader(key, val);
-        }
-        
-        if (driveToken) {
-          xhr.setRequestHeader("x-drive-access-token", driveToken);
-        }
-
-        // Track progress of the upload
-        xhr.upload.onprogress = function(e) {
-          if (e.lengthComputable) {
-            const percentComplete = Math.round((e.loaded / e.total) * 100);
-            if (percentText) percentText.innerText = `${percentComplete}%`;
-            if (progressBar) progressBar.style.width = `${percentComplete}%`;
-            if (statusText) statusText.innerText = `Đang tải video lên Google Drive... ${percentComplete}%`;
-          }
-        };
-
-        xhr.onload = function() {
-          let resData;
-          try {
-            resData = JSON.parse(xhr.responseText);
-          } catch (e) {
-            resData = { success: false, error: "Định dạng phản hồi không hợp lệ" };
-          }
-
-          if (xhr.status === 200 && resData.success) {
-            if (statusText) statusText.innerText = "Upload xong";
-            if (percentText) percentText.innerText = "100%";
-            if (progressBar) progressBar.style.width = "100%";
-
-            toast("Upload video lên Google Drive thành công!");
-            
-            if (type === "main_video") {
-              const urlInput = document.getElementById("fVideoUrl");
-              if (urlInput) {
-                urlInput.value = resData.directUrl;
-                urlInput.dispatchEvent(new Event("change"));
-                urlInput.dispatchEvent(new Event("input"));
-              }
-            } else {
-              const block = document.getElementById(blockId);
-              if (block) {
-                const urlInput = block.querySelector("[data-media-url]");
-                if (urlInput) {
-                  urlInput.value = resData.directUrl;
-                  urlInput.dispatchEvent(new Event("change"));
-                  urlInput.dispatchEvent(new Event("input"));
-                }
-              }
-            }
-          } else {
-            let errText = resData.error || "Tải video lên Drive thất bại";
-            if (resData.message) {
-              errText += ` (${resData.message})`;
-            }
-            toast(errText, "error");
-            if (statusText) statusText.innerText = `Lỗi: ${errText}`;
-          }
-          resetInput();
-        };
-
-        xhr.onerror = function() {
-          toast("Lỗi kết nối khi tải video lên Drive.", "error");
-          if (statusText) statusText.innerText = "Lỗi kết nối mạng";
-          resetInput();
-        };
-
-        const payload = {
-          fileData: reader.result,
-          fileName: file.name,
-          mimeType: file.type,
-          course_slug,
-          course_title,
-          lesson_no,
-          lesson_title,
-          media_type: type,
-          accessToken: driveToken
-        };
-
-        xhr.send(JSON.stringify(payload));
-      };
-
-      reader.readAsDataURL(file);
+      }
     }
 
     // ── TAB: STUDENTS (CRUD) ───────────────────────────────────────────────

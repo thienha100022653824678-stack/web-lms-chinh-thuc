@@ -161,6 +161,7 @@ export default async function handler(req, res) {
     }
 
     const {
+      action,
       fileData,
       fileName,
       mimeType,
@@ -176,11 +177,44 @@ export default async function handler(req, res) {
     if (!accessToken || typeof accessToken !== "string" || !accessToken.trim()) {
       return res.status(200).json({ success: false, needsOAuth: true, error: "Chưa kết nối Google Drive" });
     }
-    if (!fileData || typeof fileData !== "string") {
-      return res.status(400).json({ success: false, error: "Thiếu dữ liệu video (fileData)" });
-    }
     if (!course_slug) {
       return res.status(400).json({ success: false, error: "Thiếu slug khóa học (course_slug)" });
+    }
+
+    // Direct frontend upload helper: resolve folder structure and return folderId
+    if (action === "get-folder") {
+      const drive = getDriveClientWithToken(accessToken);
+
+      const culinaryLmsId = await getOrCreateFolder(drive, "Culinary LMS");
+      const coursesId     = await getOrCreateFolder(drive, "Courses", culinaryLmsId);
+
+      const slugUpper  = String(course_slug).toUpperCase().trim();
+      const titleVal   = String(course_title || slugUpper).trim();
+      const courseFolder = `${slugUpper} - ${titleVal}`.replace(/[/\\?%*:|"<>]/g, "-");
+      const courseFolderId = await getOrCreateFolder(drive, courseFolder, coursesId);
+
+      // Persist folder ID for Drive permission syncing (non-blocking)
+      supabase.from("site_config").upsert({
+        key: `${course_slug.trim().toLowerCase()}_gdrive_folder_id`,
+        value: { val: courseFolderId },
+        updated_at: new Date().toISOString()
+      }, { onConflict: "key" }).catch(e =>
+        console.error("[upload-video] site_config upsert failed:", e.message)
+      );
+
+      const lNo   = String(lesson_no || "1").trim();
+      const lTitle = String(lesson_title || "Untitled").trim();
+      const lessonFolder = `Lesson ${lNo} - ${lTitle}`.replace(/[/\\?%*:|"<>]/g, "-");
+      const lessonFolderId = await getOrCreateFolder(drive, lessonFolder, courseFolderId);
+
+      const targetFolderName = media_type === "main_video" ? "Main Video" : "Media Videos";
+      const targetFolderId   = await getOrCreateFolder(drive, targetFolderName, lessonFolderId);
+
+      return res.status(200).json({ success: true, folderId: targetFolderId });
+    }
+
+    if (!fileData || typeof fileData !== "string") {
+      return res.status(400).json({ success: false, error: "Thiếu dữ liệu video (fileData)" });
     }
 
     // ── Extract base64 and MIME from data URL ──────────────────────────────
