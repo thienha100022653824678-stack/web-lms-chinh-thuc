@@ -201,6 +201,34 @@
             } else {
               document.getElementById('diag-isc').innerText = 'isCocCocBrowser function not defined yet';
             }
+            
+            // Inspect window.webkit.messageHandlers
+            var handlersList = [];
+            if (window.webkit && window.webkit.messageHandlers) {
+              try {
+                handlersList = Object.keys(window.webkit.messageHandlers);
+              } catch (e) {
+                handlersList = ["Error: " + e.message];
+              }
+            }
+            
+            // Inspect any window keys containing 'coc'
+            var cocKeys = [];
+            try {
+              for (var key in window) {
+                if (key.toLowerCase().indexOf('coc') !== -1) {
+                  cocKeys.push(key);
+                }
+              }
+            } catch (e) {
+              cocKeys = ["Error: " + e.message];
+            }
+            
+            // Add custom elements to banner
+            var extraDiv = document.createElement('div');
+            extraDiv.innerHTML = "<strong>WebKit Handlers:</strong> " + JSON.stringify(handlersList) + "<br>" +
+                                "<strong>Window 'coc' Keys:</strong> " + JSON.stringify(cocKeys);
+            banner.appendChild(extraDiv);
           }, 500);
         }
       }
