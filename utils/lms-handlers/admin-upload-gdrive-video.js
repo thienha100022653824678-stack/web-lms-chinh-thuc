@@ -12,15 +12,31 @@ async function getOrCreateFolder(drive, name, parentId = null) {
     query += ` and 'root' in parents`;
   }
 
-  const res = await drive.files.list({
-    q: query,
-    fields: "files(id, name)",
-    spaces: "drive",
-    supportsAllDrives: true,
-    includeItemsFromAllDrives: true
-  });
+  let files = [];
+  try {
+    const res = await drive.files.list({
+      q: query,
+      fields: "files(id, name)",
+      spaces: "drive",
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true
+    });
+    files = res.data.files || [];
+  } catch (err) {
+    console.warn("[getOrCreateFolder] List with shared drives failed, trying standard list:", err.message);
+    try {
+      const res = await drive.files.list({
+        q: query,
+        fields: "files(id, name)",
+        spaces: "drive"
+      });
+      files = res.data.files || [];
+    } catch (fallbackErr) {
+      console.error("[getOrCreateFolder] Standard list failed:", fallbackErr.message);
+      throw fallbackErr;
+    }
+  }
 
-  const files = res.data.files || [];
   if (files.length > 0) {
     return files[0].id;
   }
@@ -34,11 +50,25 @@ async function getOrCreateFolder(drive, name, parentId = null) {
     fileMetadata.parents = [parentId];
   }
 
-  const folder = await drive.files.create({
-    requestBody: fileMetadata,
-    fields: "id",
-    supportsAllDrives: true
-  });
+  let folder;
+  try {
+    folder = await drive.files.create({
+      requestBody: fileMetadata,
+      fields: "id",
+      supportsAllDrives: true
+    });
+  } catch (err) {
+    console.warn("[getOrCreateFolder] Create with supportsAllDrives failed, trying standard create:", err.message);
+    try {
+      folder = await drive.files.create({
+        requestBody: fileMetadata,
+        fields: "id"
+      });
+    } catch (fallbackErr) {
+      console.error("[getOrCreateFolder] Standard create failed:", fallbackErr.message);
+      throw fallbackErr;
+    }
+  }
 
   return folder.data.id;
 }
@@ -130,13 +160,17 @@ export default async function handler(req, res) {
     const courseFolderId = await getOrCreateFolder(drive, courseFolderCleanName, coursesId);
 
     // Save the course folder ID to site_config for permissions syncing!
-    await supabase.from("site_config").upsert({
-      key: `${course_slug.trim().toLowerCase()}_gdrive_folder_id`,
-      value: { val: courseFolderId },
-      updated_at: new Date().toISOString()
-    }, {
-      onConflict: "key"
-    });
+    try {
+      await supabase.from("site_config").upsert({
+        key: `${course_slug.trim().toLowerCase()}_gdrive_folder_id`,
+        value: { val: courseFolderId },
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: "key"
+      });
+    } catch (dbErr) {
+      console.error("[upload-video] Failed to save folder ID to site_config:", dbErr.message);
+    }
 
     // D. "Lesson [lesson_no] - [lesson_title]" inside course folder
     const lNo = String(lesson_no || "1").trim();
@@ -157,15 +191,33 @@ export default async function handler(req, res) {
       parents: [targetFolderId]
     };
 
-    const driveFile = await drive.files.create({
-      requestBody: fileMetadata,
-      media: {
-        mimeType: cleanMimeType,
-        body: Readable.from(buffer)
-      },
-      fields: "id, webViewLink, webContentLink",
-      supportsAllDrives: true
-    });
+    let driveFile;
+    try {
+      driveFile = await drive.files.create({
+        requestBody: fileMetadata,
+        media: {
+          mimeType: cleanMimeType,
+          body: Readable.from(buffer)
+        },
+        fields: "id, webViewLink, webContentLink",
+        supportsAllDrives: true
+      });
+    } catch (err) {
+      console.warn("[upload-video] Create with supportsAllDrives failed, trying standard create:", err.message);
+      try {
+        driveFile = await drive.files.create({
+          requestBody: fileMetadata,
+          media: {
+            mimeType: cleanMimeType,
+            body: Readable.from(buffer)
+          },
+          fields: "id, webViewLink, webContentLink"
+        });
+      } catch (fallbackErr) {
+        console.error("[upload-video] Standard create failed:", fallbackErr.message);
+        throw fallbackErr;
+      }
+    }
 
     const fileId = driveFile.data.id;
     if (!fileId) {
@@ -186,7 +238,7 @@ export default async function handler(req, res) {
     console.error("[admin-upload-gdrive-video] Unexpected error:", err);
     return res.status(500).json({
       success: false,
-      error: "Lỗi server khi upload video",
+      error: `Lỗi server khi upload video: ${err.message}`,
       message: err.message
     });
   }

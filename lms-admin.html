@@ -1888,7 +1888,10 @@
               }
             }
           } else {
-            const errText = resData.error || "Tải video lên Drive thất bại";
+            let errText = resData.error || "Tải video lên Drive thất bại";
+            if (resData.message) {
+              errText += ` (${resData.message})`;
+            }
             toast(errText, "error");
             if (statusText) statusText.innerText = `Lỗi: ${errText}`;
           }
