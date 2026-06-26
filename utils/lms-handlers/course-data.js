@@ -307,9 +307,8 @@ export default async function handler(req, res) {
     }
 
     // If no course is specified in request, default to the first allowed course
-    const activeCourseSlug = courseSlug && allowedCourses.includes(courseSlug)
-      ? courseSlug
-      : allowedCourses[0];
+    // If a course is specified, use it directly so the check below can return 403 if unauthorized
+    const activeCourseSlug = courseSlug ? courseSlug : allowedCourses[0];
 
     // Check if the student is enrolled in the target course
     if (!allowedCourses.includes(activeCourseSlug)) {
