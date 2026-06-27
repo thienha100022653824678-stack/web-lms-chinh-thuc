@@ -30,6 +30,20 @@ async function moveDriveFileSafe(drive, fileId, newParentId) {
   }
 }
 
+async function makeFilePublicSafe(drive, fileId) {
+  try {
+    await drive.permissions.create({
+      fileId,
+      requestBody: { role: "reader", type: "anyone" },
+      supportsAllDrives: true,
+    });
+    return true;
+  } catch (err) {
+    console.warn(`[repair-drive] Failed to make file ${fileId} public:`, err.message);
+    return false;
+  }
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -106,6 +120,7 @@ export default async function handler(req, res) {
       const moveRes = await moveDriveFileSafe(drive, heroFileId, heroFolder.targetFolderId);
       if (moveRes.success) {
         if (moveRes.skipped) skippedCount++; else movedCount++;
+        await makeFilePublicSafe(drive, heroFileId);
         movedFiles.push({ fileId: heroFileId, name: moveRes.name, type: "course_hero", status: "success", skipped: moveRes.skipped });
       } else {
         errorCount++;
@@ -120,6 +135,7 @@ export default async function handler(req, res) {
       const moveRes = await moveDriveFileSafe(drive, posterFileId, posterFolder.targetFolderId);
       if (moveRes.success) {
         if (moveRes.skipped) skippedCount++; else movedCount++;
+        await makeFilePublicSafe(drive, posterFileId);
         movedFiles.push({ fileId: posterFileId, name: moveRes.name, type: "course_poster", status: "success", skipped: moveRes.skipped });
       } else {
         errorCount++;
@@ -134,6 +150,7 @@ export default async function handler(req, res) {
       const moveRes = await moveDriveFileSafe(drive, qrFileId, qrFolder.targetFolderId);
       if (moveRes.success) {
         if (moveRes.skipped) skippedCount++; else movedCount++;
+        await makeFilePublicSafe(drive, qrFileId);
         movedFiles.push({ fileId: qrFileId, name: moveRes.name, type: "course_qr", status: "success", skipped: moveRes.skipped });
       } else {
         errorCount++;
@@ -157,6 +174,7 @@ export default async function handler(req, res) {
         const moveRes = await moveDriveFileSafe(drive, thumbFileId, thumbnailFolder.targetFolderId);
         if (moveRes.success) {
           if (moveRes.skipped) skippedCount++; else movedCount++;
+          await makeFilePublicSafe(drive, thumbFileId);
           movedFiles.push({ fileId: thumbFileId, name: moveRes.name, type: `lesson_${lNo}_thumbnail`, status: "success", skipped: moveRes.skipped });
         } else {
           errorCount++;
@@ -197,6 +215,9 @@ export default async function handler(req, res) {
               const moveRes = await moveDriveFileSafe(drive, fileId, targetFolder);
               if (moveRes.success) {
                 if (moveRes.skipped) skippedCount++; else movedCount++;
+                if (type === "image") {
+                  await makeFilePublicSafe(drive, fileId);
+                }
                 movedFiles.push({ fileId, name: moveRes.name, type: `lesson_${lNo}_media_${type}`, status: "success", skipped: moveRes.skipped });
               } else {
                 errorCount++;

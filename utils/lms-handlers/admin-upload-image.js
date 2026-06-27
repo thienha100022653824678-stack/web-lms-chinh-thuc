@@ -187,8 +187,16 @@ export default async function handler(req, res) {
       return res.status(500).json({ success: false, error: "Google API không trả về ID file" });
     }
 
-    // SECURITY: WE DO NOT SHARE PUBLICLY ANYMORE!
-    // Permissions are inherited from the Course folder!
+    // Share publicly so they can render in HTML img tags without browser cookie block policy
+    try {
+      await drive.permissions.create({
+        fileId,
+        requestBody: { role: "reader", type: "anyone" },
+        supportsAllDrives: true,
+      });
+    } catch (err) {
+      console.warn("[admin-upload-image] Could not share file publicly:", err.message);
+    }
 
     const directUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
     const webViewLink = driveFile.data.webViewLink || `https://drive.google.com/file/d/${fileId}/view`;
