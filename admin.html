@@ -208,7 +208,7 @@
               <div class="space-y-3">
                 <!-- Course Link -->
                 <div>
-                  <label class="block text-[10px] font-bold text-slate-500 mb-1">Đường dẫn khóa học chính:</label>
+                  <label class="block text-[10px] font-bold text-slate-500 mb-1">Đường dẫn khóa học:</label>
                   <div class="flex gap-2">
                     <input id="shareCourseUrl" type="text" readonly class="flex-grow border border-slate-200 rounded-xl px-2.5 py-1.5 text-[10px] font-medium bg-slate-50 text-slate-600 focus:outline-none"/>
                     <button onclick="copyShareLink('shareCourseUrl')" class="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-xl transition shrink-0">Copy</button>
@@ -221,11 +221,6 @@
                     <input id="shareLessonUrl" type="text" readonly class="flex-grow border border-slate-200 rounded-xl px-2.5 py-1.5 text-[10px] font-medium bg-slate-50 text-slate-600 focus:outline-none"/>
                     <button onclick="copyShareLink('shareLessonUrl')" class="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-xl transition shrink-0">Copy</button>
                   </div>
-                </div>
-                <!-- Sub Course Link -->
-                <div class="pt-2 border-t border-slate-100">
-                  <label class="block text-[10px] font-bold text-slate-500 mb-1">Khóa học phụ (yeubep.shop):</label>
-                  <button onclick="openSubCourseModal()" class="w-full bg-slate-800 hover:bg-slate-900 text-white text-[10px] font-bold py-2 rounded-xl transition shadow-sm">Truy cập khóa học phụ</button>
                 </div>
               </div>
             </div>
@@ -644,82 +639,7 @@
     </div>
   </div>
 
-  <!-- ── MODAL: SUB COURSE CONFIG ── -->
-  <div id="subCourseModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[50] flex items-center justify-center p-4 hidden">
-    <div class="bg-[#0a0c10] border border-slate-800 rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh] text-slate-200">
-      <div class="bg-[#111827] px-6 py-4 border-b border-slate-800 flex items-center justify-between">
-        <div>
-          <h3 class="text-sm font-black text-amber-500 uppercase tracking-wider">Cấu Hình Khóa Học Phụ</h3>
-          <p class="text-[10px] text-slate-400 mt-0.5">Liên kết & quản lý nội dung hiển thị trên yeubep.shop</p>
-        </div>
-        <button onclick="closeSubCourseModal()" class="text-slate-400 hover:text-white text-xl font-bold">✕</button>
-      </div>
 
-      <div class="p-6 overflow-y-auto space-y-4 custom-scrollbar">
-        <!-- Bật/tắt khóa học phụ -->
-        <div class="flex items-center justify-between p-3 bg-slate-900/40 border border-slate-800 rounded-xl">
-          <div>
-            <label class="block text-xs font-bold text-slate-300">Trạng thái khóa học phụ</label>
-            <span class="text-[10px] text-slate-500">Cho phép hoặc chặn học viên truy cập trang phụ này</span>
-          </div>
-          <select id="subStatus" class="bg-[#1f2937] border border-slate-700 text-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none">
-            <option value="active">Bật (Active)</option>
-            <option value="hidden">Tắt (Hidden)</option>
-          </select>
-        </div>
-
-        <div class="grid sm:grid-cols-2 gap-4">
-          <!-- Slug / Post ID -->
-          <div>
-            <label class="block text-[10px] font-bold text-slate-400 mb-1">Post ID / Slug bài viết phụ (UUID):</label>
-            <div class="flex gap-2">
-              <input id="subPostId" type="text" placeholder="UUID hoặc slug..." class="w-full bg-[#1f2937] border border-slate-700 text-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-amber-500"/>
-              <button onclick="generateSubPostId()" class="bg-amber-500 hover:bg-amber-600 text-black text-[10px] font-bold px-3 py-2 rounded-xl transition shrink-0">Tạo mới</button>
-            </div>
-          </div>
-
-          <!-- Tiêu đề -->
-          <div>
-            <label class="block text-[10px] font-bold text-slate-400 mb-1">Tiêu đề hiển thị trên web phụ:</label>
-            <input id="subTitle" type="text" placeholder="Ví dụ: Công thức làm sốt xào chuẩn vị..." class="w-full bg-[#1f2937] border border-slate-700 text-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-amber-500"/>
-          </div>
-        </div>
-
-        <!-- URL Video hoặc Hình ảnh chính -->
-        <div>
-          <label class="block text-[10px] font-bold text-slate-400 mb-1">URL Video hoặc hình ảnh chính (Hero URL):</label>
-          <input id="subHeroMediaUrl" type="text" placeholder="URL drive video hoặc ảnh chính..." class="w-full bg-[#1f2937] border border-slate-700 text-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-amber-500"/>
-        </div>
-
-        <!-- Ảnh/Video phụ (danh sách cách nhau bằng dấu xuống dòng) -->
-        <div>
-          <label class="block text-[10px] font-bold text-slate-400 mb-1">Hình ảnh/Video phụ bổ sung (Mỗi link một dòng):</label>
-          <textarea id="subImages" rows="3" placeholder="Nhập các đường dẫn ảnh hoặc video phụ..." class="w-full bg-[#1f2937] border border-slate-700 text-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-amber-500"></textarea>
-        </div>
-
-        <!-- Nội dung chi tiết (recipe) -->
-        <div>
-          <label class="block text-[10px] font-bold text-slate-400 mb-1">Nội dung công thức / Hướng dẫn chi tiết (HTML hoặc Markdown):</label>
-          <textarea id="subRecipe" rows="6" placeholder="Nhập công thức dạng văn bản hoặc HTML..." class="w-full bg-[#1f2937] border border-slate-700 text-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-amber-500"></textarea>
-        </div>
-
-        <!-- Chia sẻ / Xem trước link phụ -->
-        <div id="subShareContainer" class="hidden p-3 bg-slate-900/60 border border-slate-800 rounded-xl space-y-2">
-          <label class="block text-[10px] font-bold text-amber-500">Đường dẫn học viên xem bài học phụ:</label>
-          <div class="flex gap-2">
-            <input id="subShareUrl" type="text" readonly class="flex-grow bg-[#1f2937]/50 border border-slate-800 text-slate-300 rounded-xl px-3 py-1.5 text-[10px] focus:outline-none"/>
-            <button onclick="copyShareLink('subShareUrl')" class="bg-amber-500 hover:bg-amber-600 text-black text-[10px] font-bold px-3 py-1.5 rounded-xl transition shrink-0">Copy</button>
-            <a id="subPreviewBtn" href="#" target="_blank" class="bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl transition flex items-center justify-center shrink-0">Xem trước</a>
-          </div>
-        </div>
-      </div>
-
-      <div class="bg-[#111827] px-6 py-4 border-t border-slate-800 flex justify-end gap-3 rounded-b-2xl">
-        <button onclick="closeSubCourseModal()" class="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition">Hủy</button>
-        <button onclick="saveSubCourse()" class="bg-amber-500 hover:bg-amber-600 text-black text-xs font-bold px-5 py-2 rounded-xl transition shadow-lg shadow-amber-500/10">Lưu cấu hình</button>
-      </div>
-    </div>
-  </div>
 
 
   <footer class="bg-white py-4 border-t border-slate-200 text-center text-xs text-slate-400 shrink-0">
@@ -3130,133 +3050,7 @@
       }
     });
 
-    // ── Sub Course Management ──────────────────────────────────────────────
-    function generateSubPostId() {
-      const uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        const r = Math.random() * 16 | 0;
-        const v = c === 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-      });
-      document.getElementById("subPostId").value = uuid;
-    }
 
-    async function openSubCourseModal() {
-      const course = document.getElementById("courseSelect").value;
-      if (!course) {
-        toast("Vui lòng chọn khóa học trước.", "error");
-        return;
-      }
-
-      showLoader("Đang tải cấu hình khóa học phụ...");
-      try {
-        const res = await fetch(`/api/lms/admin?endpoint=sub-posts&course=${encodeURIComponent(course)}`, {
-          method: "GET",
-          headers: authHeaders()
-        });
-        const d = await res.json();
-
-        if (res.ok && d.success) {
-          const subPost = d.subPosts && d.subPosts.length > 0 ? d.subPosts[0] : null;
-          
-          if (subPost) {
-            document.getElementById("subPostId").value = subPost.id || "";
-            document.getElementById("subTitle").value = subPost.title || "";
-            document.getElementById("subHeroMediaUrl").value = subPost.hero_media_url || "";
-            document.getElementById("subRecipe").value = subPost.recipe || "";
-            document.getElementById("subImages").value = (subPost.images || []).join("\n");
-            document.getElementById("subStatus").value = subPost.status || "active";
-            
-            const subShareContainer = document.getElementById("subShareContainer");
-            subShareContainer.classList.remove("hidden");
-            const shareUrl = `https://yeubep.shop/post/${subPost.id}`;
-            document.getElementById("subShareUrl").value = shareUrl;
-            document.getElementById("subPreviewBtn").href = `${shareUrl}?preview=true`;
-          } else {
-            document.getElementById("subPostId").value = "";
-            document.getElementById("subTitle").value = "";
-            document.getElementById("subHeroMediaUrl").value = "";
-            document.getElementById("subRecipe").value = "";
-            document.getElementById("subImages").value = "";
-            document.getElementById("subStatus").value = "active";
-            document.getElementById("subShareContainer").classList.add("hidden");
-            
-            generateSubPostId();
-            const courseTitle = document.getElementById("lessonsSelectedCourseInfo")?.innerText || "";
-            document.getElementById("subTitle").value = courseTitle ? `Lớp học phụ: ${courseTitle}` : "";
-          }
-
-          document.getElementById("subCourseModal").classList.remove("hidden");
-        } else {
-          toast(d.error || "Không thể tải cấu hình khóa học phụ", "error");
-        }
-      } catch (err) {
-        toast("Lỗi kết nối khi tải cấu hình khóa học phụ", "error");
-      } finally {
-        hideLoader();
-      }
-    }
-
-    function closeSubCourseModal() {
-      document.getElementById("subCourseModal").classList.add("hidden");
-    }
-
-    async function saveSubCourse() {
-      const course = document.getElementById("courseSelect").value;
-      if (!course) {
-        toast("Vui lòng chọn khóa học trước.", "error");
-        return;
-      }
-
-      const id = document.getElementById("subPostId").value.trim();
-      const title = document.getElementById("subTitle").value.trim();
-      const heroMediaUrl = document.getElementById("subHeroMediaUrl").value.trim();
-      const recipe = document.getElementById("subRecipe").value.trim();
-      const imagesText = document.getElementById("subImages").value;
-      const status = document.getElementById("subStatus").value;
-
-      if (!id) {
-        toast("Vui lòng nhập hoặc tạo Post ID.", "error");
-        return;
-      }
-      if (!title) {
-        toast("Vui lòng nhập tiêu đề bài viết phụ.", "error");
-        return;
-      }
-
-      const images = imagesText.split("\n").map(line => line.trim()).filter(Boolean);
-
-      const payload = {
-        action: "save",
-        id,
-        courseSlug: course,
-        title,
-        recipe,
-        heroMediaUrl,
-        images,
-        status
-      };
-
-      showLoader("Đang lưu cấu hình khóa học phụ...");
-      try {
-        const res = await fetch("/api/lms/admin?endpoint=sub-posts", {
-          method: "POST",
-          headers: authHeaders(),
-          body: JSON.stringify(payload)
-        });
-        const d = await res.json();
-
-        if (res.ok && d.success) {
-          toast("Lưu cấu hình khóa học phụ thành công!");
-          closeSubCourseModal();
-        } else {
-          toast(d.error || "Lỗi khi lưu cấu hình", "error");
-        }
-      } catch (err) {
-        toast("Lỗi kết nối khi lưu cấu hình", "error");
-      } finally {
-        hideLoader();
-      }
-    }
 
     window.onload = () => {
       initGoogleSignIn();
