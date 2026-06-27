@@ -496,6 +496,15 @@
       return `https://drive.google.com/file/d/${fileId}/preview`;
     }
 
+    function normalizeGoogleDriveImageUrl(url) {
+      if (!url) return "";
+      const driveId = getGoogleDriveFileId(url);
+      if (driveId) {
+        return `https://drive.google.com/thumbnail?id=${driveId}&sz=w1000`;
+      }
+      return url;
+    }
+
     function getYouTubeVideoId(input) {
       let text = extractIframeSrc(input).replace(/&amp;/g, "&").trim();
       if (!text) return "";
@@ -818,8 +827,7 @@
         }
         if (item.type === "image") {
           let imgSrc = extractIframeSrc(item.url).replace(/&amp;/g, "&").trim();
-          const driveMatch = imgSrc.match(/drive\.google\.com\/file\/d\/([^/]+)/);
-          if (driveMatch) imgSrc = `https://drive.google.com/uc?export=download&id=${driveMatch[1]}`;
+          imgSrc = normalizeGoogleDriveImageUrl(imgSrc);
           return `
             <div class="bg-white border border-brandBrown/5 rounded-2xl overflow-hidden shadow-sm mb-4">
               ${safeTitle ? `<div class="px-4 pt-4 font-bold text-sm text-brandBrown">${safeTitle}</div>` : ""}
@@ -903,7 +911,7 @@
         const videoThumb = document.getElementById("videoThumb");
         const playBtn = document.getElementById("playBtn");
         
-        videoThumb.src = currentLesson.thumbnailUrl || HERO_PLACEHOLDER_IMAGE;
+        videoThumb.src = normalizeGoogleDriveImageUrl(currentLesson.thumbnailUrl || HERO_PLACEHOLDER_IMAGE);
 
         // Auto print/recipe scroll
         if (window.location.hash === "#recipe") {
@@ -993,7 +1001,7 @@
               : "bg-transparent border-transparent hover:bg-brandGray text-brandBrown/80"
           }`;
 
-          const thumb = l.thumbnailUrl || HERO_PLACEHOLDER_IMAGE;
+          const thumb = normalizeGoogleDriveImageUrl(l.thumbnailUrl || HERO_PLACEHOLDER_IMAGE);
           a.innerHTML = `
             <div class="w-12 aspect-video rounded overflow-hidden flex-shrink-0 border border-brandBrown/5 bg-brandGray relative">
               <img class="w-full h-full object-cover" src="${thumb}" alt="thumb">
