@@ -173,14 +173,34 @@
       font-weight: bold;
     }
     .recipe-render a {
-      color: #2563eb;
+      color: #D96B27;
       font-weight: 700;
       text-decoration: underline;
       text-underline-offset: 2px;
       word-break: break-word;
+      transition: color 0.2s;
     }
     .recipe-render a:hover {
-      color: #1d4ed8;
+      color: #2A4B2A;
+    }
+    .recipe-render .recipe-shop-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background-color: #FFF6F0;
+      color: #D96B27;
+      border: 1px solid #FCD3B6;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: bold;
+      text-decoration: none !important;
+      margin: 0 4px;
+      transition: background-color 0.2s, border-color 0.2s;
+    }
+    .recipe-render .recipe-shop-link:hover {
+      background-color: #FCD3B6;
+      color: #B24E18;
     }
   </style>
 </head>
@@ -395,7 +415,7 @@
     }
 
     function linkifyTextSafe(text) {
-      const regex = /(https?:\/\/[^\s<>]+|www\.[^\s<>]+|(?:facebook\.com|fb\.com|shopee\.vn|zalo\.me|tiktok\.com)\/[^\s<>]*)/gi;
+      const regex = /(https?:\/\/[^\s<>]+|www\.[^\s<>]+|(?:facebook\.com|fb\.com|shopee\.vn|zalo\.me|tiktok\.com|lazada\.vn|tiki\.vn)\/[^\s<>]*)/gi;
       return text.replace(regex, (match) => {
         let cleanUrl = match;
         let suffix = "";
@@ -410,7 +430,15 @@
         } else if (!/^https?:\/\//i.test(cleanUrl)) {
           href = "https://" + cleanUrl;
         }
-        return `<a href="${href}" target="_blank" rel="noopener noreferrer">${cleanUrl}</a>${suffix}`;
+        
+        let label = cleanUrl;
+        let isShopping = /shopee|lazada|tiki|amazon|tiktok\.com\/view\/product/i.test(cleanUrl);
+        if (isShopping) {
+          label = `🛒 Mua nguyên liệu tại đây ↗`;
+          return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="recipe-shop-link">${label}</a>${suffix}`;
+        }
+        
+        return `<a href="${href}" target="_blank" rel="noopener noreferrer">${label} ↗</a>${suffix}`;
       });
     }
 
@@ -432,20 +460,26 @@
           closeList();
           return;
         }
-        if (/^[-*•]\s+/.test(line)) {
+        // Match list items starting with -, *, •, +
+        if (/^[-*•+]\s+/.test(line)) {
           if (!listOpen) {
             html.push("<ul>");
             listOpen = true;
           }
-          const cleanText = escapeHtml(line.replace(/^[-*•]\s+/, ""));
+          const cleanText = escapeHtml(line.replace(/^[-*•+]\s+/, ""));
           html.push(`<li>${linkifyTextSafe(cleanText)}</li>`);
           return;
         }
         closeList();
-        if (/^\d+[\).\s]/.test(line)) {
-          html.push(`<h4>${linkifyTextSafe(escapeHtml(line))}</h4>`);
-        } else if (line.length <= 80 && !/[.!?]$/.test(line)) {
+        
+        const endsWithColon = /:\s*$/.test(line);
+        const startsWithHeadingWord = /^(Bài|Bước|Phần|Lưu ý|Công thức|Nguyên liệu|Sơ chế|Gia vị|Cách làm|Hướng dẫn)\s*\d*\s*:/i.test(line);
+        const isAllUpperCase = line.length <= 60 && !/[a-z]/.test(line) && /[A-Z]/.test(line);
+
+        if (startsWithHeadingWord || endsWithColon || isAllUpperCase) {
           html.push(`<h3>${linkifyTextSafe(escapeHtml(line))}</h3>`);
+        } else if (/^\d+[\.)]\s+/.test(line)) {
+          html.push(`<h4>${linkifyTextSafe(escapeHtml(line))}</h4>`);
         } else {
           html.push(`<p>${linkifyTextSafe(escapeHtml(line))}</p>`);
         }
