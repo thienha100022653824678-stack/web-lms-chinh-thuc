@@ -2765,6 +2765,15 @@
         return;
       }
 
+      let driveToken = "";
+      try {
+        driveToken = await ensureDriveAccess();
+      } catch (err) {
+        if (!confirm("Chưa kết nối Google Drive. Quyền học trên website vẫn được cấp, nhưng quyền xem ảnh/video trên Drive sẽ KHÔNG được tự động đồng bộ. Bạn có muốn tiếp tục?")) {
+          return;
+        }
+      }
+
       showLoader("Đang tiến hành cấp quyền hàng loạt...");
       try {
         const payload = {
@@ -2777,7 +2786,10 @@
 
         const res = await fetch("/api/lms/admin?endpoint=bulk-enroll", {
           method: "POST",
-          headers: authHeaders(),
+          headers: {
+            ...authHeaders(),
+            "x-drive-access-token": driveToken || ""
+          },
           body: JSON.stringify(payload)
         });
         const d = await res.json();
@@ -2850,6 +2862,15 @@
         return;
       }
 
+      let driveToken = "";
+      try {
+        driveToken = await ensureDriveAccess();
+      } catch (err) {
+        if (!confirm("Chưa kết nối Google Drive. Quyền học trên website vẫn được cấp, nhưng quyền xem ảnh/video trên Drive sẽ KHÔNG được tự động đồng bộ. Bạn có muốn tiếp tục?")) {
+          return;
+        }
+      }
+
       const payload = {
         email,
         courseSlug,
@@ -2860,7 +2881,10 @@
       try {
         const res = await fetch("/api/lms/admin?endpoint=enrollments", {
           method: "POST",
-          headers: authHeaders(),
+          headers: {
+            ...authHeaders(),
+            "x-drive-access-token": driveToken || ""
+          },
           body: JSON.stringify(payload)
         });
         const d = await res.json();
@@ -2905,11 +2929,23 @@
     async function revokeAccess(id) {
       if (!confirm("Bạn có chắc chắn muốn thu hồi quyền truy cập lớp học này của học viên?")) return;
 
+      let driveToken = "";
+      try {
+        driveToken = await ensureDriveAccess();
+      } catch (err) {
+        if (!confirm("Chưa kết nối Google Drive. Quyền học trên website vẫn bị thu hồi, nhưng quyền truy cập trên Drive của học viên sẽ KHÔNG bị tự động xóa. Bạn có muốn tiếp tục?")) {
+          return;
+        }
+      }
+
       showLoader("Đang thu hồi quyền học...");
       try {
         const res = await fetch(`/api/lms/admin?endpoint=enrollments&id=${id}`, {
           method: "DELETE",
-          headers: authHeaders()
+          headers: {
+            ...authHeaders(),
+            "x-drive-access-token": driveToken || ""
+          }
         });
         const d = await res.json();
 
