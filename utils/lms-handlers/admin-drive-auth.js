@@ -66,6 +66,18 @@ export default async function handler(req, res) {
       });
     }
 
+    // Save token to site_config so background sync can use it
+    try {
+      const { supabase } = await import("../supabase.js");
+      await supabase.from("site_config").upsert({
+        key: "google_drive_access_token",
+        value: { val: accessToken, expires_at: Date.now() + 3600 * 1000 },
+        updated_at: new Date().toISOString()
+      }, { onConflict: "key" });
+    } catch (saveErr) {
+      console.error("[admin-drive-auth] Failed to save token to site_config:", saveErr.message);
+    }
+
     return res.status(200).json({
       success: true,
       email: tokenEmail,
