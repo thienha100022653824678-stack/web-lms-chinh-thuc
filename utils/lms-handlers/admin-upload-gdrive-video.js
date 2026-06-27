@@ -179,7 +179,8 @@ export default async function handler(req, res) {
 
     const fileMetadata = {
       name: finalFileName.replace(/[/\\?%*:|"<>']/g, "-"),
-      parents: [targetFolderId]
+      parents: [targetFolderId],
+      copyRequiresWriterPermission: true
     };
 
     let driveFile;

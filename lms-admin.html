@@ -2303,7 +2303,8 @@
 
         initXhr.send(JSON.stringify({
           name: file.name,
-          parents: [folderId]
+          parents: [folderId],
+          copyRequiresWriterPermission: true
         }));
 
       } catch (err) {

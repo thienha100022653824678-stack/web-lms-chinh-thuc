@@ -44,6 +44,22 @@ async function makeFilePublicSafe(drive, fileId) {
   }
 }
 
+async function restrictFileSharingSafe(drive, fileId) {
+  try {
+    await drive.files.update({
+      fileId,
+      requestBody: {
+        copyRequiresWriterPermission: true
+      },
+      supportsAllDrives: true
+    });
+    return true;
+  } catch (err) {
+    console.warn(`[repair-drive] Failed to restrict file ${fileId} downloads:`, err.message);
+    return false;
+  }
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -188,6 +204,7 @@ export default async function handler(req, res) {
         const moveRes = await moveDriveFileSafe(drive, videoFileId, mainVideoFolder.targetFolderId);
         if (moveRes.success) {
           if (moveRes.skipped) skippedCount++; else movedCount++;
+          await restrictFileSharingSafe(drive, videoFileId);
           movedFiles.push({ fileId: videoFileId, name: moveRes.name, type: `lesson_${lNo}_main_video`, status: "success", skipped: moveRes.skipped });
         } else {
           errorCount++;
@@ -217,6 +234,8 @@ export default async function handler(req, res) {
                 if (moveRes.skipped) skippedCount++; else movedCount++;
                 if (type === "image") {
                   await makeFilePublicSafe(drive, fileId);
+                } else if (type === "video") {
+                  await restrictFileSharingSafe(drive, fileId);
                 }
                 movedFiles.push({ fileId, name: moveRes.name, type: `lesson_${lNo}_media_${type}`, status: "success", skipped: moveRes.skipped });
               } else {
