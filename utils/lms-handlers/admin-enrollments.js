@@ -1,5 +1,5 @@
 import { supabase } from "../supabase.js";
-import { getAdminFromRequest, normalizeEmail, getDriveClientWithToken, getCourseFolderIdOrDiscover, addDriveFolderPermission, removeDriveFolderPermission } from "../lms.js";
+import { getAdminFromRequest, normalizeEmail, syncEnrollment } from "../lms.js";
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -55,72 +55,18 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Thiếu email hoặc course slug" });
       }
 
-      const cleanEmail = normalizeEmail(email);
+      const syncResult = await syncEnrollment(supabase, {
+        email,
+        courseSlug,
+        action: "create",
+        expiredAt
+      });
 
-      // 1. Get or create student
-      let studentId;
-      const { data: student, error: studentFetchErr } = await supabase
-        .from("students")
-        .select("id")
-        .eq("email", cleanEmail)
-        .maybeSingle();
-
-      if (studentFetchErr) throw studentFetchErr;
-
-      if (student) {
-        studentId = student.id;
-      } else {
-        const { data: newStudent, error: studentInsertErr } = await supabase
-          .from("students")
-          .insert({ email: cleanEmail, status: "active" })
-          .select("id")
-          .single();
-
-        if (studentInsertErr) throw studentInsertErr;
-        studentId = newStudent.id;
+      if (!syncResult.success) {
+        return res.status(500).json({ success: false, error: syncResult.error || "Lỗi đồng bộ phân quyền" });
       }
 
-      // 2. Fetch course ID by slug
-      const { data: courseRec } = await supabase
-        .from("courses")
-        .select("id")
-        .eq("slug", courseSlug)
-        .maybeSingle();
-
-      // 3. Upsert enrollment
-      const { data, error } = await supabase
-        .from("student_enrollments")
-        .upsert({
-          student_id: studentId,
-          course_id: courseRec?.id || null,
-          course_slug: courseSlug,
-          email: cleanEmail,
-          status: "active",
-          expired_at: expiredAt || null,
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: "email,course_slug"
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      // Sync Google Drive permissions if token is provided
-      const driveAccessToken = req.headers["x-drive-access-token"];
-      if (driveAccessToken) {
-        try {
-          const drive = getDriveClientWithToken(driveAccessToken);
-          const folderId = await getCourseFolderIdOrDiscover(supabase, drive, courseSlug);
-          if (folderId) {
-            await addDriveFolderPermission(driveAccessToken, folderId, cleanEmail);
-          }
-        } catch (e) {
-          console.error("Google Drive sync failed inside enrollments POST:", e);
-        }
-      }
-
-      return res.status(200).json({ success: true, enrollment: data });
+      return res.status(200).json({ success: true, enrollment: syncResult.enrollment });
     }
 
     // ── PUT: Update Enrollment Status / Expiry ────────────────────────────────
@@ -129,6 +75,13 @@ export default async function handler(req, res) {
       if (!id) {
         return res.status(400).json({ success: false, error: "Thiếu ID quyền học viên" });
       }
+
+      // Fetch existing details before updating to check if status changed
+      const { data: oldEnroll } = await supabase
+        .from("student_enrollments")
+        .select("email, course_slug, status")
+        .eq("id", id)
+        .maybeSingle();
 
       const { data, error } = await supabase
         .from("student_enrollments")
@@ -142,6 +95,17 @@ export default async function handler(req, res) {
         .single();
 
       if (error) throw error;
+
+      // Sync Google Drive permissions if status changed
+      if (oldEnroll && status && oldEnroll.status !== status) {
+        await syncEnrollment(supabase, {
+          email: oldEnroll.email,
+          courseSlug: oldEnroll.course_slug,
+          action: status === "active" ? "create" : "revoke",
+          expiredAt
+        });
+      }
+
       return res.status(200).json({ success: true, enrollment: data });
     }
 
@@ -166,18 +130,12 @@ export default async function handler(req, res) {
 
       if (error) throw error;
 
-      // Sync Google Drive permissions revocation
-      const driveAccessToken = req.headers["x-drive-access-token"];
-      if (driveAccessToken && enroll) {
-        try {
-          const drive = getDriveClientWithToken(driveAccessToken);
-          const folderId = await getCourseFolderIdOrDiscover(supabase, drive, enroll.course_slug);
-          if (folderId) {
-            await removeDriveFolderPermission(driveAccessToken, folderId, enroll.email);
-          }
-        } catch (e) {
-          console.error("Google Drive sync failed inside enrollments DELETE:", e);
-        }
+      if (enroll) {
+        await syncEnrollment(supabase, {
+          email: enroll.email,
+          courseSlug: enroll.course_slug,
+          action: "revoke"
+        });
       }
 
       return res.status(200).json({ success: true, message: "Đã thu hồi quyền học thành công" });

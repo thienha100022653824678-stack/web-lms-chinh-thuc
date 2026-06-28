@@ -1,5 +1,5 @@
 import { PassThrough } from "stream";
-import { getAdminFromRequest, getDriveClientWithToken, resolveCourseFolderTree, saveCourseFolderId } from "../lms.js";
+import { getAdminFromRequest, getGoogleDriveClient, resolveCourseFolderTree, saveCourseFolderId } from "../lms.js";
 import { supabase } from "../supabase.js";
 
 const MAX_VIDEO_BYTES = 500 * 1024 * 1024; // 500 MB limit
@@ -98,14 +98,17 @@ export default async function handler(req, res) {
       accessToken
     } = req.body || {};
 
-    if (!accessToken || typeof accessToken !== "string" || !accessToken.trim()) {
-      return res.status(200).json({ success: false, needsOAuth: true, error: "Chưa kết nối Google Drive" });
+    let drive;
+    try {
+      const clientInfo = await getGoogleDriveClient(supabase);
+      drive = clientInfo.drive;
+    } catch (driveErr) {
+      return res.status(200).json({ success: false, needsOAuth: true, error: driveErr.message || "Chưa kết nối Google Drive" });
     }
+
     if (!course_slug) {
       return res.status(400).json({ success: false, error: "Thiếu slug khóa học (course_slug)" });
     }
-
-    const drive = getDriveClientWithToken(accessToken);
 
     // Direct frontend upload helper: resolve folder structure and return folderId
     if (action === "get-folder") {

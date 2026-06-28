@@ -25,7 +25,7 @@ export default async function handler(req, res) {
   if (endpoint === "auth") {
     return adminAuthHandler(req, res);
   }
-  if (endpoint === "drive-auth") {
+  if (endpoint === "drive-auth" || endpoint === "drive-status") {
     return adminDriveAuthHandler(req, res);
   }
   if (endpoint === "courses") {

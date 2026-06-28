@@ -1,6 +1,6 @@
 import { PassThrough } from "stream";
 import { supabase } from "../supabase.js";
-import { getAdminFromRequest, getDriveClientWithToken } from "../lms.js";
+import { getAdminFromRequest, getGoogleDriveClient } from "../lms.js";
 
 export const config = {
   api: {
@@ -35,13 +35,15 @@ export default async function handler(req, res) {
       return res.status(401).json({ success: false, error: "Chưa đăng nhập admin" });
     }
 
-    const { course, lesson, title, text, fileData, fileName, accessToken } = req.body || {};
-
-    if (!accessToken || typeof accessToken !== "string" || !accessToken.trim()) {
+    let drive;
+    try {
+      const clientInfo = await getGoogleDriveClient(supabase);
+      drive = clientInfo.drive;
+    } catch (driveErr) {
       return res.status(200).json({
         success: false,
         needsOAuth: true,
-        error: "Chưa kết nối Google Drive"
+        error: driveErr.message || "Chưa kết nối Google Drive"
       });
     }
 
@@ -69,8 +71,6 @@ export default async function handler(req, res) {
         error: "Nội dung công thức trống"
       });
     }
-
-    const drive = getDriveClientWithToken(accessToken);
     const folderId = (process.env.GOOGLE_DRIVE_RECIPE_FOLDER_ID || "").trim();
     const docName = `${course} - ${lesson} - ${title}`;
 

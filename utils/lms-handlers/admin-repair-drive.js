@@ -1,4 +1,4 @@
-import { getAdminFromRequest, getDriveClientWithToken, resolveCourseFolderTree, saveCourseFolderId, getDriveFileId, getCourseFolderIdOrDiscover } from "../lms.js";
+import { getAdminFromRequest, getGoogleDriveClient, resolveCourseFolderTree, saveCourseFolderId, getDriveFileId, getCourseFolderIdOrDiscover } from "../lms.js";
 import { supabase } from "../supabase.js";
 
 async function moveDriveFileSafe(drive, fileId, newParentId) {
@@ -76,16 +76,19 @@ export default async function handler(req, res) {
       return res.status(401).json({ success: false, error: "Chưa đăng nhập admin" });
     }
 
-    const { courseSlug, accessToken } = req.body || {};
+    const { courseSlug } = req.body || {};
 
     if (!courseSlug) {
       return res.status(400).json({ success: false, error: "Thiếu mã khóa học (courseSlug)" });
     }
-    if (!accessToken || typeof accessToken !== "string" || !accessToken.trim()) {
-      return res.status(200).json({ success: false, needsOAuth: true, error: "Chưa kết nối Google Drive" });
-    }
 
-    const drive = getDriveClientWithToken(accessToken);
+    let drive;
+    try {
+      const clientInfo = await getGoogleDriveClient(supabase);
+      drive = clientInfo.drive;
+    } catch (driveErr) {
+      return res.status(200).json({ success: false, needsOAuth: true, error: driveErr.message || "Chưa kết nối Google Drive" });
+    }
 
     // 1. Fetch Course details
     const { data: course, error: courseErr } = await supabase

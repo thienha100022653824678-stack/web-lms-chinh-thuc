@@ -710,3 +710,391 @@ export function getDriveFileId(url) {
   if (/^[a-zA-Z0-9_-]{25,50}$/.test(cleanId)) return cleanId;
   return null;
 }
+
+// ── Centralized Google Drive Client and Sync Enrollment functions ──────────────
+
+export async function getGoogleDriveClient(supabase) {
+  // 1. Service Account authentication
+  if (process.env.GOOGLE_SERVICE_ACCOUNT) {
+    try {
+      const creds = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
+      const auth = new google.auth.JWT(
+        creds.client_email,
+        null,
+        creds.private_key.replace(/\\n/g, '\n'),
+        ['https://www.googleapis.com/auth/drive']
+      );
+      return { drive: google.drive({ version: "v3", auth }), isServiceAccount: true };
+    } catch (err) {
+      console.error("Failed to initialize Service Account drive client:", err);
+    }
+  }
+
+  // 2. OAuth Refresh Token authentication fallback
+  const { data: configToken } = await supabase
+    .from("site_config")
+    .select("value")
+    .eq("key", "google_drive_access_token")
+    .maybeSingle();
+
+  const { data: configRefresh } = await supabase
+    .from("site_config")
+    .select("value")
+    .eq("key", "google_drive_refresh_token")
+    .maybeSingle();
+
+  const accessTokenVal = configToken?.value?.val;
+  const expiresAt = configToken?.value?.expires_at || 0;
+  const refreshToken = configRefresh?.value?.val;
+
+  if (!refreshToken && !accessTokenVal) {
+    throw new Error("Chưa kết nối Google Drive (thiếu Access/Refresh Token hoặc Service Account)");
+  }
+
+  // Check if token is still valid (5 mins buffer)
+  if (accessTokenVal && expiresAt > Date.now() + 300000) {
+    const auth = new google.auth.OAuth2();
+    auth.setCredentials({ access_token: accessTokenVal });
+    return { drive: google.drive({ version: "v3", auth }), accessToken: accessTokenVal };
+  }
+
+  // Needs refresh
+  if (!refreshToken) {
+    throw new Error("Access Token hết hạn và thiếu Refresh Token. Vui lòng kết nối lại Google Drive.");
+  }
+
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET
+  );
+  oauth2Client.setCredentials({ refresh_token: refreshToken });
+
+  const tokenRes = await oauth2Client.getAccessToken();
+  const newAccessToken = tokenRes.token;
+  if (!newAccessToken) {
+    throw new Error("Không thể làm mới Google Drive Access Token");
+  }
+
+  const newExpiresAt = Date.now() + 3500 * 1000;
+  await supabase.from("site_config").upsert({
+    key: "google_drive_access_token",
+    value: { val: newAccessToken, expires_at: newExpiresAt },
+    updated_at: new Date().toISOString()
+  }, { onConflict: "key" });
+
+  const auth = new google.auth.OAuth2();
+  auth.setCredentials({ access_token: newAccessToken });
+  return { drive: google.drive({ version: "v3", auth }), accessToken: newAccessToken };
+}
+
+export async function addDriveFolderPermissionDirect(drive, folderId, emailAddress) {
+  if (!drive || !folderId || !emailAddress) return;
+  await drive.permissions.create({
+    fileId: folderId,
+    requestBody: {
+      role: "reader",
+      type: "user",
+      emailAddress: emailAddress
+    },
+    supportsAllDrives: true,
+    sendNotificationEmail: false
+  });
+}
+
+export async function removeDriveFolderPermissionDirect(drive, folderId, emailAddress) {
+  if (!drive || !folderId || !emailAddress) return;
+  const listRes = await drive.permissions.list({
+    fileId: folderId,
+    fields: "permissions(id, emailAddress)",
+    supportsAllDrives: true
+  });
+  const permissions = listRes.data.permissions || [];
+  const matched = permissions.find(p => p.emailAddress && p.emailAddress.toLowerCase() === emailAddress.toLowerCase());
+  if (matched) {
+    await drive.permissions.delete({
+      fileId: folderId,
+      permissionId: matched.id,
+      supportsAllDrives: true
+    });
+  }
+}
+
+export async function writeDriveLog(supabase, { course_slug, folder_id, email, action, status, message, request_id = null }) {
+  try {
+    await supabase.from("drive_permission_logs").insert({
+      course_slug,
+      folder_id,
+      email: normalizeEmail(email),
+      action,
+      status,
+      message,
+      request_id,
+      time: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error("Failed to write to drive_permission_logs:", err.message);
+  }
+}
+
+export async function addToDriveSyncQueue(supabase, { email, course_slug, action, error }) {
+  try {
+    const cleanEmail = normalizeEmail(email);
+    const { data: existing } = await supabase
+      .from("drive_sync_queue")
+      .select("id, attempts")
+      .eq("email", cleanEmail)
+      .eq("course_slug", course_slug)
+      .eq("action", action)
+      .maybeSingle();
+
+    if (existing) {
+      await supabase
+        .from("drive_sync_queue")
+        .update({
+          attempts: (existing.attempts || 0) + 1,
+          error_message: error,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", existing.id);
+    } else {
+      await supabase.from("drive_sync_queue").insert({
+        email: cleanEmail,
+        course_slug,
+        action,
+        attempts: 1,
+        error_message: error,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+    }
+  } catch (err) {
+    console.error("Failed to add to drive_sync_queue:", err.message);
+  }
+}
+
+export async function syncGoogleDrivePermission(supabase, { email, courseSlug, action }) {
+  const cleanEmail = normalizeEmail(email);
+  const actionName = action === "create" || action === "syncEnrollment" ? "create" : "revoke";
+  
+  let driveClientInfo;
+  let folderId = null;
+  let attempt = 0;
+  const maxAttempts = 3;
+  let lastError = null;
+
+  try {
+    folderId = await getCourseFolderIdOrDiscover(supabase, null, courseSlug);
+  } catch (err) {
+    console.error(`[syncDrive] Failed to get folder ID for ${courseSlug}:`, err.message);
+    lastError = err;
+  }
+
+  if (!folderId) {
+    const errorMsg = `Thư mục khóa học chưa được cấu hình Drive cho slug: ${courseSlug}`;
+    await writeDriveLog(supabase, {
+      course_slug: courseSlug,
+      folder_id: null,
+      email: cleanEmail,
+      action: actionName,
+      status: "FAILED",
+      message: errorMsg
+    });
+    await addToDriveSyncQueue(supabase, { email: cleanEmail, course_slug: courseSlug, action: actionName, error: errorMsg });
+    return { success: false, error: errorMsg };
+  }
+
+  try {
+    driveClientInfo = await getGoogleDriveClient(supabase);
+  } catch (err) {
+    const errorMsg = `Không khởi tạo được GDrive Client: ${err.message}`;
+    console.error(`[syncDrive] ${errorMsg}`);
+    await writeDriveLog(supabase, {
+      course_slug: courseSlug,
+      folder_id: folderId,
+      email: cleanEmail,
+      action: actionName,
+      status: "FAILED",
+      message: errorMsg
+    });
+    await addToDriveSyncQueue(supabase, { email: cleanEmail, course_slug: courseSlug, action: actionName, error: errorMsg });
+    return { success: false, error: errorMsg };
+  }
+
+  const { drive } = driveClientInfo;
+
+  while (attempt < maxAttempts) {
+    try {
+      if (actionName === "create") {
+        let alreadyHasPermission = false;
+        try {
+          const listRes = await drive.permissions.list({
+            fileId: folderId,
+            fields: "permissions(id, emailAddress)",
+            supportsAllDrives: true
+          });
+          const permissions = listRes.data.permissions || [];
+          alreadyHasPermission = permissions.some(
+            p => p.emailAddress && p.emailAddress.toLowerCase().trim() === cleanEmail
+          );
+        } catch (listErr) {
+          console.warn(`[syncDrive] Failed to list permissions (attempt ${attempt + 1}):`, listErr.message);
+        }
+
+        if (alreadyHasPermission) {
+          await writeDriveLog(supabase, {
+            course_slug: courseSlug,
+            folder_id: folderId,
+            email: cleanEmail,
+            action: actionName,
+            status: "SUCCESS",
+            message: "Gmail đã được chia sẻ trước đó (bỏ qua)"
+          });
+          return { success: true, skipped: true };
+        }
+
+        await addDriveFolderPermissionDirect(drive, folderId, cleanEmail);
+      } else {
+        await removeDriveFolderPermissionDirect(drive, folderId, cleanEmail);
+      }
+
+      await writeDriveLog(supabase, {
+        course_slug: courseSlug,
+        folder_id: folderId,
+        email: cleanEmail,
+        action: actionName,
+        status: "SUCCESS",
+        message: actionName === "create" ? "Cấp quyền Drive thành công" : "Thu hồi quyền Drive thành công"
+      });
+      return { success: true };
+    } catch (err) {
+      attempt++;
+      lastError = err;
+      console.error(`[syncDrive] Attempt ${attempt} failed for ${cleanEmail} on ${courseSlug}:`, err.message);
+      if (attempt < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+      }
+    }
+  }
+
+  const finalErrorMsg = lastError ? lastError.message : "Lỗi Google API không xác định";
+  await writeDriveLog(supabase, {
+    course_slug: courseSlug,
+    folder_id: folderId,
+    email: cleanEmail,
+    action: actionName,
+    status: "FAILED",
+    message: `Thất bại sau 3 lần thử. Chi tiết: ${finalErrorMsg}`
+  });
+
+  await addToDriveSyncQueue(supabase, {
+    email: cleanEmail,
+    course_slug: courseSlug,
+    action: actionName,
+    error: finalErrorMsg
+  });
+
+  return { success: false, error: finalErrorMsg };
+}
+
+export async function syncEnrollment(supabase, { email, courseSlug, action, name = null, phone = null, orderId = null, expiredAt = null }) {
+  if (!email || !courseSlug || !action) {
+    throw new Error("Missing required parameters for syncEnrollment");
+  }
+
+  const cleanEmail = normalizeEmail(email);
+  const normalizedAction = action === "create" || action === "syncEnrollment" ? "create" : "revoke";
+
+  let enrollmentResult = null;
+
+  if (normalizedAction === "create") {
+    // 1. Get or create student
+    let studentId;
+    const { data: student, error: studentFetchErr } = await supabase
+      .from("students")
+      .select("id")
+      .eq("email", cleanEmail)
+      .maybeSingle();
+
+    if (studentFetchErr) throw studentFetchErr;
+
+    if (student) {
+      studentId = student.id;
+      if (name || phone) {
+        await supabase
+          .from("students")
+          .update({
+            full_name: name || undefined,
+            phone: phone || undefined,
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", studentId);
+      }
+    } else {
+      const { data: newStudent, error: studentInsertErr } = await supabase
+        .from("students")
+        .insert({
+          email: cleanEmail,
+          full_name: name || null,
+          phone: phone || null,
+          status: "active",
+          updated_at: new Date().toISOString()
+        })
+        .select("id")
+        .single();
+
+      if (studentInsertErr) throw studentInsertErr;
+      studentId = newStudent.id;
+    }
+
+    // 2. Fetch course ID by slug
+    const { data: courseRec } = await supabase
+      .from("courses")
+      .select("id")
+      .eq("slug", courseSlug.trim())
+      .maybeSingle();
+
+    // 3. Upsert enrollment
+    const { data, error: enrollErr } = await supabase
+      .from("student_enrollments")
+      .upsert({
+        student_id: studentId,
+        course_id: courseRec?.id || null,
+        course_slug: courseSlug.trim(),
+        email: cleanEmail,
+        status: "active",
+        expired_at: expiredAt || null,
+        source_order_id: orderId || null,
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: "email,course_slug"
+      })
+      .select()
+      .single();
+
+    if (enrollErr) throw enrollErr;
+    enrollmentResult = data;
+  } else {
+    // Delete enrollment
+    const { error: deleteErr } = await supabase
+      .from("student_enrollments")
+      .delete()
+      .eq("email", cleanEmail)
+      .eq("course_slug", courseSlug.trim());
+
+    if (deleteErr) throw deleteErr;
+  }
+
+  // 4. Sync Google Drive permission (runs asynchronously so it doesn't block but is fully executed)
+  const driveResult = await syncGoogleDrivePermission(supabase, {
+    email: cleanEmail,
+    courseSlug,
+    action: normalizedAction
+  });
+
+  return {
+    success: true,
+    action: normalizedAction,
+    enrollment: enrollmentResult,
+    driveSync: driveResult
+  };
+}

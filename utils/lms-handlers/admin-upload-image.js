@@ -1,5 +1,5 @@
 import { PassThrough } from "stream";
-import { getAdminFromRequest, getDriveClientWithToken, resolveCourseFolderTree, saveCourseFolderId } from "../lms.js";
+import { getAdminFromRequest, getGoogleDriveClient, resolveCourseFolderTree, saveCourseFolderId } from "../lms.js";
 import { supabase } from "../supabase.js";
 
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024; // 4 MB
@@ -51,11 +51,15 @@ export default async function handler(req, res) {
       lessonTitle
     } = req.body || {};
 
-    if (!accessToken || typeof accessToken !== "string" || !accessToken.trim()) {
+    let drive;
+    try {
+      const clientInfo = await getGoogleDriveClient(supabase);
+      drive = clientInfo.drive;
+    } catch (driveErr) {
       return res.status(200).json({
         success: false,
         needsOAuth: true,
-        error: "Chưa kết nối Google Drive"
+        error: driveErr.message || "Chưa kết nối Google Drive"
       });
     }
 
@@ -104,7 +108,6 @@ export default async function handler(req, res) {
     // Sanitize filename to avoid drive issues
     finalFileName = finalFileName.replace(/[/\\?%*:|"<>']/g, "-");
 
-    const drive = getDriveClientWithToken(accessToken);
     let targetFolderId = "";
     let isFallback = false;
 

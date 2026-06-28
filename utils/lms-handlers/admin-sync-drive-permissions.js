@@ -1,4 +1,4 @@
-import { getAdminFromRequest, getDriveClientWithToken, getCourseFolderIdOrDiscover, addDriveFolderPermission } from "../lms.js";
+import { getAdminFromRequest, getGoogleDriveClient, getCourseFolderIdOrDiscover, addDriveFolderPermissionDirect, removeDriveFolderPermissionDirect } from "../lms.js";
 import { supabase } from "../supabase.js";
 
 export default async function handler(req, res) {
@@ -17,16 +17,20 @@ export default async function handler(req, res) {
       return res.status(401).json({ success: false, error: "Chưa đăng nhập admin" });
     }
 
-    const { courseSlug, accessToken } = req.body || {};
+    const { courseSlug } = req.body || {};
 
-    if (!accessToken || typeof accessToken !== "string" || !accessToken.trim()) {
-      return res.status(200).json({ success: false, needsOAuth: true, error: "Chưa kết nối Google Drive" });
+    let driveClientInfo;
+    try {
+      driveClientInfo = await getGoogleDriveClient(supabase);
+    } catch (driveErr) {
+      return res.status(200).json({ success: false, needsOAuth: true, error: driveErr.message || "Chưa kết nối Google Drive" });
     }
 
-    const drive = getDriveClientWithToken(accessToken);
+    const { drive } = driveClientInfo;
     const errors = [];
     let successCount = 0;
     let skippedCount = 0;
+    let removedCount = 0;
     let errorCount = 0;
 
     // Get list of courses to sync
@@ -64,7 +68,7 @@ export default async function handler(req, res) {
           continue;
         }
 
-        // Fetch active enrollments
+        // Fetch active enrollments in database
         const { data: enrollments, error: enrollErr } = await supabase
           .from("student_enrollments")
           .select("email")
@@ -76,12 +80,10 @@ export default async function handler(req, res) {
         }
 
         const activeEmails = (enrollments || []).map(e => String(e.email || "").trim().toLowerCase()).filter(Boolean);
+        const activeEmailsSet = new Set(activeEmails);
 
-        if (activeEmails.length === 0) {
-          continue; // No active students to sync for this course
-        }
-
-        // Fetch existing permissions on folder
+        // Fetch existing permissions on Google Drive folder
+        let existingPermissions = [];
         let existingEmails = new Set();
         try {
           const permList = await drive.permissions.list({
@@ -89,8 +91,8 @@ export default async function handler(req, res) {
             fields: "permissions(id, emailAddress, role)",
             supportsAllDrives: true
           });
-          const permissions = permList.data.permissions || [];
-          permissions.forEach(p => {
+          existingPermissions = permList.data.permissions || [];
+          existingPermissions.forEach(p => {
             if (p.emailAddress) {
               existingEmails.add(p.emailAddress.toLowerCase().trim());
             }
@@ -99,7 +101,7 @@ export default async function handler(req, res) {
           console.warn(`[sync-drive-permissions] Could not list permissions for folder ${folderId}:`, permListErr.message);
         }
 
-        // Add reader permission for each active enrollment
+        // 1. ADD missing permissions (active in DB but missing in GDrive)
         for (const email of activeEmails) {
           if (existingEmails.has(email)) {
             skippedCount++;
@@ -107,7 +109,7 @@ export default async function handler(req, res) {
           }
 
           try {
-            await addDriveFolderPermission(accessToken, folderId, email);
+            await addDriveFolderPermissionDirect(drive, folderId, email);
             successCount++;
           } catch (addErr) {
             console.error(`[sync-drive-permissions] Failed to add permission for ${email} on ${slug}:`, addErr.message);
@@ -115,6 +117,30 @@ export default async function handler(req, res) {
             errors.push({ course: slug, email, error: addErr.message });
           }
         }
+
+        // 2. REMOVE extra/unauthorized permissions (present in GDrive folder but missing or inactive in DB)
+        // Skip owners/admins if possible. We only delete permissions of type 'user' with role 'reader' that are not active in database.
+        for (const p of existingPermissions) {
+          if (!p.emailAddress) continue;
+          const email = p.emailAddress.toLowerCase().trim();
+          
+          // If this email is NOT in our active enrollments, and it's a reader (student), we revoke access
+          if (!activeEmailsSet.has(email) && p.role === "reader") {
+            try {
+              await drive.permissions.delete({
+                fileId: folderId,
+                permissionId: p.id,
+                supportsAllDrives: true
+              });
+              removedCount++;
+            } catch (delErr) {
+              console.error(`[sync-drive-permissions] Failed to remove extra permission for ${email} on ${slug}:`, delErr.message);
+              errorCount++;
+              errors.push({ course: slug, email, error: `Thu hồi thất bại: ${delErr.message}` });
+            }
+          }
+        }
+
       } catch (courseErr) {
         console.error(`[sync-drive-permissions] Error syncing course ${slug}:`, courseErr.message);
         errorCount++;
@@ -127,6 +153,7 @@ export default async function handler(req, res) {
       report: {
         successCount,
         skippedCount,
+        removedCount,
         errorCount,
         errors
       }

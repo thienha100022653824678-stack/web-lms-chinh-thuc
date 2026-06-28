@@ -1,9 +1,7 @@
 import { supabase } from "../utils/supabase.js";
 import { 
   normalizeEmail, 
-  addDriveFolderPermission, 
-  removeDriveFolderPermission, 
-  getCourseFolderIdOrDiscover 
+  syncEnrollment
 } from "../utils/lms.js";
 
 export default async function handler(req, res) {
@@ -99,89 +97,13 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Thiếu email hoặc courseSlug" });
       }
 
-      const cleanEmail = normalizeEmail(email);
-
-      // 1. Get or create student
-      let studentId;
-      const { data: student, error: studentFetchErr } = await supabase
-        .from("students")
-        .select("id")
-        .eq("email", cleanEmail)
-        .maybeSingle();
-
-      if (studentFetchErr) throw studentFetchErr;
-
-      if (student) {
-        studentId = student.id;
-      } else {
-        const { data: newStudent, error: studentInsertErr } = await supabase
-          .from("students")
-          .insert({ email: cleanEmail, status: "active" })
-          .select("id")
-          .single();
-
-        if (studentInsertErr) throw studentInsertErr;
-        studentId = newStudent.id;
-      }
-
-      // 2. Fetch course ID by slug
-      const { data: courseRec } = await supabase
-        .from("courses")
-        .select("id")
-        .eq("slug", courseSlug.trim())
-        .maybeSingle();
-
-      // 3. Upsert enrollment
-      const { data: enrollment, error: enrollErr } = await supabase
-        .from("student_enrollments")
-        .upsert({
-          student_id: studentId,
-          course_id: courseRec?.id || null,
-          course_slug: courseSlug.trim(),
-          email: cleanEmail,
-          status: "active",
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: "email,course_slug"
-        })
-        .select()
-        .single();
-
-      if (enrollErr) throw enrollErr;
-
-      // 4. Background Google Drive permission sync if token is stored in site_config
-      let driveSynced = false;
-      let driveError = null;
-      
-      try {
-        const { data: tokenConfig } = await supabase
-          .from("site_config")
-          .select("value")
-          .eq("key", "google_drive_access_token")
-          .maybeSingle();
-
-        if (tokenConfig && tokenConfig.value && tokenConfig.value.val) {
-          const driveAccessToken = tokenConfig.value.val;
-          const folderId = await getCourseFolderIdOrDiscover(supabase, null, courseSlug.trim());
-          if (folderId) {
-            await addDriveFolderPermission(driveAccessToken, folderId, cleanEmail);
-            driveSynced = true;
-          } else {
-            driveError = "Thư mục khóa học chưa được cấu hình Drive";
-          }
-        } else {
-          driveError = "LMS admin chưa kết nối Google Drive, vui lòng đồng bộ quyền Drive thủ công sau.";
-        }
-      } catch (err) {
-        console.error("[sync] GDrive permission sync error:", err);
-        driveError = err.message;
-      }
-
-      return res.status(200).json({ 
-        success: true, 
-        enrollment, 
-        driveSync: { synced: driveSynced, error: driveError } 
+      const syncResult = await syncEnrollment(supabase, {
+        email,
+        courseSlug,
+        action: "create"
       });
+
+      return res.status(200).json(syncResult);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -192,45 +114,13 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Thiếu email hoặc courseSlug" });
       }
 
-      const cleanEmail = normalizeEmail(email);
-
-      // Delete enrollment
-      const { error: deleteErr } = await supabase
-        .from("student_enrollments")
-        .delete()
-        .eq("email", cleanEmail)
-        .eq("course_slug", courseSlug.trim());
-
-      if (deleteErr) throw deleteErr;
-
-      // Revoke Google Drive folder permissions
-      let driveRevoked = false;
-      let driveError = null;
-
-      try {
-        const { data: tokenConfig } = await supabase
-          .from("site_config")
-          .select("value")
-          .eq("key", "google_drive_access_token")
-          .maybeSingle();
-
-        if (tokenConfig && tokenConfig.value && tokenConfig.value.val) {
-          const driveAccessToken = tokenConfig.value.val;
-          const folderId = await getCourseFolderIdOrDiscover(supabase, null, courseSlug.trim());
-          if (folderId) {
-            await removeDriveFolderPermission(driveAccessToken, folderId, cleanEmail);
-            driveRevoked = true;
-          }
-        }
-      } catch (err) {
-        console.error("[sync] GDrive permission revoke error:", err);
-        driveError = err.message;
-      }
-
-      return res.status(200).json({ 
-        success: true, 
-        driveRevoke: { revoked: driveRevoked, error: driveError } 
+      const syncResult = await syncEnrollment(supabase, {
+        email,
+        courseSlug,
+        action: "revoke"
       });
+
+      return res.status(200).json(syncResult);
     }
 
     return res.status(400).json({ success: false, error: "Action không hợp lệ" });

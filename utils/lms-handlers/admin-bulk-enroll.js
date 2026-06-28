@@ -1,5 +1,5 @@
 import { supabase } from "../supabase.js";
-import { getAdminFromRequest, normalizeEmail, getDriveClientWithToken, getCourseFolderIdOrDiscover, addDriveFolderPermission } from "../lms.js";
+import { getAdminFromRequest, normalizeEmail, syncEnrollment } from "../lms.js";
 
 // Helper to validate email format
 function isValidEmail(email) {
@@ -47,7 +47,6 @@ export default async function handler(req, res) {
     // Classify emails
     const classified = [];
     const validEmailsSet = new Set();
-    const duplicateSet = new Set();
     
     rawEmails.forEach((rawEmail) => {
       const email = normalizeEmail(rawEmail);
@@ -57,7 +56,6 @@ export default async function handler(req, res) {
       }
       
       if (validEmailsSet.has(email)) {
-        duplicateSet.add(email);
         classified.push({ email, type: "duplicate", detail: "Email trùng lặp trong danh sách" });
         return;
       }
@@ -119,96 +117,33 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Không có email hợp lệ để cấp quyền" });
       }
 
-      // 1. Fetch course ID by slug
-      const { data: courseRec, error: courseErr } = await supabase
-        .from("courses")
-        .select("id")
-        .eq("slug", courseSlug)
-        .maybeSingle();
-      
-      if (courseErr) throw courseErr;
-      const courseId = courseRec?.id || null;
-
-      // 2. Fetch existing students in batches of 1000
-      const existingStudents = new Map(); // email -> student_id
-      const chunks = chunkArray(uniqueValidEmails, 1000);
-      for (const chunk of chunks) {
-        const { data: students, error: fetchErr } = await supabase
-          .from("students")
-          .select("id, email")
-          .in("email", chunk);
-        
-        if (fetchErr) throw fetchErr;
-        if (students) {
-          students.forEach(s => existingStudents.set(normalizeEmail(s.email), s.id));
-        }
-      }
-
-      // 3. Find missing students to insert
-      const missingEmails = uniqueValidEmails.filter(email => !existingStudents.has(email));
-      
-      if (missingEmails.length > 0) {
-        const missingStudentsPayload = missingEmails.map(email => ({
-          email,
-          status: "active",
-          created_at: new Date().toISOString()
-        }));
-
-        // Insert new students in chunks of 1000
-        const missingChunks = chunkArray(missingStudentsPayload, 1000);
-        for (const missingChunk of missingChunks) {
-          const { data: newStudents, error: insertErr } = await supabase
-            .from("students")
-            .insert(missingChunk)
-            .select("id, email");
-          
-          if (insertErr) throw insertErr;
-          if (newStudents) {
-            newStudents.forEach(s => existingStudents.set(normalizeEmail(s.email), s.id));
-          }
-        }
-      }
-
-      // 4. Construct enrollment payloads
-      const enrollmentPayloads = uniqueValidEmails.map(email => {
-        const studentId = existingStudents.get(email);
-        return {
-          student_id: studentId,
-          course_id: courseId,
-          course_slug: courseSlug,
-          email: email,
-          status: status,
-          expired_at: expiresAt || null,
-          updated_at: new Date().toISOString()
-        };
-      });
-
-      // 5. Bulk upsert enrollments in chunks of 1000
       let successCount = 0;
       let failedCount = 0;
       const reportDetails = [];
 
-      const enrollChunks = chunkArray(enrollmentPayloads, 1000);
-      for (const enrollChunk of enrollChunks) {
-        const { error: upsertErr } = await supabase
-          .from("student_enrollments")
-          .upsert(enrollChunk, { onConflict: "email,course_slug" });
-        
-        if (upsertErr) {
-          console.error("[bulk-enroll] Batch upsert failed:", upsertErr);
-          failedCount += enrollChunk.length;
-          enrollChunk.forEach(item => {
-            reportDetails.push({ email: item.email, status: "failed", error: upsertErr.message });
+      // Process each enrollment sequentially (or in batches) using syncEnrollment
+      for (const email of uniqueValidEmails) {
+        try {
+          const syncResult = await syncEnrollment(supabase, {
+            email,
+            courseSlug,
+            action: "create",
+            expiredAt: expiresAt
           });
-        } else {
-          successCount += enrollChunk.length;
-          enrollChunk.forEach(item => {
-            reportDetails.push({ email: item.email, status: "success", error: null });
-          });
+          if (syncResult.success) {
+            successCount++;
+            reportDetails.push({ email, status: "success", error: null });
+          } else {
+            failedCount++;
+            reportDetails.push({ email, status: "failed", error: syncResult.error || "Lỗi đồng bộ phân quyền" });
+          }
+        } catch (enrollErr) {
+          failedCount++;
+          reportDetails.push({ email, status: "failed", error: enrollErr.message });
         }
       }
 
-      // 6. Write log into audit_logs if table exists
+      // Write log into audit_logs if table exists
       try {
         await supabase.from("audit_logs").insert({
           action: "bulk_enroll",
@@ -217,22 +152,6 @@ export default async function handler(req, res) {
         });
       } catch (e) {
         // silent fail if audit_logs table doesn't exist
-      }
-
-      // Sync Google Drive permissions for all uniqueValidEmails
-      const driveAccessToken = req.headers["x-drive-access-token"];
-      if (driveAccessToken && successCount > 0) {
-        try {
-          const drive = getDriveClientWithToken(driveAccessToken);
-          const folderId = await getCourseFolderIdOrDiscover(supabase, drive, courseSlug);
-          if (folderId) {
-            for (const email of uniqueValidEmails) {
-              await addDriveFolderPermission(driveAccessToken, folderId, email);
-            }
-          }
-        } catch (e) {
-          console.error("Google Drive bulk sync failed:", e);
-        }
       }
 
       return res.status(200).json({
