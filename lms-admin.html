@@ -169,7 +169,7 @@
                     <button type="button" onclick="document.getElementById('courseHeroUploadInput').click()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold px-3 py-2 rounded-xl transition shrink-0 cursor-pointer">Tải ảnh</button>
                   </div>
                 </div>
-                <div>
+                <div class="hidden">
                   <label class="block text-[10px] font-bold text-slate-500 mb-1">Ảnh poster khóa học</label>
                   <div class="flex gap-2">
                     <input id="metaPosterImage" type="text" placeholder="https://..." class="flex-grow border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium"/>
@@ -177,7 +177,7 @@
                     <button type="button" onclick="document.getElementById('coursePosterUploadInput').click()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold px-3 py-2 rounded-xl transition shrink-0 cursor-pointer">Tải ảnh</button>
                   </div>
                 </div>
-                <div>
+                <div class="hidden">
                   <label class="block text-[10px] font-bold text-slate-500 mb-1">Ảnh QR ngân hàng</label>
                   <div class="flex gap-2">
                     <input id="metaQrImage" type="text" placeholder="https://..." class="flex-grow border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium"/>
@@ -187,7 +187,7 @@
                 </div>
                 <button onclick="saveCourseMeta()" class="w-full bg-brandGreen hover:bg-brandGreenLight text-white text-xs font-bold py-2.5 rounded-xl transition shadow-sm">Lưu cấu hình</button>
                 
-                <div class="pt-3 border-t border-slate-100 space-y-2">
+                <div class="pt-3 border-t border-slate-100 space-y-2 hidden">
                   <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tiện ích Google Drive</h4>
                   <div class="grid grid-cols-2 gap-2">
                     <button onclick="syncDrivePermissions()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold py-2 px-2.5 rounded-xl transition border border-indigo-100 flex items-center justify-center gap-1">
@@ -351,7 +351,7 @@
                   <!-- Dynamic media blocks populated here -->
                 </div>
                 <div class="flex flex-wrap gap-2 pt-2 border-t border-slate-200">
-                  <button onclick="addMediaBlock('video')" class="bg-blue-50 text-blue-600 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-blue-100 transition">+ Video (GDrive)</button>
+                  <button onclick="openGDriveVideoModal()" class="bg-blue-50 text-blue-600 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-blue-100 transition">+ Video (GDrive)</button>
                   <button onclick="addMediaBlock('image')" class="bg-emerald-50 text-emerald-600 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-emerald-100 transition">+ Thêm Ảnh</button>
                 </div>
               </div>
@@ -445,6 +445,41 @@
           </div>
         </div>
 
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MODAL: UPLOAD GDRIVE VIDEO ── -->
+  <div id="gdriveVideoModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center hidden">
+    <div class="bg-white rounded-3xl max-w-md w-full mx-4 overflow-hidden shadow-2xl border border-slate-100 flex flex-col">
+      <div class="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+        <h3 class="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+          <span>📥 Tải Lên Video Phụ (Google Drive)</span>
+        </h3>
+        <button onclick="closeGDriveVideoModal()" class="text-slate-400 hover:text-slate-600 transition font-bold text-lg">✕</button>
+      </div>
+      <div class="p-5 space-y-4">
+        <!-- Drop area -->
+        <div id="modalVideoUploadZone" class="border-2 border-dashed border-slate-200 rounded-2xl p-6 bg-slate-50 hover:bg-slate-100/50 hover:border-brandGreen transition cursor-pointer flex flex-col items-center justify-center text-center gap-2 h-40">
+          <svg class="w-10 h-10 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+          <span class="text-xs text-slate-600 font-bold">Kéo thả video vào đây hoặc click để chọn file</span>
+          <span class="text-[10px] text-slate-400 font-medium">Hỗ trợ các định dạng video phổ biến</span>
+        </div>
+        <input type="file" id="modalVideoFileInput" accept="video/*" class="hidden"/>
+        
+        <!-- Progress wrapper -->
+        <div id="modalVideoProgressWrapper" class="hidden space-y-2 bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+          <div class="flex items-center justify-between text-xs font-bold">
+            <span id="modalVideoUploadStatus" class="text-slate-600">Đang chuẩn bị...</span>
+            <span id="modalVideoUploadPercent" class="text-brandGreen">0%</span>
+          </div>
+          <div class="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+            <div id="modalVideoUploadProgressBar" class="bg-brandGreen h-1.5 transition-all duration-100" style="width: 0%;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="bg-slate-50 px-5 py-3 border-t border-slate-100 flex justify-end gap-2 text-xs font-bold">
+        <button onclick="closeGDriveVideoModal()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl transition">Đóng</button>
       </div>
     </div>
   </div>
@@ -1501,33 +1536,10 @@
                   <input type="file" accept="image/*" class="hidden" onchange="handleImageUploadForBlock('${id}', this)"/>
                 </label>` : ''}
             </div>
-            ${type === "video" ? `
-              <!-- Supplementary video drag/drop upload zone -->
-              <div id="${id}_uploadZone" class="border border-dashed border-slate-200 rounded-lg p-2 bg-slate-50/50 hover:bg-slate-50 hover:border-brandGreen transition cursor-pointer flex flex-col items-center justify-center text-center gap-1" onclick="triggerBlockVideoUpload('${id}')">
-                <span class="text-[10px] text-slate-500 font-medium">📥 Kéo thả video vào đây hoặc bấm để chọn file</span>
-              </div>
-              <input type="file" id="${id}_videoFile" accept="video/*" class="hidden" onchange="handleVideoUpload(this, 'media_video', '${id}')"/>
-              
-              <!-- Progress bar / Status -->
-              <div id="${id}_progressWrapper" class="hidden space-y-1">
-                <div class="flex items-center justify-between text-[9px] font-bold">
-                  <span id="${id}_uploadStatus" class="text-slate-600">Đang tải...</span>
-                  <span id="${id}_uploadPercent" class="text-brandGreen">0%</span>
-                </div>
-                <div class="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
-                  <div id="${id}_uploadProgressBar" class="bg-brandGreen h-1 transition-all duration-100" style="width: 0%;"></div>
-                </div>
-              </div>
-            ` : ''}
           </div>
         </div>
       `;
       container.appendChild(div);
-
-      // If it is a video block, initialize its drag & drop area
-      if (type === "video") {
-        setupVideoDragAndDrop(`${id}_uploadZone`, `${id}_videoFile`, "media_video", id);
-      }
     }
 
     function buildMediaUrls() {
@@ -1993,6 +2005,23 @@
       }
     }
 
+    function openGDriveVideoModal() {
+      const modal = document.getElementById("gdriveVideoModal");
+      if (modal) {
+        modal.classList.remove("hidden");
+        document.getElementById("modalVideoProgressWrapper").classList.add("hidden");
+        document.getElementById("modalVideoUploadProgressBar").style.width = "0%";
+        document.getElementById("modalVideoUploadPercent").innerText = "0%";
+        document.getElementById("modalVideoUploadStatus").innerText = "Sẵn sàng";
+        document.getElementById("modalVideoFileInput").value = "";
+      }
+    }
+    
+    function closeGDriveVideoModal() {
+      const modal = document.getElementById("gdriveVideoModal");
+      if (modal) modal.classList.add("hidden");
+    }
+
     function setupVideoDragAndDrop(zoneId, inputId, type, blockId = "") {
       const zone = document.getElementById(zoneId);
       if (!zone) return;
@@ -2060,10 +2089,10 @@
       }
 
       // Show progress wrapper
-      const wrapperId = type === "main_video" ? "mainVideoUploadProgressWrapper" : `${blockId}_progressWrapper`;
-      const statusId = type === "main_video" ? "mainVideoUploadStatus" : `${blockId}_uploadStatus`;
-      const percentId = type === "main_video" ? "mainVideoUploadPercent" : `${blockId}_uploadPercent`;
-      const progressElId = type === "main_video" ? "mainVideoUploadProgressBar" : `${blockId}_uploadProgressBar`;
+      const wrapperId = type === "main_video" ? "mainVideoUploadProgressWrapper" : (type === "modal_video" ? "modalVideoProgressWrapper" : `${blockId}_progressWrapper`);
+      const statusId = type === "main_video" ? "mainVideoUploadStatus" : (type === "modal_video" ? "modalVideoUploadStatus" : `${blockId}_uploadStatus`);
+      const percentId = type === "main_video" ? "mainVideoUploadPercent" : (type === "modal_video" ? "modalVideoUploadPercent" : `${blockId}_uploadPercent`);
+      const progressElId = type === "main_video" ? "mainVideoUploadProgressBar" : (type === "modal_video" ? "modalVideoUploadProgressBar" : `${blockId}_uploadProgressBar`);
 
       const wrapper = document.getElementById(wrapperId);
       const statusText = document.getElementById(statusId);
@@ -2191,6 +2220,11 @@
                     urlInput.dispatchEvent(new Event("change"));
                     urlInput.dispatchEvent(new Event("input"));
                   }
+                } else if (type === "modal_video") {
+                  addMediaBlock("video", file.name, directUrl);
+                  setTimeout(() => {
+                    closeGDriveVideoModal();
+                  }, 1000);
                 } else {
                   const block = document.getElementById(blockId);
                   if (block) {
@@ -3070,6 +3104,20 @@
     window.onload = () => {
       initGoogleSignIn();
       setupVideoDragAndDrop("mainVideoUploadZone", "mainVideoFileInput", "main_video");
+      setupVideoDragAndDrop("modalVideoUploadZone", "modalVideoFileInput", "modal_video");
+      
+      const modalUploadZone = document.getElementById("modalVideoUploadZone");
+      if (modalUploadZone) {
+        modalUploadZone.addEventListener("click", () => {
+          document.getElementById("modalVideoFileInput").click();
+        });
+      }
+      const modalFileInput = document.getElementById("modalVideoFileInput");
+      if (modalFileInput) {
+        modalFileInput.addEventListener("change", function() {
+          handleVideoUpload(this, "modal_video");
+        });
+      }
     };
   </script>
 </body>

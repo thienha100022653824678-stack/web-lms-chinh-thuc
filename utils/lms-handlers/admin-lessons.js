@@ -1,5 +1,6 @@
 import { supabase } from "../supabase.js";
 import { getAdminFromRequest } from "../lms.js";
+import { fetchRecipeText } from "./public-lesson.js";
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -91,6 +92,33 @@ export default async function handler(req, res) {
           });
 
         if (insertErr) throw insertErr;
+
+        // Sync recipe text to System 1 Portal
+        if (lessonData.recipeUrl) {
+          try {
+            const recipeText = await fetchRecipeText(lessonData.recipeUrl);
+            const sys1Url = process.env.SYSTEM1_URL;
+            const secret = process.env.INTERNAL_SYNC_SECRET;
+            if (sys1Url && secret && recipeText) {
+              await fetch(`${sys1Url.trim().replace(/\/$/, '')}/api/sync`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "X-Sync-Secret": secret
+                },
+                body: JSON.stringify({
+                  action: "syncRecipe",
+                  courseSlug: lessonData.course,
+                  recipe: recipeText,
+                  title: lessonData.title
+                })
+              });
+            }
+          } catch (syncErr) {
+            console.error("[admin-lessons] Sync recipe failed on create:", syncErr.message);
+          }
+        }
+
         return res.status(200).json({ success: true, message: "Tạo bài học thành công" });
       }
 
@@ -132,6 +160,33 @@ export default async function handler(req, res) {
           .eq("lesson_no", parseInt(originalLesson, 10));
 
         if (updateErr) throw updateErr;
+
+        // Sync recipe text to System 1 Portal
+        if (lessonData.recipeUrl) {
+          try {
+            const recipeText = await fetchRecipeText(lessonData.recipeUrl);
+            const sys1Url = process.env.SYSTEM1_URL;
+            const secret = process.env.INTERNAL_SYNC_SECRET;
+            if (sys1Url && secret && recipeText) {
+              await fetch(`${sys1Url.trim().replace(/\/$/, '')}/api/sync`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "X-Sync-Secret": secret
+                },
+                body: JSON.stringify({
+                  action: "syncRecipe",
+                  courseSlug: lessonData.course,
+                  recipe: recipeText,
+                  title: lessonData.title
+                })
+              });
+            }
+          } catch (syncErr) {
+            console.error("[admin-lessons] Sync recipe failed on update:", syncErr.message);
+          }
+        }
+
         return res.status(200).json({ success: true, message: "Cập nhật bài học thành công" });
       }
 

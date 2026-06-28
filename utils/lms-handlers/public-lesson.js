@@ -199,7 +199,7 @@ async function fetchRecipeTextFromPublicUrl(recipeUrl) {
   throw lastError || new Error("Public fetch failed");
 }
 
-async function fetchRecipeText(recipeUrl) {
+export async function fetchRecipeText(recipeUrl) {
   if (!recipeUrl) return "";
   const trimmed = recipeUrl.trim();
   if (!/^https?:\/\//i.test(trimmed)) {
