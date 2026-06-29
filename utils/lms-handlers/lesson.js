@@ -320,6 +320,7 @@ export default async function handler(req, res) {
       mediaUrls: securedMedia,
       views: lesson.views || 0,
       status: lesson.status || "active",
+      isSection: lesson.is_section || false,
       recipeText,
       ...securedVideo
     };

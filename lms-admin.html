@@ -257,6 +257,12 @@
                 </div>
               </div>
 
+              <!-- Checkbox is_section -->
+              <div class="flex items-center gap-2 py-1">
+                <input id="fIsSection" type="checkbox" onchange="toggleSectionFormFields()" class="w-4 h-4 text-brandGreen border-slate-300 rounded focus:ring-brandGreen"/>
+                <label for="fIsSection" class="text-xs font-extrabold text-slate-700 cursor-pointer select-none">📁 Đây là Chương (Section)</label>
+              </div>
+
               <div>
                 <label class="block text-xs font-bold text-slate-500 mb-1">Tiêu đề bài học</label>
                 <input id="fTitle" type="text" placeholder="Ví dụ: Tổng quan lý thuyết nhào bột" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"/>
@@ -290,7 +296,7 @@
                 </div>
               </div>
 
-              <div>
+              <div id="thumbnailContainer">
                 <label class="block text-xs font-bold text-slate-500 mb-1">Ảnh đại diện (Thumbnail URL)</label>
                 <div class="flex gap-2">
                   <input id="fThumbnailUrl" type="text" placeholder="https://..." class="flex-grow border border-slate-200 rounded-xl px-3 py-2 text-sm"/>
@@ -301,7 +307,7 @@
                 </div>
               </div>
 
-               <div>
+              <div id="videoUrlContainer">
                 <label class="block text-xs font-bold text-slate-500 mb-1">Video bài giảng chính (Google Drive)</label>
                 <div class="flex gap-2">
                   <input id="fVideoUrl" type="text" placeholder="Dán link chia sẻ hoặc ID video Google Drive..." class="flex-grow border border-slate-200 rounded-xl px-3 py-2 text-sm"/>
@@ -328,7 +334,7 @@
               </div>
 
               <!-- RECIPE -->
-              <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+              <div id="recipeContainer" class="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
                 <label class="block text-xs font-black text-slate-500">📄 CÔNG THỨC CHI TIẾT</label>
                 <textarea id="recipeText" rows="6" placeholder="Viết hoặc dán công thức bằng văn bản vào đây..." class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"></textarea>
                 
@@ -342,7 +348,7 @@
               </div>
 
               <!-- MEDIA PHỤ -->
-              <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+              <div id="mediaContainer" class="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
                 <div class="flex items-center justify-between">
                   <label class="block text-xs font-black text-slate-500">🌾 MEDIA PHỤ BỔ SUNG (mediaUrls)</label>
                   <button onclick="previewMediaUrls()" class="text-xs text-blue-600 font-bold hover:underline">Xem dạng văn bản</button>
@@ -1271,17 +1277,39 @@
         return;
       }
 
+      const hasSections = STATE.lessons.some(l => l.isSection);
+      let sectionCounter = 0;
+      let lessonCounter = 0;
+
       listContainer.innerHTML = STATE.lessons.map((l, idx) => {
         const isHidden = l.status === "hidden";
-        return `
-          <div onclick="loadLessonToEditor(${idx})" class="lesson-item flex items-center justify-between p-2 rounded-xl border border-transparent hover:bg-slate-50 cursor-pointer transition ${isHidden ? 'opacity-40' : ''}">
-            <div class="flex items-center gap-2 min-w-0">
-              <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-brandGreen/10 text-brandGreen">Bài ${l.lesson}</span>
-              <span class="text-xs font-semibold truncate text-slate-700">${escapeHtml(l.title)}</span>
+        if (l.isSection) {
+          sectionCounter++;
+          lessonCounter = 0;
+          return `
+            <div onclick="loadLessonToEditor(${idx})" class="lesson-item p-3.5 my-2 rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 hover:bg-slate-50 cursor-pointer transition ${isHidden ? 'opacity-40' : ''}">
+              <div class="flex items-center justify-between min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="text-[10px] font-black px-2 py-0.5 rounded bg-blue-600 text-white uppercase">📁 CHƯƠNG ${sectionCounter}</span>
+                  <span class="text-xs font-bold text-slate-800">${escapeHtml(l.title)}</span>
+                </div>
+                <button onclick="event.stopPropagation(); deleteLesson('${l.course}', ${l.lesson})" class="text-xs text-red-500 hover:text-red-700 font-bold px-2 py-1">Ẩn</button>
+              </div>
             </div>
-            <button onclick="event.stopPropagation(); deleteLesson('${l.course}', ${l.lesson})" class="text-xs text-red-500 hover:text-red-700 font-bold px-2 py-1">Ẩn</button>
-          </div>
-        `;
+          `;
+        } else {
+          lessonCounter++;
+          const numDisplay = hasSections ? lessonCounter : l.lesson;
+          return `
+            <div onclick="loadLessonToEditor(${idx})" class="lesson-item flex items-center justify-between p-2.5 rounded-xl border border-transparent hover:bg-slate-50 cursor-pointer transition ${isHidden ? 'opacity-40' : ''}">
+              <div class="flex items-center gap-2 min-w-0 ${hasSections ? 'pl-4 border-l-2 border-slate-100 ml-2' : ''}">
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-brandGreen/10 text-brandGreen">Bài ${numDisplay}</span>
+                <span class="text-xs font-semibold truncate text-slate-700">${escapeHtml(l.title)}</span>
+              </div>
+              <button onclick="event.stopPropagation(); deleteLesson('${l.course}', ${l.lesson})" class="text-xs text-red-500 hover:text-red-700 font-bold px-2 py-1">Ẩn</button>
+            </div>
+          `;
+        }
       }).join("");
     }
 
@@ -1294,6 +1322,27 @@
       if (statusText) statusText.innerText = "Đang tải video lên Google Drive...";
       const percentText = document.getElementById("mainVideoUploadPercent");
       if (percentText) percentText.innerText = "0%";
+    }
+
+    // Toggle relevant fields for sections vs normal lessons
+    function toggleSectionFormFields() {
+      const isSection = document.getElementById("fIsSection").checked;
+      const thumbnailContainer = document.getElementById("thumbnailContainer");
+      const videoUrlContainer = document.getElementById("videoUrlContainer");
+      const recipeContainer = document.getElementById("recipeContainer");
+      const mediaContainer = document.getElementById("mediaContainer");
+
+      if (isSection) {
+        if (thumbnailContainer) thumbnailContainer.classList.add("hidden");
+        if (videoUrlContainer) videoUrlContainer.classList.add("hidden");
+        if (recipeContainer) recipeContainer.classList.add("hidden");
+        if (mediaContainer) mediaContainer.classList.add("hidden");
+      } else {
+        if (thumbnailContainer) thumbnailContainer.classList.remove("hidden");
+        if (videoUrlContainer) videoUrlContainer.classList.remove("hidden");
+        if (recipeContainer) recipeContainer.classList.remove("hidden");
+        if (mediaContainer) mediaContainer.classList.remove("hidden");
+      }
     }
 
     // ── Lesson Form Initialization ─────────────────────────────────────────
@@ -1314,6 +1363,9 @@
 
       document.getElementById("fCourse").value = course;
       document.getElementById("fLesson").value = STATE.lessons.length + 1;
+      document.getElementById("fIsSection").checked = false;
+      toggleSectionFormFields();
+
       document.getElementById("fTitle").value = "";
       document.getElementById("fDescription").value = "";
       document.getElementById("fDuration").value = "";
@@ -1351,6 +1403,9 @@
 
       document.getElementById("fCourse").value = l.course;
       document.getElementById("fLesson").value = l.lesson;
+      document.getElementById("fIsSection").checked = l.isSection || false;
+      toggleSectionFormFields();
+
       document.getElementById("fTitle").value = l.title || "";
       document.getElementById("fDescription").value = l.description || "";
       document.getElementById("fDuration").value = l.duration || "";
@@ -1416,6 +1471,7 @@
       const status = document.getElementById("fStatus").value;
       let thumbnailUrl = document.getElementById("fThumbnailUrl").value.trim();
       const videoUrl = document.getElementById("fVideoUrl").value.trim();
+      const isSection = document.getElementById("fIsSection").checked;
 
       // Default thumbnail to Hero URL if empty
       if (!thumbnailUrl) {
@@ -1436,7 +1492,7 @@
       if (!lesson) { toast("Nhập số bài học.", "error"); return; }
       if (!title) { toast("Nhập tiêu đề bài học.", "error"); return; }
 
-      const lessonData = { course, lesson, title, description, duration, level, status, thumbnailUrl, videoUrl, recipeUrl, mediaUrls };
+      const lessonData = { course, lesson, title, description, duration, level, status, thumbnailUrl, videoUrl, recipeUrl, mediaUrls, isSection };
 
       const payload = {
         action: STATE.isEditMode ? "update" : "create",

@@ -101,6 +101,7 @@ CREATE TABLE IF NOT EXISTS lessons (
   media_urls TEXT,
   views INTEGER DEFAULT 0,
   is_free BOOLEAN DEFAULT false,
+  is_section BOOLEAN DEFAULT false,
   active BOOLEAN DEFAULT true,
   status TEXT DEFAULT 'active',
   sort_order INTEGER DEFAULT 0,

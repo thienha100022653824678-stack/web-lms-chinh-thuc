@@ -45,7 +45,8 @@ export default async function handler(req, res) {
         videoUrl: l.video_url || "",
         recipeUrl: l.recipe_url || "",
         mediaUrls: l.media_urls || "",
-        status: l.status || "active"
+        status: l.status || "active",
+        isSection: l.is_section || false
       }));
 
       return res.status(200).json({ success: true, lessons: formattedLessons });
@@ -88,6 +89,7 @@ export default async function handler(req, res) {
             media_urls: lessonData.mediaUrls || "",
             status: "active",
             sort_order: parseInt(lessonData.lesson, 10),
+            is_section: lessonData.isSection || false,
             updated_at: new Date().toISOString()
           });
 
@@ -154,6 +156,7 @@ export default async function handler(req, res) {
             media_urls: lessonData.mediaUrls || "",
             status: lessonData.status || "active",
             sort_order: parseInt(lessonData.lesson, 10),
+            is_section: lessonData.isSection || false,
             updated_at: new Date().toISOString()
           })
           .eq("course_slug", originalCourse)

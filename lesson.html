@@ -1024,8 +1024,22 @@
         sidebar.innerHTML = "";
         
         const currentIdx = courseLessonsList.findIndex(l => l.id === LESSON_ID);
+        const hasSections = courseLessonsList.some(l => l.isSection);
+        let sectionCounter = 0;
+        let lessonCounter = 0;
 
         courseLessonsList.forEach((l, idx) => {
+          if (l.isSection) {
+            sectionCounter++;
+            lessonCounter = 0;
+            const header = document.createElement("div");
+            header.className = "px-3 py-2 mt-4 text-[10px] font-black uppercase tracking-wider text-brandBrown/50 flex items-center gap-1.5 bg-brandBrown/5 rounded-lg select-none";
+            header.innerHTML = `📁 CHƯƠNG ${sectionCounter} — ${escapeHtml(l.title)}`;
+            sidebar.appendChild(header);
+            return;
+          }
+
+          lessonCounter++;
           const isActive = l.id === LESSON_ID;
           const a = document.createElement("a");
           a.href = `/lesson.html?id=${l.id}`;
@@ -1033,16 +1047,17 @@
             isActive
               ? "bg-brandGreen/10 border-brandGreen/25 text-brandGreen font-extrabold"
               : "bg-transparent border-transparent hover:bg-brandGray text-brandBrown/80"
-          }`;
+          } ${hasSections ? 'ml-2 pl-4 border-l border-brandBrown/10' : ''}`;
 
           const thumb = normalizeGoogleDriveImageUrl(l.thumbnailUrl || HERO_PLACEHOLDER_IMAGE);
+          const numDisplay = hasSections ? lessonCounter : (l.lesson || idx + 1);
           a.innerHTML = `
             <div class="w-12 aspect-video rounded overflow-hidden flex-shrink-0 border border-brandBrown/5 bg-brandGray relative">
               <img class="w-full h-full object-cover" src="${thumb}" alt="thumb">
               ${isActive ? '<div class="absolute inset-0 bg-brandGreen/40 flex items-center justify-center text-white text-[10px]">▶</div>' : ''}
             </div>
             <div class="min-w-0 flex-grow">
-              <div class="text-[9px] uppercase tracking-wider text-brandBrown/40">Bài ${l.lesson || idx + 1}</div>
+              <div class="text-[9px] uppercase tracking-wider text-brandBrown/40">Bài ${numDisplay}</div>
               <div class="truncate text-xs leading-normal mt-0.5">${escapeHtml(l.title)}</div>
             </div>
           `;
@@ -1053,16 +1068,26 @@
         const prevBtn = document.getElementById("prevBtn");
         const nextBtn = document.getElementById("nextBtn");
 
-        if (currentIdx > 0) {
+        let prevIdx = currentIdx - 1;
+        while (prevIdx >= 0 && courseLessonsList[prevIdx].isSection) {
+          prevIdx--;
+        }
+
+        if (prevIdx >= 0) {
           prevBtn.disabled = false;
-          prevBtn.onclick = () => window.location.href = `/lesson.html?id=${courseLessonsList[currentIdx - 1].id}`;
+          prevBtn.onclick = () => window.location.href = `/lesson.html?id=${courseLessonsList[prevIdx].id}`;
         } else {
           prevBtn.disabled = true;
         }
 
-        if (currentIdx !== -1 && currentIdx < courseLessonsList.length - 1) {
+        let nextIdx = currentIdx + 1;
+        while (nextIdx < courseLessonsList.length && courseLessonsList[nextIdx].isSection) {
+          nextIdx++;
+        }
+
+        if (nextIdx < courseLessonsList.length) {
           nextBtn.disabled = false;
-          nextBtn.onclick = () => window.location.href = `/lesson.html?id=${courseLessonsList[currentIdx + 1].id}`;
+          nextBtn.onclick = () => window.location.href = `/lesson.html?id=${courseLessonsList[nextIdx].id}`;
         } else {
           nextBtn.disabled = true;
         }
