@@ -362,6 +362,34 @@
                 </div>
               </div>
 
+              <!-- TÀI LIỆU BÀI HỌC -->
+              <div id="materialsContainer" class="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                <label class="block text-xs font-black text-slate-500">📎 TÀI LIỆU BÀI HỌC (materials)</label>
+                
+                <!-- Materials dropzone -->
+                <div id="materialsUploadZone" class="border-2 border-dashed border-slate-200 rounded-xl p-4 bg-white hover:bg-slate-50 hover:border-brandGreen transition cursor-pointer flex flex-col items-center justify-center text-center gap-1.5" onclick="triggerMaterialsUpload()">
+                  <span class="text-xs text-slate-500 font-medium">📥 Kéo thả tài liệu vào đây hoặc bấm để chọn file</span>
+                  <span class="text-[10px] text-slate-400">PDF, Excel, Word, PowerPoint, Text, v.v. Tối đa 50MB</span>
+                </div>
+                <input type="file" id="materialsFileInput" class="hidden" onchange="handleMaterialsUpload(this)"/>
+
+                <!-- Progress bar for materials upload -->
+                <div id="materialsUploadProgressWrapper" class="hidden space-y-1">
+                  <div class="flex items-center justify-between text-[11px] font-bold">
+                    <span id="materialsUploadStatus" class="text-slate-600">Đang tải tài liệu lên Drive...</span>
+                    <span id="materialsUploadPercent" class="text-brandGreen">0%</span>
+                  </div>
+                  <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                    <div id="materialsUploadProgressBar" class="bg-brandGreen h-1.5 transition-all duration-100" style="width: 0%;"></div>
+                  </div>
+                </div>
+
+                <!-- Materials List -->
+                <div id="materialsListContainer" class="space-y-2">
+                  <!-- Dynamic list of materials populated here -->
+                </div>
+              </div>
+
             </div>
 
             <!-- Footer Actions -->
@@ -708,6 +736,7 @@
       originalLesson: "",
       recipeFileBase64: "",
       recipeFileName: "",
+      currentMaterials: [],
       students: [],
       enrollments: []
     };
@@ -1331,17 +1360,20 @@
       const videoUrlContainer = document.getElementById("videoUrlContainer");
       const recipeContainer = document.getElementById("recipeContainer");
       const mediaContainer = document.getElementById("mediaContainer");
+      const materialsContainer = document.getElementById("materialsContainer");
 
       if (isSection) {
         if (thumbnailContainer) thumbnailContainer.classList.add("hidden");
         if (videoUrlContainer) videoUrlContainer.classList.add("hidden");
         if (recipeContainer) recipeContainer.classList.add("hidden");
         if (mediaContainer) mediaContainer.classList.add("hidden");
+        if (materialsContainer) materialsContainer.classList.add("hidden");
       } else {
         if (thumbnailContainer) thumbnailContainer.classList.remove("hidden");
         if (videoUrlContainer) videoUrlContainer.classList.remove("hidden");
         if (recipeContainer) recipeContainer.classList.remove("hidden");
         if (mediaContainer) mediaContainer.classList.remove("hidden");
+        if (materialsContainer) materialsContainer.classList.remove("hidden");
       }
     }
 
@@ -1352,6 +1384,7 @@
       STATE.originalLesson = "";
       STATE.recipeFileBase64 = "";
       STATE.recipeFileName = "";
+      STATE.currentMaterials = [];
 
       document.getElementById("formTitle").innerText = "Thêm Bài Học Mới";
       const badge = document.getElementById("formModeBadge");
@@ -1379,6 +1412,7 @@
       document.getElementById("recipeOpenLink").classList.add("hidden");
       document.getElementById("mainVideoStatus").innerHTML = "";
       document.getElementById("mediaBlocksContainer").innerHTML = "";
+      renderMaterialsList();
       resetMainVideoProgress();
       
       const shareLessonUrlContainer = document.getElementById("shareLessonUrlContainer");
@@ -1395,6 +1429,7 @@
       STATE.recipeFileBase64 = "";
       STATE.originalMime = ""; // Unused reset placeholder if needed
       STATE.recipeFileName = "";
+      STATE.currentMaterials = l.materials || [];
 
       document.getElementById("formTitle").innerText = `Sửa: ${l.title || "Bài " + l.lesson}`;
       const badge = document.getElementById("formModeBadge");
@@ -1425,6 +1460,7 @@
       
       document.getElementById("recipeFileInput").value = "";
       document.getElementById("mainVideoStatus").innerHTML = "";
+      renderMaterialsList();
       resetMainVideoProgress();
 
       const shareLessonUrlContainer = document.getElementById("shareLessonUrlContainer");
@@ -1472,6 +1508,7 @@
       let thumbnailUrl = document.getElementById("fThumbnailUrl").value.trim();
       const videoUrl = document.getElementById("fVideoUrl").value.trim();
       const isSection = document.getElementById("fIsSection").checked;
+      const materials = STATE.currentMaterials || [];
 
       // Default thumbnail to Hero URL if empty
       if (!thumbnailUrl) {
@@ -1492,7 +1529,7 @@
       if (!lesson) { toast("Nhập số bài học.", "error"); return; }
       if (!title) { toast("Nhập tiêu đề bài học.", "error"); return; }
 
-      const lessonData = { course, lesson, title, description, duration, level, status, thumbnailUrl, videoUrl, recipeUrl, mediaUrls, isSection };
+      const lessonData = { course, lesson, title, description, duration, level, status, thumbnailUrl, videoUrl, recipeUrl, mediaUrls, isSection, materials };
 
       const payload = {
         action: STATE.isEditMode ? "update" : "create",
@@ -1524,6 +1561,231 @@
         hideLoader();
       }
     }
+
+    // ── Lesson Materials Helpers & Resumable Upload ──────────────────────────
+    function renderMaterialsList() {
+      const container = document.getElementById("materialsListContainer");
+      if (!container) return;
+      container.innerHTML = "";
+
+      if (!STATE.currentMaterials || STATE.currentMaterials.length === 0) {
+        container.innerHTML = `<p class="text-[11px] text-slate-400 italic">Chưa có tài liệu nào.</p>`;
+        return;
+      }
+
+      STATE.currentMaterials.forEach((m, idx) => {
+        const item = document.createElement("div");
+        item.className = "flex items-center justify-between p-2.5 bg-white border border-slate-150 rounded-xl text-xs gap-3";
+        
+        let typeIcon = "📄";
+        if (m.type === "pdf") typeIcon = "📕";
+        else if (m.type === "excel") typeIcon = "🟢";
+        else if (m.type === "word") typeIcon = "📘";
+        else if (m.type === "powerpoint") typeIcon = "📙";
+        else if (m.type === "text") typeIcon = "📝";
+
+        item.innerHTML = `
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-base shrink-0">${typeIcon}</span>
+            <span class="font-semibold text-slate-700 truncate">${escapeHtml(m.name)}</span>
+            <span class="text-[9px] uppercase px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 font-bold shrink-0">${m.type}</span>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <a href="${m.url}" target="_blank" class="text-blue-600 hover:text-blue-800 font-bold px-2 py-1">Mở</a>
+            <button onclick="event.preventDefault(); deleteMaterial(${idx})" class="text-red-500 hover:text-red-750 font-bold px-2 py-1">Xóa</button>
+          </div>
+        `;
+        container.appendChild(item);
+      });
+    }
+
+    window.deleteMaterial = function(idx) {
+      STATE.currentMaterials.splice(idx, 1);
+      renderMaterialsList();
+    };
+
+    window.triggerMaterialsUpload = function() {
+      const fileInput = document.getElementById("materialsFileInput");
+      if (fileInput) fileInput.click();
+    };
+
+    window.handleMaterialsUpload = async function(input) {
+      const file = input.files[0];
+      if (!file) return;
+
+      const resetInput = () => { input.value = ""; };
+
+      const course_slug = document.getElementById("fCourse").value;
+      if (!course_slug) {
+        toast("Vui lòng chọn hoặc tạo khóa học trước khi upload tài liệu.", "error");
+        resetInput();
+        return;
+      }
+
+      const lesson_no = document.getElementById("fLesson").value.trim() || "1";
+      const lesson_title = document.getElementById("fTitle").value.trim() || "Chưa đặt tên";
+      const course_title = (STATE.globalConfig && STATE.globalConfig[`${course_slug}_title`]) || course_slug.toUpperCase();
+
+      let driveToken;
+      try {
+        driveToken = await ensureDriveAccess();
+      } catch (err) {
+        toast("Vui lòng kết nối Google Drive để upload tài liệu.", "error");
+        resetInput();
+        return;
+      }
+
+      const wrapper = document.getElementById("materialsUploadProgressWrapper");
+      const statusText = document.getElementById("materialsUploadStatus");
+      const percentText = document.getElementById("materialsUploadPercent");
+      const progressBar = document.getElementById("materialsUploadProgressBar");
+
+      if (wrapper) wrapper.classList.remove("hidden");
+      if (statusText) statusText.innerText = "Đang chuẩn bị thư mục Google Drive...";
+      if (percentText) percentText.innerText = "0%";
+      if (progressBar) progressBar.style.width = "0%";
+
+      try {
+        const folderRes = await fetch("/api/lms/admin?endpoint=upload-gdrive-video", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeaders(),
+            "x-drive-access-token": driveToken
+          },
+          body: JSON.stringify({
+            action: "get-folder",
+            course_slug,
+            course_title,
+            lesson_no,
+            lesson_title,
+            media_type: "lesson_material",
+            accessToken: driveToken
+          })
+        });
+
+        const folderData = await folderRes.json();
+        if (!folderRes.ok || !folderData.success) {
+          throw new Error(folderData.error || "Không thể khởi tạo thư mục tải lên");
+        }
+
+        const folderId = folderData.folderId;
+        if (statusText) statusText.innerText = "Khởi tạo phiên tải lên Google Drive...";
+
+        // Resolve document type/extension
+        let uploadMime = file.type || "application/octet-stream";
+        const ext = file.name.split(".").pop().toLowerCase().trim();
+        const docMimeMap = {
+          "pdf": "application/pdf",
+          "doc": "application/msword",
+          "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "xls": "application/vnd.ms-excel",
+          "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "ppt": "application/vnd.ms-powerpoint",
+          "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+          "txt": "text/plain",
+          "csv": "text/csv"
+        };
+        const resolvedType = docMimeMap[ext] || "other";
+
+        // Step 2: Initiate Resumable Upload
+        const initXhr = new XMLHttpRequest();
+        initXhr.open("POST", "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable", true);
+        initXhr.setRequestHeader("Authorization", `Bearer ${driveToken}`);
+        initXhr.setRequestHeader("Content-Type", "application/json; charset=UTF-8");
+        initXhr.setRequestHeader("X-Upload-Content-Type", uploadMime);
+        initXhr.setRequestHeader("X-Upload-Content-Length", file.size);
+
+        const fileMetadata = {
+          name: file.name.replace(/[/\\?%*:|"<>']/g, "-"),
+          parents: [folderId]
+        };
+
+        initXhr.send(JSON.stringify(fileMetadata));
+
+        initXhr.onload = function() {
+          if (initXhr.status === 200 || initXhr.status === 201) {
+            const sessionUrl = initXhr.getResponseHeader("Location");
+            if (!sessionUrl) {
+              toast("Lỗi khởi tạo phiên upload tài liệu.", "error");
+              if (wrapper) wrapper.classList.add("hidden");
+              resetInput();
+              return;
+            }
+
+            if (statusText) statusText.innerText = "Đang tải tài liệu lên Drive...";
+
+            const putXhr = new XMLHttpRequest();
+            putXhr.open("PUT", sessionUrl, true);
+            putXhr.setRequestHeader("Content-Type", uploadMime);
+            putXhr.setRequestHeader("Content-Range", `bytes 0-${file.size - 1}/${file.size}`);
+
+            putXhr.upload.onprogress = function(e) {
+              if (e.lengthComputable) {
+                const percentComplete = Math.round((e.loaded / e.total) * 100);
+                if (percentText) percentText.innerText = `${percentComplete}%`;
+                if (progressBar) progressBar.style.width = `${percentComplete}%`;
+                if (statusText) statusText.innerText = `Đang tải tài liệu lên Drive... ${percentComplete}%`;
+              }
+            };
+
+            putXhr.onload = function() {
+              if (putXhr.status === 200 || putXhr.status === 201) {
+                let driveFileData = {};
+                try {
+                  driveFileData = JSON.parse(putXhr.responseText);
+                } catch (e) {}
+
+                const fileId = driveFileData.id;
+                if (!fileId) {
+                  toast("Lỗi: Không nhận được ID file từ Google Drive.", "error");
+                  resetInput();
+                  return;
+                }
+
+                if (statusText) statusText.innerText = "Tải lên thành công";
+                if (percentText) percentText.innerText = "100%";
+                if (progressBar) progressBar.style.width = "100%";
+
+                toast("Tải tài liệu lên Google Drive thành công!");
+                const directUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+
+                // Add to STATE
+                if (!STATE.currentMaterials) STATE.currentMaterials = [];
+                STATE.currentMaterials.push({
+                  name: file.name,
+                  url: directUrl,
+                  type: resolvedType
+                });
+                renderMaterialsList();
+
+                setTimeout(() => {
+                  if (wrapper) wrapper.classList.add("hidden");
+                }, 1500);
+
+              } else {
+                toast("Tải tài liệu thất bại", "error");
+              }
+              resetInput();
+            };
+
+            putXhr.onerror = function() {
+              toast("Lỗi kết nối mạng khi upload tài liệu.", "error");
+              resetInput();
+            };
+
+            putXhr.send(file);
+          } else {
+            toast("Lỗi khởi tạo phiên upload tài liệu.", "error");
+            resetInput();
+          }
+        };
+
+      } catch (err) {
+        toast(`Upload tài liệu thất bại: ${err.message}`, "error");
+        resetInput();
+      }
+    };
 
     // ── Hide/Delete Lesson ─────────────────────────────────────────────────
     async function deleteLesson(course, lesson) {
@@ -3180,6 +3442,36 @@
         modalFileInput.addEventListener("change", function() {
           handleVideoUpload(this, "modal_video");
         });
+      }
+
+      // Materials drag and drop
+      const materialsZone = document.getElementById("materialsUploadZone");
+      if (materialsZone) {
+        ["dragenter", "dragover"].forEach(eventName => {
+          materialsZone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            materialsZone.classList.add("border-brandGreen", "bg-slate-50");
+          }, false);
+        });
+
+        ["dragleave", "drop"].forEach(eventName => {
+          materialsZone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            materialsZone.classList.remove("border-brandGreen", "bg-slate-50");
+          }, false);
+        });
+
+        materialsZone.addEventListener("drop", (e) => {
+          const dt = e.dataTransfer;
+          const files = dt.files;
+          if (files && files.length > 0) {
+            const input = document.getElementById("materialsFileInput");
+            if (input) {
+              input.files = files;
+              handleMaterialsUpload(input);
+            }
+          }
+        }, false);
       }
     };
   </script>

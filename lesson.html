@@ -316,6 +316,18 @@
         </button>
       </div>
 
+      <!-- Materials Card -->
+      <div id="materialsCard" class="hidden mt-6 bg-white border border-brandBrown/5 rounded-2xl p-5 shadow-sm">
+        <div class="flex items-center justify-between border-b border-brandGray pb-3 mb-4">
+          <span class="font-black text-brandGreen text-base flex items-center gap-2">
+            <span>📎</span> TÀI LIỆU BÀI HỌC
+          </span>
+        </div>
+        <div id="materialsContent" class="space-y-3">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
       <!-- Description / Extra details -->
       <div class="mt-6 bg-white border border-brandBrown/5 rounded-2xl p-5 shadow-sm mb-12">
         <h4 class="font-extrabold text-brandBrown text-sm mb-2">Giới thiệu bài học</h4>
@@ -497,6 +509,43 @@
           Chưa tải được nội dung công thức. Vui lòng kiểm tra quyền chia sẻ file công thức.
         </div>
       `;
+    }
+
+    function renderMaterials(materials) {
+      const card = document.getElementById("materialsCard");
+      const content = document.getElementById("materialsContent");
+      if (!card || !content) return;
+
+      if (!materials || !Array.isArray(materials) || materials.length === 0) {
+        card.classList.add("hidden");
+        return;
+      }
+
+      card.classList.remove("hidden");
+      content.innerHTML = materials.map(m => {
+        let typeIcon = "📄";
+        if (m.type === "pdf") typeIcon = "📕";
+        else if (m.type === "excel") typeIcon = "🟢";
+        else if (m.type === "word") typeIcon = "📘";
+        else if (m.type === "powerpoint") typeIcon = "📙";
+        else if (m.type === "text") typeIcon = "📝";
+
+        const fileId = getGoogleDriveFileId(m.url);
+        const viewUrl = fileId ? `https://drive.google.com/file/d/${fileId}/view?usp=drivesdk` : m.url;
+
+        return `
+          <div class="flex items-center justify-between p-3 sm:p-3.5 bg-brandGray/40 border border-brandBrown/5 rounded-2xl text-xs sm:text-sm gap-3 hover:bg-brandGray transition">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <span class="text-lg shrink-0">${typeIcon}</span>
+              <span class="font-extrabold text-brandBrown truncate">${escapeHtml(m.name)}</span>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <a href="${viewUrl}" target="_blank" class="px-3 py-1.5 bg-brandGreen hover:bg-brandGreenLight text-white font-bold rounded-lg transition text-[11px] sm:text-xs">Mở</a>
+              <a href="${m.url}" target="_blank" class="px-3 py-1.5 bg-white border border-brandGreen/35 hover:bg-brandCream text-brandGreen font-bold rounded-lg transition text-[11px] sm:text-xs">Tải xuống</a>
+            </div>
+          </div>
+        `;
+      }).join("");
     }
 
     // Extract Iframe Src (if any)
@@ -940,12 +989,65 @@
         // Render sub materials
         renderMediaItems(currentLesson);
 
-        // Setup Video Wrapper/Iframe
+        // Render materials
+        renderMaterials(currentLesson.materials || []);
+
+        // Setup Video Wrapper/Iframe / Hiding Empty Videos
+        const videoContainer = document.getElementById("videoContainer");
         const videoWrapper = document.getElementById("videoWrapper");
         const videoThumb = document.getElementById("videoThumb");
         const playBtn = document.getElementById("playBtn");
         
-        videoThumb.src = normalizeGoogleDriveImageUrl(currentLesson.thumbnailUrl || HERO_PLACEHOLDER_IMAGE);
+        const hasVideo = currentLesson.videoUrl && currentLesson.videoUrl.trim() !== "";
+        if (!hasVideo) {
+          if (playBtn) playBtn.classList.add("hidden");
+          const hasImage = currentLesson.thumbnailUrl && currentLesson.thumbnailUrl.trim() !== "" && !currentLesson.thumbnailUrl.includes("placeholder");
+          if (hasImage) {
+            if (videoContainer) {
+              videoContainer.classList.remove("hidden");
+              if (videoThumb) {
+                videoThumb.src = normalizeGoogleDriveImageUrl(currentLesson.thumbnailUrl);
+                videoThumb.className = "absolute inset-0 w-full h-full object-cover opacity-100";
+              }
+            }
+          } else {
+            if (videoContainer) videoContainer.classList.add("hidden");
+          }
+        } else {
+          if (videoContainer) videoContainer.classList.remove("hidden");
+          if (playBtn) playBtn.classList.remove("hidden");
+          if (videoThumb) {
+            videoThumb.src = normalizeGoogleDriveImageUrl(currentLesson.thumbnailUrl || HERO_PLACEHOLDER_IMAGE);
+            videoThumb.className = "absolute inset-0 w-full h-full object-cover opacity-70";
+          }
+
+          // Setup Video Click Handler
+          playBtn.onclick = () => {
+            if (isCocCocBrowser()) {
+              videoWrapper.innerHTML = getCocCocBlockedHtml();
+              clearWatermarkFrom(videoWrapper);
+              return;
+            }
+            if (!isMobileDevice()) {
+              videoWrapper.innerHTML = getPCBlockedHtml();
+              clearWatermarkFrom(videoWrapper);
+              return;
+            }
+
+            const videoUrl = lessonVideoUrl(currentLesson);
+            if (!videoUrl) {
+              alert("Video chưa được cập nhật hoặc phiên xem video đã hết hạn.");
+              return;
+            }
+
+            videoWrapper.innerHTML = getIframePlayerHtml(videoUrl);
+            if (currentLesson.videoProvider === "bunny_embed") {
+              createWatermark(videoWrapper, studentEmail);
+            } else {
+              clearWatermarkFrom(videoWrapper);
+            }
+          };
+        }
 
         // Auto print/recipe scroll
         if (window.location.hash === "#recipe") {
@@ -954,13 +1056,6 @@
           }, 500);
         }
 
-        // Setup Video Click Handler
-        playBtn.onclick = () => {
-          if (isCocCocBrowser()) {
-            videoWrapper.innerHTML = getCocCocBlockedHtml();
-            clearWatermarkFrom(videoWrapper);
-            return;
-          }
           if (!isMobileDevice()) {
             videoWrapper.innerHTML = getPCBlockedHtml();
             clearWatermarkFrom(videoWrapper);

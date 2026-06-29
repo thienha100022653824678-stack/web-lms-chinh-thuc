@@ -368,6 +368,7 @@ export default async function handler(req, res) {
         views: l.views || 0,
         status: l.status || "active",
         isSection: l.is_section || false,
+        materials: l.materials || [],
         ...securedVideo
       };
     });

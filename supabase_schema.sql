@@ -102,6 +102,7 @@ CREATE TABLE IF NOT EXISTS lessons (
   views INTEGER DEFAULT 0,
   is_free BOOLEAN DEFAULT false,
   is_section BOOLEAN DEFAULT false,
+  materials JSONB DEFAULT '[]'::jsonb,
   active BOOLEAN DEFAULT true,
   status TEXT DEFAULT 'active',
   sort_order INTEGER DEFAULT 0,

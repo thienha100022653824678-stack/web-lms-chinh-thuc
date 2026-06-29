@@ -289,6 +289,7 @@ export default async function handler(req, res) {
       views: lessonData.views || 0,
       status: lessonData.status || "active",
       isSection: lessonData.is_section || false,
+      materials: lessonData.materials || [],
       recipeText
     };
 

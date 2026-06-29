@@ -63,6 +63,27 @@ function resolveVideoMime(rawMimeFromBrowser, fileName) {
   return "video/mp4";
 }
 
+function resolveDocumentMime(rawMimeFromBrowser, fileName) {
+  let mime = (rawMimeFromBrowser || "").trim();
+  if (mime && mime !== "application/octet-stream" && mime !== "application/x-generic") {
+    return mime;
+  }
+  
+  const ext = String(fileName || "").split(".").pop().toLowerCase().trim();
+  const docMimeMap = {
+    "pdf": "application/pdf",
+    "doc": "application/msword",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "xls": "application/vnd.ms-excel",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "ppt": "application/vnd.ms-powerpoint",
+    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "txt": "text/plain",
+    "csv": "text/csv"
+  };
+  return docMimeMap[ext] || "application/octet-stream";
+}
+
 function bufferToStream(buffer) {
   const pass = new PassThrough();
   pass.end(buffer);
@@ -117,7 +138,7 @@ export default async function handler(req, res) {
         course_title: course_title || course_slug.toUpperCase(),
         lesson_no: lesson_no || "1",
         lesson_title: lesson_title || "Untitled",
-        type: media_type === "main_video" ? "main_video" : "lesson_media_video"
+        type: media_type === "main_video" ? "main_video" : (media_type === "lesson_material" ? "lesson_material" : "lesson_media_video")
       });
 
       if (resolved.courseFolderId) {
@@ -141,23 +162,26 @@ export default async function handler(req, res) {
       cleanBase64 = parts[1];
     }
 
-    const effectiveMime = resolveVideoMime(mimeType || mimeFromDataUrl, fileName);
+    const isMaterial = media_type === "lesson_material";
+    const effectiveMime = isMaterial 
+      ? resolveDocumentMime(mimeType || mimeFromDataUrl, fileName)
+      : resolveVideoMime(mimeType || mimeFromDataUrl, fileName);
     
     let buffer;
     try {
       buffer = Buffer.from(cleanBase64, "base64");
     } catch {
-      return res.status(400).json({ success: false, error: "Dữ liệu video base64 không hợp lệ" });
+      return res.status(400).json({ success: false, error: "Dữ liệu file base64 không hợp lệ" });
     }
 
     if (buffer.byteLength === 0) {
-      return res.status(400).json({ success: false, error: "File video rỗng, không thể tải lên" });
+      return res.status(400).json({ success: false, error: "File rỗng, không thể tải lên" });
     }
 
     if (buffer.byteLength > MAX_VIDEO_BYTES) {
       return res.status(400).json({
         success: false,
-        error: `Video quá lớn (${(buffer.byteLength / 1024 / 1024).toFixed(1)} MB). Tối đa 500 MB.`
+        error: `File quá lớn (${(buffer.byteLength / 1024 / 1024).toFixed(1)} MB). Tối đa 500 MB.`
       });
     }
 
@@ -167,7 +191,7 @@ export default async function handler(req, res) {
       course_title: course_title || course_slug.toUpperCase(),
       lesson_no: lesson_no || "1",
       lesson_title: lesson_title || "Untitled",
-      type: media_type === "main_video" ? "main_video" : "lesson_media_video"
+      type: media_type
     });
 
     const targetFolderId = resolved.targetFolderId;
@@ -176,7 +200,7 @@ export default async function handler(req, res) {
     }
 
     const origExt = String(fileName || "").split(".").pop().toLowerCase().trim();
-    const fallbackExt = MIME_TO_EXT[effectiveMime] || "mp4";
+    const fallbackExt = isMaterial ? (origExt || "pdf") : (MIME_TO_EXT[effectiveMime] || "mp4");
     const finalExt = origExt || fallbackExt;
     const finalFileName = fileName || `${media_type}_${Date.now()}.${finalExt}`;
 
