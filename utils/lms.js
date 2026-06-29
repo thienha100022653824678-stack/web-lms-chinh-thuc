@@ -724,7 +724,9 @@ export async function getGoogleDriveClient(supabase) {
         creds.private_key.replace(/\\n/g, '\n'),
         ['https://www.googleapis.com/auth/drive']
       );
-      return { drive: google.drive({ version: "v3", auth }), isServiceAccount: true };
+      const tokenRes = await auth.getAccessToken();
+      const accessToken = tokenRes.token || tokenRes;
+      return { drive: google.drive({ version: "v3", auth }), isServiceAccount: true, accessToken };
     } catch (err) {
       console.error("Failed to initialize Service Account drive client:", err);
     }

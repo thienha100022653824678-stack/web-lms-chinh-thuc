@@ -20,36 +20,20 @@ export default async function handler(req, res) {
 
     // ── GET: Check connection status ─────────────────────────────────────────
     if (req.method === "GET") {
-      // 1. Check Service Account first
-      if (process.env.GOOGLE_SERVICE_ACCOUNT) {
-        try {
-          JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
-          return res.status(200).json({ success: true, connected: true, type: "service_account" });
-        } catch (e) {
-          console.error("Invalid GOOGLE_SERVICE_ACCOUNT JSON config:", e);
+      const { getGoogleDriveClient } = await import("../lms.js");
+      try {
+        const clientInfo = await getGoogleDriveClient(supabase);
+        if (clientInfo && clientInfo.drive) {
+          const type = clientInfo.isServiceAccount ? "service_account" : "oauth";
+          return res.status(200).json({
+            success: true,
+            connected: true,
+            type,
+            accessToken: clientInfo.accessToken
+          });
         }
-      }
-
-      // 2. Check Refresh Token in site_config
-      const { data: configRefresh } = await supabase
-        .from("site_config")
-        .select("value")
-        .eq("key", "google_drive_refresh_token")
-        .maybeSingle();
-
-      if (configRefresh && configRefresh.value && configRefresh.value.val) {
-        return res.status(200).json({ success: true, connected: true, type: "oauth" });
-      }
-
-      // 3. Check Access Token in site_config as fallback
-      const { data: configToken } = await supabase
-        .from("site_config")
-        .select("value")
-        .eq("key", "google_drive_access_token")
-        .maybeSingle();
-
-      if (configToken && configToken.value && configToken.value.val) {
-        return res.status(200).json({ success: true, connected: true, type: "oauth" });
+      } catch (err) {
+        console.error("Failed to check Google Drive client info:", err);
       }
 
       return res.status(200).json({ success: true, connected: false });

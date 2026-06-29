@@ -1677,7 +1677,14 @@
     }
 
     async function ensureDriveAccess() {
-      return "unused_client_token";
+      const res = await fetch("/api/lms/admin?endpoint=drive-status", {
+        headers: authHeaders()
+      });
+      const d = await res.json();
+      if (res.ok && d.success && d.connected && d.accessToken) {
+        return d.accessToken;
+      }
+      throw new Error("Chưa kết nối Google Drive hoặc không lấy được Access Token");
     }
 
     async function checkDriveStatus() {
