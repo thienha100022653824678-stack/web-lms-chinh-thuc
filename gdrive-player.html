@@ -86,10 +86,7 @@
       ← Quay lại bài học
     </button>
     <a id="openDriveBtn" class="btn btn-open" target="_blank">
-      ↗ Mở tab mới / App Drive
-    </a>
-    <a id="downloadBtn" class="btn btn-download" target="_blank">
-      📥 Tải video
+      Phát video bị lỗi ──► Mở xem TT qua GDrive
     </a>
   </div>
 
@@ -104,7 +101,6 @@
     if (fileId) {
       iframe.src = `https://drive.google.com/file/d/${fileId}/preview`;
       document.getElementById('openDriveBtn').href = `https://drive.google.com/file/d/${fileId}/view?usp=drivesdk`;
-      document.getElementById('downloadBtn').href = `https://drive.google.com/uc?export=download&id=${fileId}`;
     } else {
       alert('Không tìm thấy ID video Google Drive!');
     }
