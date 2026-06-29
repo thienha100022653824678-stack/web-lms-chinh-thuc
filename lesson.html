@@ -91,6 +91,14 @@
       font-family: "Be Vietnam Pro", sans-serif;
     }
     
+    /* Disable selection and copy in recipeContent */
+    .no-select {
+      -webkit-user-select: none !important;
+      -moz-user-select: none !important;
+      -ms-user-select: none !important;
+      user-select: none !important;
+    }
+    
     .serif-title {
       font-family: "Playfair Display", serif;
     }
@@ -302,12 +310,9 @@
           <span class="font-black text-brandGreen text-base flex items-center gap-2">
             <span>📄</span> CÔNG THỨC CHI TIẾT
           </span>
-          <button id="printBtn" onclick="window.print()" class="text-xs font-bold text-brandGreen hover:underline flex items-center gap-1">
-            🖨️ In công thức
-          </button>
         </div>
         
-        <div id="recipeContent" class="recipe-render text-sm sm:text-base overflow-hidden transition-all duration-300 max-h-[380px] relative">
+        <div id="recipeContent" class="recipe-render text-sm sm:text-base overflow-hidden transition-all duration-300 max-h-[380px] relative no-select">
           <!-- Loaded by JS -->
         </div>
         
@@ -985,6 +990,17 @@
         // Render recipe
         const recipeContent = document.getElementById("recipeContent");
         recipeContent.innerHTML = renderRecipeContent(currentLesson);
+
+        // Add copy-protection event listeners
+        recipeContent.addEventListener('copy', (e) => e.preventDefault());
+        recipeContent.addEventListener('cut', (e) => e.preventDefault());
+        recipeContent.addEventListener('contextmenu', (e) => e.preventDefault());
+        recipeContent.addEventListener('selectstart', (e) => e.preventDefault());
+        recipeContent.addEventListener('keydown', (e) => {
+          if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'x')) {
+            e.preventDefault();
+          }
+        });
 
         // Render sub materials
         renderMediaItems(currentLesson);
