@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://accounts.google.com/gsi/client" async></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 
   <script>
     tailwind.config = {
@@ -253,7 +254,7 @@
                 </div>
                 <div>
                   <label class="block text-xs font-bold text-slate-500 mb-1">Bài số (Lesson no)</label>
-                  <input id="fLesson" type="number" min="1" placeholder="1" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"/>
+                  <input id="fLesson" type="number" min="1" readonly placeholder="1" class="w-full bg-slate-100 text-slate-500 border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold"/>
                 </div>
               </div>
 
@@ -1316,7 +1317,7 @@
           sectionCounter++;
           lessonCounter = 0;
           return `
-            <div onclick="loadLessonToEditor(${idx})" class="lesson-item p-3.5 my-2 rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 hover:bg-slate-50 cursor-pointer transition ${isHidden ? 'opacity-40' : ''}">
+            <div data-id="${l.id || ''}" data-idx="${idx}" onclick="loadLessonToEditor(${idx})" class="lesson-item cursor-grab active:cursor-grabbing p-3.5 my-2 rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 hover:bg-slate-50 transition ${isHidden ? 'opacity-40' : ''}">
               <div class="flex items-center justify-between min-w-0">
                 <div class="flex items-center gap-2">
                   <span class="text-[10px] font-black px-2 py-0.5 rounded bg-blue-600 text-white uppercase">📁 CHƯƠNG ${sectionCounter}</span>
@@ -1328,9 +1329,9 @@
           `;
         } else {
           lessonCounter++;
-          const numDisplay = hasSections ? lessonCounter : l.lesson;
+          const numDisplay = hasSections ? lessonCounter : (l.lesson || idx + 1);
           return `
-            <div onclick="loadLessonToEditor(${idx})" class="lesson-item flex items-center justify-between p-2.5 rounded-xl border border-transparent hover:bg-slate-50 cursor-pointer transition ${isHidden ? 'opacity-40' : ''}">
+            <div data-id="${l.id || ''}" data-idx="${idx}" onclick="loadLessonToEditor(${idx})" class="lesson-item cursor-grab active:cursor-grabbing flex items-center justify-between p-2.5 rounded-xl border border-transparent hover:bg-slate-50 transition ${isHidden ? 'opacity-40' : ''}">
               <div class="flex items-center gap-2 min-w-0 ${hasSections ? 'pl-4 border-l-2 border-slate-100 ml-2' : ''}">
                 <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-brandGreen/10 text-brandGreen">Bài ${numDisplay}</span>
                 <span class="text-xs font-semibold truncate text-slate-700">${escapeHtml(l.title)}</span>
@@ -1340,6 +1341,8 @@
           `;
         }
       }).join("");
+
+      initSortable();
     }
 
     function resetMainVideoProgress() {
@@ -1351,6 +1354,121 @@
       if (statusText) statusText.innerText = "Đang tải video lên Google Drive...";
       const percentText = document.getElementById("mainVideoUploadPercent");
       if (percentText) percentText.innerText = "0%";
+    }
+
+    // ── Dynamic Numbering Helpers ──────────────────────────────────────────
+    function getSuggestedRelativeLessonNo() {
+      let lastSectionIdx = -1;
+      for (let i = STATE.lessons.length - 1; i >= 0; i--) {
+        if (STATE.lessons[i].isSection) {
+          lastSectionIdx = i;
+          break;
+        }
+      }
+
+      const hasSections = STATE.lessons.some(l => l.isSection);
+      if (!hasSections) {
+        return STATE.lessons.filter(l => !l.isSection).length + 1;
+      }
+
+      if (lastSectionIdx === -1) {
+        return 1;
+      }
+
+      let count = 0;
+      for (let i = lastSectionIdx + 1; i < STATE.lessons.length; i++) {
+        if (!STATE.lessons[i].isSection) {
+          count++;
+        }
+      }
+      return count + 1;
+    }
+
+    function getSuggestedRelativeSectionNo() {
+      let count = 0;
+      STATE.lessons.forEach(l => {
+        if (l.isSection) count++;
+      });
+      return count + 1;
+    }
+
+    function getRelativeLessonNoForIndex(idx) {
+      const l = STATE.lessons[idx];
+      if (!l) return 1;
+      if (l.isSection) {
+        let count = 0;
+        for (let i = 0; i <= idx; i++) {
+          if (STATE.lessons[i].isSection) count++;
+        }
+        return count;
+      } else {
+        let lastSectionIdx = -1;
+        for (let i = idx; i >= 0; i--) {
+          if (STATE.lessons[i].isSection) {
+            lastSectionIdx = i;
+            break;
+          }
+        }
+
+        const hasSections = STATE.lessons.some(x => x.isSection);
+        if (!hasSections) {
+          return STATE.lessons.slice(0, idx + 1).filter(x => !x.isSection).length;
+        }
+
+        let count = 0;
+        const start = lastSectionIdx === -1 ? 0 : lastSectionIdx + 1;
+        for (let i = start; i <= idx; i++) {
+          if (!STATE.lessons[i].isSection) count++;
+        }
+        return count;
+      }
+    }
+
+    // ── Sortable Reordering ─────────────────────────────────────────────────
+    let sortableInstance = null;
+    function initSortable() {
+      const listContainer = document.getElementById("lessonList");
+      if (!listContainer) return;
+      if (sortableInstance) {
+        sortableInstance.destroy();
+      }
+      sortableInstance = Sortable.create(listContainer, {
+        animation: 150,
+        ghostClass: "bg-slate-100",
+        onEnd: async function(evt) {
+          const itemEls = listContainer.querySelectorAll('.lesson-item');
+          const orderedIds = Array.from(itemEls).map(el => el.getAttribute('data-id')).filter(Boolean);
+          const course = document.getElementById("courseSelect")?.value || "";
+          
+          if (!course || orderedIds.length === 0) return;
+
+          showLoader("Đang cập nhật thứ tự bài học...");
+          try {
+            const res = await fetch("/api/lms/admin?endpoint=lessons", {
+              method: "POST",
+              headers: authHeaders(),
+              body: JSON.stringify({
+                action: "reorder",
+                course,
+                orderedIds
+              })
+            });
+            const d = await res.json();
+            if (res.ok && d.success) {
+              toast("Cập nhật thứ tự bài học thành công!");
+              await loadLessonsList(course);
+            } else {
+              toast(d.error || "Lỗi khi cập nhật thứ tự bài học", "error");
+              renderLessonsList();
+            }
+          } catch {
+            toast("Lỗi kết nối khi cập nhật thứ tự bài học", "error");
+            renderLessonsList();
+          } finally {
+            hideLoader();
+          }
+        }
+      });
     }
 
     // Toggle relevant fields for sections vs normal lessons
@@ -1375,6 +1493,14 @@
         if (mediaContainer) mediaContainer.classList.remove("hidden");
         if (materialsContainer) materialsContainer.classList.remove("hidden");
       }
+
+      if (!STATE.isEditMode) {
+        if (isSection) {
+          document.getElementById("fLesson").value = getSuggestedRelativeSectionNo();
+        } else {
+          document.getElementById("fLesson").value = getSuggestedRelativeLessonNo();
+        }
+      }
     }
 
     // ── Lesson Form Initialization ─────────────────────────────────────────
@@ -1395,7 +1521,6 @@
       badge.className = "text-[9px] font-black tracking-wider px-2.5 py-1 rounded-full bg-blue-50 text-blue-600 uppercase";
 
       document.getElementById("fCourse").value = course;
-      document.getElementById("fLesson").value = STATE.lessons.length + 1;
       document.getElementById("fIsSection").checked = false;
       toggleSectionFormFields();
 
@@ -1437,7 +1562,7 @@
       badge.className = "text-[9px] font-black tracking-wider px-2.5 py-1 rounded-full bg-orange-50 text-brandOrange uppercase";
 
       document.getElementById("fCourse").value = l.course;
-      document.getElementById("fLesson").value = l.lesson;
+      document.getElementById("fLesson").value = getRelativeLessonNoForIndex(idx);
       document.getElementById("fIsSection").checked = l.isSection || false;
       toggleSectionFormFields();
 
@@ -1499,7 +1624,8 @@
     // ── Save Lesson (Supabase CRUD) ────────────────────────────────────────
     async function saveLesson() {
       const course = document.getElementById("fCourse").value;
-      const lesson = document.getElementById("fLesson").value.trim();
+      const finalLessonNo = STATE.isEditMode ? parseInt(STATE.originalLesson, 10) : (STATE.lessons.length + 1);
+      const lesson = finalLessonNo;
       const title = document.getElementById("fTitle").value.trim();
       const description = document.getElementById("fDescription").value.trim();
       const duration = document.getElementById("fDuration").value.trim();

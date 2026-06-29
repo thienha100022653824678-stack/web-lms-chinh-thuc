@@ -196,6 +196,44 @@ export default async function handler(req, res) {
         return res.status(200).json({ success: true, message: "Cập nhật bài học thành công" });
       }
 
+      // Action: REORDER
+      if (action === "reorder") {
+        const { course, orderedIds } = req.body || {};
+        if (!course || !Array.isArray(orderedIds)) {
+          return res.status(400).json({ success: false, error: "Thiếu tham số course hoặc orderedIds" });
+        }
+
+        // To prevent UNIQUE constraint conflicts on lesson_no,
+        // we first assign temporary negative numbers, then positive numbers.
+        for (let i = 0; i < orderedIds.length; i++) {
+          const { error: tempErr } = await supabase
+            .from("lessons")
+            .update({
+              lesson_no: -(i + 1),
+              sort_order: -(i + 1),
+              updated_at: new Date().toISOString()
+            })
+            .eq("id", orderedIds[i])
+            .eq("course_slug", course);
+          if (tempErr) throw tempErr;
+        }
+
+        for (let i = 0; i < orderedIds.length; i++) {
+          const { error: finalErr } = await supabase
+            .from("lessons")
+            .update({
+              lesson_no: i + 1,
+              sort_order: i + 1,
+              updated_at: new Date().toISOString()
+            })
+            .eq("id", orderedIds[i])
+            .eq("course_slug", course);
+          if (finalErr) throw finalErr;
+        }
+
+        return res.status(200).json({ success: true, message: "Đã sắp xếp lại bài học thành công" });
+      }
+
       // Action: DELETE (Soft delete)
       if (action === "delete") {
         if (!course || !lesson) {
