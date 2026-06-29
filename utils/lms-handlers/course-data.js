@@ -331,11 +331,20 @@ export default async function handler(req, res) {
       });
     }
 
-    // Map course-prefixed config values to clean names for the active course
+    // 2.5 Load from courses table
+    const { data: courseRow } = await supabase
+      .from("courses")
+      .select("title, subtitle, image_url, raw_data")
+      .eq("slug", activeCourseSlug)
+      .maybeSingle();
+
+    const courseRawData = (courseRow && courseRow.raw_data) || {};
+
+    // Map course-prefixed config values to clean names for the active course with db fallbacks
     const courseInfo = {
-      title: rawConfig[`${activeCourseSlug}_title`] || rawConfig.title || "Culinary Academy",
-      subtitle: rawConfig[`${activeCourseSlug}_subtitle`] || rawConfig.subtitle || "",
-      heroImage: rawConfig[`${activeCourseSlug}_heroImage`] || rawConfig.heroImage || ""
+      title: (courseRow && courseRow.title) || rawConfig[`${activeCourseSlug}_title`] || rawConfig.title || "Culinary Academy",
+      subtitle: (courseRow && courseRow.subtitle) || rawConfig[`${activeCourseSlug}_subtitle`] || rawConfig.subtitle || "",
+      heroImage: (courseRow && courseRow.image_url) || courseRawData.heroImageUrl || courseRawData.bannerImageUrl || rawConfig[`${activeCourseSlug}_heroImage`] || rawConfig[`${activeCourseSlug}_banner_url`] || rawConfig[`${activeCourseSlug}_image_url`] || rawConfig[`${activeCourseSlug}_thumbnail_url`] || rawConfig.heroImage || ""
     };
 
     // 3. Load Lessons from Supabase
