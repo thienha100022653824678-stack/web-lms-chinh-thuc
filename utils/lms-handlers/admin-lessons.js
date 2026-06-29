@@ -100,11 +100,12 @@ export default async function handler(req, res) {
         // Sync recipe text to System 1 Portal
         if (lessonData.recipeUrl) {
           try {
+            console.log(`[Recipe Sync] course_slug: ${lessonData.course}`);
             const recipeText = await fetchRecipeText(lessonData.recipeUrl);
             const sys1Url = process.env.SYSTEM1_URL;
             const secret = process.env.INTERNAL_SYNC_SECRET;
             if (sys1Url && secret && recipeText) {
-              await fetch(`${sys1Url.trim().replace(/\/$/, '')}/api/sync`, {
+              const syncRes = await fetch(`${sys1Url.trim().replace(/\/$/, '')}/api/sync`, {
                 method: "POST",
                 headers: {
                   "Content-Type": "application/json",
@@ -117,9 +118,22 @@ export default async function handler(req, res) {
                   title: lessonData.title
                 })
               });
+              const responseText = await syncRes.text();
+              if (syncRes.ok) {
+                try {
+                  const resJson = JSON.parse(responseText);
+                  console.log(`[Recipe Sync] post id: ${resJson.postId} - success`);
+                } catch {
+                  console.log(`[Recipe Sync] success - response: ${responseText}`);
+                }
+              } else {
+                console.error(`[Recipe Sync] failed - status: ${syncRes.status}, error: ${responseText}`);
+              }
+            } else {
+              console.warn(`[Recipe Sync] skipped - sys1Url: ${!!sys1Url}, secret: ${!!secret}, hasRecipeText: ${!!recipeText}`);
             }
           } catch (syncErr) {
-            console.error("[admin-lessons] Sync recipe failed on create:", syncErr.message);
+            console.error("[Recipe Sync] failed with error:", syncErr.message);
           }
         }
 
@@ -170,11 +184,12 @@ export default async function handler(req, res) {
         // Sync recipe text to System 1 Portal
         if (lessonData.recipeUrl) {
           try {
+            console.log(`[Recipe Sync] course_slug: ${lessonData.course}`);
             const recipeText = await fetchRecipeText(lessonData.recipeUrl);
             const sys1Url = process.env.SYSTEM1_URL;
             const secret = process.env.INTERNAL_SYNC_SECRET;
             if (sys1Url && secret && recipeText) {
-              await fetch(`${sys1Url.trim().replace(/\/$/, '')}/api/sync`, {
+              const syncRes = await fetch(`${sys1Url.trim().replace(/\/$/, '')}/api/sync`, {
                 method: "POST",
                 headers: {
                   "Content-Type": "application/json",
@@ -187,9 +202,22 @@ export default async function handler(req, res) {
                   title: lessonData.title
                 })
               });
+              const responseText = await syncRes.text();
+              if (syncRes.ok) {
+                try {
+                  const resJson = JSON.parse(responseText);
+                  console.log(`[Recipe Sync] post id: ${resJson.postId} - success`);
+                } catch {
+                  console.log(`[Recipe Sync] success - response: ${responseText}`);
+                }
+              } else {
+                console.error(`[Recipe Sync] failed - status: ${syncRes.status}, error: ${responseText}`);
+              }
+            } else {
+              console.warn(`[Recipe Sync] skipped - sys1Url: ${!!sys1Url}, secret: ${!!secret}, hasRecipeText: ${!!recipeText}`);
             }
           } catch (syncErr) {
-            console.error("[admin-lessons] Sync recipe failed on update:", syncErr.message);
+            console.error("[Recipe Sync] failed with error:", syncErr.message);
           }
         }
 
