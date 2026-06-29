@@ -22,42 +22,76 @@
       display: block;
     }
 
-    .back-btn {
+    .controls-container {
       position: fixed;
       top: 16px;
       left: 16px;
+      right: 16px;
       z-index: 999999;
-      padding: 12px 20px;
-      font-size: 16px;
-      font-weight: bold;
-      color: #fff;
-      background-color: #2A4B2A; /* Brand green */
-      border: none;
-      border-radius: 999px;
-      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
-      cursor: pointer;
       display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: background-color 0.2s, transform 0.1s;
-      outline: none;
-      user-select: none;
-      -webkit-user-select: none;
-      text-decoration: none;
+      gap: 10px;
+      flex-wrap: wrap;
     }
 
-    .back-btn:active {
-      transform: scale(0.95);
+    .btn {
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 800;
+      color: #fff;
+      border: none;
+      border-radius: 99px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: background-color 0.2s, transform 0.1s;
+      outline: none;
+      text-decoration: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .btn-back {
+      background-color: #2A4B2A; /* Brand green */
+    }
+    .btn-back:active {
       background-color: #1E351E;
+      transform: scale(0.96);
+    }
+
+    .btn-open {
+      background-color: #2563eb; /* Blue */
+    }
+    .btn-open:active {
+      background-color: #1d4ed8;
+      transform: scale(0.96);
+    }
+
+    .btn-download {
+      background-color: #e11d48; /* Rose */
+    }
+    .btn-download:active {
+      background-color: #be123c;
+      transform: scale(0.96);
     }
   </style>
 </head>
 <body>
 
-  <!-- Floating Back Button -->
-  <button class="back-btn" onclick="goBack()">
-    ← Quay lại bài học
-  </button>
+  <!-- Floating Controls Container -->
+  <div class="controls-container">
+    <button class="btn btn-back" onclick="goBack()">
+      ← Quay lại bài học
+    </button>
+    <a id="openDriveBtn" class="btn btn-open" target="_blank">
+      ↗ Mở tab mới / App Drive
+    </a>
+    <a id="downloadBtn" class="btn btn-download" target="_blank">
+      📥 Tải video
+    </a>
+  </div>
 
   <!-- Google Drive Preview Iframe -->
   <iframe id="playerIframe" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
@@ -69,6 +103,8 @@
 
     if (fileId) {
       iframe.src = `https://drive.google.com/file/d/${fileId}/preview`;
+      document.getElementById('openDriveBtn').href = `https://drive.google.com/file/d/${fileId}/view?usp=drivesdk`;
+      document.getElementById('downloadBtn').href = `https://drive.google.com/uc?export=download&id=${fileId}`;
     } else {
       alert('Không tìm thấy ID video Google Drive!');
     }
