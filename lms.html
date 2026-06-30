@@ -992,9 +992,118 @@
       }
     }
 
-    function showLoggedOutState() {
+    function showLoggedOutState(isUnauthorized = false, email = '') {
       const headerArea = document.getElementById("loginArea");
       headerArea.innerHTML = `<div id="googleBtn" class="min-h-[40px] flex items-center justify-end"></div>`;
+      
+      const ua = navigator.userAgent;
+      const isIOS = /iPhone|iPad|iPod/i.test(ua);
+      const isZalo = /Zalo/i.test(ua);
+      const isFB = /(FBAN|FBAV)/i.test(ua);
+      const isInAppIOS = isIOS && (isZalo || isFB);
+
+      if (isInAppIOS) {
+        if (!document.getElementById("floatArrowStyle")) {
+          const style = document.createElement("style");
+          style.id = "floatArrowStyle";
+          style.innerHTML = `
+            @keyframes floatArrow {
+              0% { transform: translate(0, 0) scale(1); }
+              100% { transform: translate(4px, -4px) scale(1.15); }
+            }
+          `;
+          document.head.appendChild(style);
+        }
+
+        let arrowOverlay = document.getElementById("inAppArrowOverlay");
+        if (!arrowOverlay) {
+          arrowOverlay = document.createElement("div");
+          arrowOverlay.id = "inAppArrowOverlay";
+          arrowOverlay.style.cssText = "position:fixed;top:12px;right:16px;z-index:9999;display:flex;flex-direction:column;align-items:flex-end;pointer-events:none;";
+          arrowOverlay.innerHTML = `
+            <div style="font-size:2rem;line-height:1;color:#fbbf24;animation:floatArrow 0.8s infinite alternate ease-in-out;margin-bottom:4px;">↗️</div>
+            <div style="background:#fbbf24;color:#000;padding:6px 12px;border-radius:8px;font-size:0.85rem;font-weight:bold;box-shadow:0 4px 12px rgba(0,0,0,0.5);white-space:nowrap;">Bấm dấu ⋯ ở đây</div>
+          `;
+          document.body.appendChild(arrowOverlay);
+        }
+      }
+
+      const statusBox = document.getElementById("statusBox");
+      if (statusBox) {
+        if (isUnauthorized) {
+          if (isInAppIOS) {
+            statusBox.innerHTML = `
+              <div class="text-4xl mb-4">⚠️</div>
+              <p class="font-extrabold text-lg sm:text-xl text-brandOrange mb-2">Gmail này chưa được cấp quyền học khóa này</p>
+              <p class="text-brandBrown/60 text-sm max-w-sm mx-auto leading-relaxed mb-4">
+                Bạn đang đăng nhập bằng:<br/>
+                <strong class="text-brandOrange break-all">${escapeHtml(email)}</strong>
+              </p>
+              <div style="background:rgba(251,191,36,0.05);padding:14px;border-radius:12px;border:1px solid rgba(251,191,36,0.2);text-align:left;margin-top:1.5rem;margin-bottom:1rem;">
+                <div style="font-weight:bold;color:#fbbf24;font-size:0.85rem;margin-bottom:6px;display:flex;align-items:center;gap:4px;">
+                  💡 Đang mở trong Zalo/Facebook?
+                </div>
+                <p style="font-size:0.85rem;color:#9ca3af;line-height:1.45;margin:0;">
+                  Bấm dấu <strong style="color:#fff">⋯</strong> ở góc trên bên phải ➔ chọn <strong style="color:#fff">“Mở bằng Safari”</strong> hoặc <strong style="color:#fff">“Mở bằng trình duyệt”</strong> để đăng nhập Gmail.
+                </p>
+              </div>
+              <a href="https://yeunauan.live/my-courses" class="mt-4 inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full border border-brandBrown/10 text-brandBrown hover:bg-brandGray transition text-sm font-bold w-full">
+                Quay lại khóa học của tôi
+              </a>
+            `;
+          } else {
+            statusBox.innerHTML = `
+              <div class="text-4xl mb-4">⚠️</div>
+              <p class="font-extrabold text-lg sm:text-xl text-brandOrange mb-2">Gmail này chưa được cấp quyền học khóa này</p>
+              <p class="text-brandBrown/60 text-sm max-w-sm mx-auto leading-relaxed mb-4">
+                Bạn đang đăng nhập bằng:<br/>
+                <strong class="text-brandOrange break-all">${escapeHtml(email)}</strong>
+              </p>
+              <div style="display:flex;justify-content:center;margin:1.5rem 0;">
+                <div id="statusGoogleBtn" class="min-h-[44px]"></div>
+              </div>
+              <a href="https://yeunauan.live/my-courses" class="mt-4 inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full border border-brandBrown/10 text-brandBrown hover:bg-brandGray transition text-sm font-bold w-full">
+                Quay lại khóa học của tôi
+              </a>
+            `;
+          }
+        } else {
+          if (isInAppIOS) {
+            statusBox.innerHTML = `
+              <div class="text-4xl mb-4">🔒</div>
+              <p class="font-extrabold text-lg sm:text-xl text-brandBrown mb-2">Bạn đã thanh toán thành công, tiếp tục mở mục Quản lý khóa học để xem</p>
+              
+              <div style="background:rgba(251,191,36,0.05);padding:14px;border-radius:12px;border:1px solid rgba(251,191,36,0.2);text-align:left;margin-top:1.5rem;margin-bottom:1rem;">
+                <div style="font-weight:bold;color:#fbbf24;font-size:0.85rem;margin-bottom:6px;display:flex;align-items:center;gap:4px;">
+                  💡 Đang mở trong Zalo/Facebook?
+                </div>
+                <p style="font-size:0.85rem;color:#9ca3af;line-height:1.45;margin:0;">
+                  Bấm dấu <strong style="color:#fff">⋯</strong> ở góc trên bên phải ➔ chọn <strong style="color:#fff">“Mở bằng Safari”</strong> hoặc <strong style="color:#fff">“Mở bằng trình duyệt”</strong> để đăng nhập Gmail.
+                </p>
+              </div>
+              
+              <a href="https://yeunauan.live/my-courses" class="mt-4 inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full border border-brandBrown/10 text-brandBrown hover:bg-brandGray transition text-sm font-bold w-full">
+                Quay lại khóa học của tôi
+              </a>
+            `;
+          } else {
+            statusBox.innerHTML = `
+              <div class="text-4xl mb-4">🔒</div>
+              <p class="font-extrabold text-lg sm:text-xl text-brandBrown mb-2">Đăng nhập để vào học</p>
+              <p class="text-brandBrown/60 text-sm mb-4">Vui lòng đăng nhập đúng Gmail đã được cấp quyền khóa học.</p>
+              
+              <div style="display:flex;justify-content:center;margin:1.5rem 0;">
+                <div id="statusGoogleBtn" class="min-h-[44px]"></div>
+              </div>
+              
+              <a href="https://yeunauan.live/my-courses" class="mt-4 inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full border border-brandBrown/10 text-brandBrown hover:bg-brandGray transition text-sm font-bold w-full">
+                Quay lại khóa học của tôi
+              </a>
+            `;
+          }
+        }
+      }
+
       renderGoogleButton();
 
       const mobileAuth = document.getElementById("mobileLessonAuthIndicator");
@@ -1003,18 +1112,30 @@
       }
     }
 
-    // Main Google GSI Button render
     function renderGoogleButton() {
-      const btnContainer = document.getElementById("googleBtn");
-      if (!btnContainer) return;
       if (typeof google !== "undefined" && google.accounts && google.accounts.id) {
-        btnContainer.innerHTML = "";
-        google.accounts.id.renderButton(btnContainer, {
-          theme: "outline",
-          size: "medium",
-          text: "signin_with",
-          shape: "pill"
-        });
+        const headerBtn = document.getElementById("googleBtn");
+        if (headerBtn) {
+          headerBtn.innerHTML = "";
+          google.accounts.id.renderButton(headerBtn, {
+            theme: "outline",
+            size: "medium",
+            text: "signin_with",
+            shape: "pill"
+          });
+        }
+        
+        const cardBtn = document.getElementById("statusGoogleBtn");
+        if (cardBtn) {
+          cardBtn.innerHTML = "";
+          google.accounts.id.renderButton(cardBtn, {
+            theme: "filled_blue",
+            size: "large",
+            text: "signin_with",
+            shape: "rectangular",
+            width: 280
+          });
+        }
       }
     }
 
@@ -1967,14 +2088,7 @@
         if (!response.ok || !data.allowed) {
           if (response.status === 401 || response.status === 403) {
             clearSession();
-            statusBox.innerHTML = `
-              <div class="text-4xl mb-4">⚠️</div>
-              <p class="font-extrabold text-lg sm:text-xl text-brandOrange mb-2">Không có quyền truy cập</p>
-              <p class="text-brandBrown/60 text-sm max-w-sm mx-auto leading-relaxed">
-                Tài khoản Gmail <b>${escapeHtml(data.email || "của bạn")}</b> chưa được đăng ký khóa học này. Vui lòng đăng nhập đúng tài khoản hoặc liên hệ admin.
-              </p>
-            `;
-            showLoggedOutState();
+            showLoggedOutState(true, data.email || "của bạn");
             return;
           }
           statusBox.innerHTML = `
@@ -2059,7 +2173,7 @@
 
     async function getPublicConfig() {
       try {
-        const res = await fetch("/api/lms/portal?endpoint=public-config");
+        const res = await fetch(`/api/lms/portal?endpoint=public-config&course=${encodeURIComponent(COURSE)}`);
         if (!res.ok) return { googleClientId: "" };
         return await res.json();
       } catch (err) {
@@ -2097,6 +2211,24 @@
       if (await tryRestoreSession()) return;
       
       const config = await configPromise;
+
+      // Render public course metadata immediately if available
+      if (config.courseInfo) {
+        if (config.courseInfo.title) {
+          document.getElementById("courseTitle").innerHTML = config.courseInfo.title;
+        }
+        if (config.courseInfo.subtitle) {
+          document.getElementById("courseSubtitle").innerText = config.courseInfo.subtitle;
+        }
+        if (config.courseInfo.heroImage) {
+          const img = document.getElementById("heroImage");
+          if (img) {
+            img.src = config.courseInfo.heroImage;
+            img.classList.remove("opacity-0");
+          }
+        }
+      }
+
       const googleReady = await setupGoogleSignIn(config);
       
       showLoggedOutState();
