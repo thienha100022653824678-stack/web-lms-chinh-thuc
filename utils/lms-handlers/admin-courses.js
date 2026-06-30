@@ -66,6 +66,9 @@ export default async function handler(req, res) {
             const rawData = c.raw_data || {};
             config[`${slug}_qrImage`] = rawData.qrImageUrl || "";
           }
+          if (config[`${slug}_isPublished`] === undefined) {
+            config[`${slug}_isPublished`] = !!c.is_published;
+          }
         });
       }
 
@@ -134,6 +137,9 @@ export default async function handler(req, res) {
           if (newConfig.heroImage !== undefined) {
             updatePayload.image_url = String(newConfig.heroImage || "").trim();
           }
+          if (newConfig.isPublished !== undefined) {
+            updatePayload.is_published = newConfig.isPublished === "true" || newConfig.isPublished === true;
+          }
           
           updatePayload.raw_data = rawData;
 
@@ -141,6 +147,34 @@ export default async function handler(req, res) {
             .from("courses")
             .update(updatePayload)
             .eq("slug", course);
+
+          // Sync publish status to Student Portal (Supabase A)
+          const system1Url = process.env.SYSTEM1_URL;
+          const syncSecret = process.env.INTERNAL_SYNC_SECRET;
+          if (system1Url && syncSecret) {
+            try {
+              const isPublished = newConfig.isPublished === "true" || newConfig.isPublished === true;
+              const syncRes = await fetch(`${system1Url.trim().replace(/\/$/, '')}/api/sync`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "X-Sync-Secret": syncSecret
+                },
+                body: JSON.stringify({
+                  action: "syncCoursePublishStatus",
+                  courseSlug: course,
+                  isPublished: isPublished,
+                  title: newConfig.title || course.toUpperCase(),
+                  imageUrl: newConfig.heroImage || ""
+                })
+              });
+              if (!syncRes.ok) {
+                console.error("Failed to sync publish status to Portal:", await syncRes.text());
+              }
+            } catch (syncErr) {
+              console.error("Error syncing publish status to Portal:", syncErr);
+            }
+          }
         }
       } catch (dbErr) {
         console.error("[admin-courses] Sync to courses table failed:", dbErr.message);
