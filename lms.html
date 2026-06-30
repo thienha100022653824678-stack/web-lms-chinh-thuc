@@ -302,12 +302,13 @@
         <div id="statusGoogleBtn" style="display:flex;justify-content:center;min-height:44px;margin:1.2rem 0;"></div>
         <!-- Fallback button: triggers google.accounts.id.prompt() via JS -->
         <div id="fallbackLoginBtn" style="margin:0.5rem 0;">
-          <button onclick="triggerGoogleLogin()"
-             style="display:inline-flex;align-items:center;gap:10px;background:#4285F4;color:#fff;font-weight:700;font-size:0.95rem;padding:12px 24px;border-radius:8px;border:none;cursor:pointer;box-shadow:0 2px 8px rgba(66,133,244,0.3);width:100%;max-width:280px;justify-content:center;">
+          <button id="googleLoginButton"
+             style="position: relative; z-index: 99999; pointer-events: auto; display:inline-flex;align-items:center;gap:10px;background:#4285F4;color:#fff;font-weight:700;font-size:0.95rem;padding:12px 24px;border-radius:8px;border:none;cursor:pointer;box-shadow:0 2px 8px rgba(66,133,244,0.3);width:100%;max-width:280px;justify-content:center;">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
             Đăng nhập bằng Google
           </button>
         </div>
+        <div id="loginDebug" style="margin-top: 10px; font-size: 0.85rem; color: #6b5c54; font-weight: bold; text-align: center;">Login debug: ready</div>
         <a href="https://yeunauan.live/my-courses"
            style="display:inline-flex;align-items:center;justify-content:center;gap:6px;margin-top:14px;padding:10px 20px;border-radius:999px;border:1px solid rgba(45,25,20,0.12);color:#6b5c54;font-size:0.85rem;font-weight:600;text-decoration:none;">
           Quay lại khóa học của tôi
@@ -1124,12 +1125,13 @@
               </div>
 
               <div id="fallbackLoginBtn" style="display:flex;justify-content:center;margin:0.5rem 0;">
-                <button onclick="triggerGoogleLogin()"
-                   style="display:inline-flex;align-items:center;gap:10px;background:#4285F4;color:#fff;font-weight:700;font-size:0.95rem;padding:12px 24px;border-radius:8px;border:none;cursor:pointer;box-shadow:0 2px 8px rgba(66,133,244,0.3);">
+                <button id="googleLoginButton"
+                   style="position: relative; z-index: 99999; pointer-events: auto; display:inline-flex;align-items:center;gap:10px;background:#4285F4;color:#fff;font-weight:700;font-size:0.95rem;padding:12px 24px;border-radius:8px;border:none;cursor:pointer;box-shadow:0 2px 8px rgba(66,133,244,0.3);">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
                   Đăng nhập bằng Google
                 </button>
               </div>
+              <div id="loginDebug" style="margin-top: 10px; font-size: 0.85rem; color: #6b5c54; font-weight: bold; text-align: center;">Login debug: ready</div>
 
               <a href="https://yeunauan.live/my-courses" class="mt-4 inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full border border-brandBrown/10 text-brandBrown hover:bg-brandGray transition text-sm font-bold w-full">
                 Quay lại khóa học của tôi
@@ -1145,6 +1147,8 @@
       if (mobileAuth) {
         mobileAuth.innerText = "Chưa đăng nhập";
       }
+
+      bindLoginBtn();
     }
 
     function renderGoogleButton() {
@@ -1186,8 +1190,12 @@
 
     function triggerGoogleLogin() {
       console.log('[LMS Login] button clicked');
+      const dbg = document.getElementById('loginDebug');
+      if (dbg) dbg.textContent = 'Login debug: clicked';
+
       if (_isRedirecting) {
         console.log('[LMS Login] already redirecting, skipping click');
+        if (dbg) dbg.textContent = 'Login debug: already redirecting';
         return;
       }
       _isRedirecting = true;
@@ -1197,7 +1205,8 @@
         console.log('[LMS Login] current _googleClientId:', clientId);
         if (!clientId) {
           console.log('[LMS Login] Client ID empty, waiting for configPromise');
-          const btn = document.querySelector('#fallbackLoginBtn button');
+          if (dbg) dbg.textContent = 'Login debug: fetching config';
+          const btn = document.getElementById('googleLoginButton');
           if (btn) {
             btn.textContent = 'Đang khởi tạo kết nối...';
             btn.disabled = true;
@@ -1214,6 +1223,7 @@
               performGoogleRedirect(clientId);
             } else {
               _isRedirecting = false;
+              if (dbg) dbg.textContent = 'Lỗi cấu hình Google Client ID';
               alert('Hệ thống chưa cấu hình Google Client ID trên máy chủ Vercel. Vui lòng thiết lập biến môi trường.');
             }
           }).catch(err => {
@@ -1223,6 +1233,7 @@
               btn.textContent = 'Đăng nhập bằng Google';
               btn.disabled = false;
             }
+            if (dbg) dbg.textContent = 'Lỗi: ' + err.message;
             alert('Lỗi kết nối máy chủ Google: ' + err.message);
           });
           return;
@@ -1233,7 +1244,8 @@
       } catch(e) {
         _isRedirecting = false;
         console.error('[LMS Login] triggerGoogleLogin error:', e);
-        const btn = document.querySelector('#fallbackLoginBtn button');
+        if (dbg) dbg.textContent = 'Lỗi: ' + e.message;
+        const btn = document.getElementById('googleLoginButton');
         if (btn) { btn.textContent = 'Đăng nhập bằng Google'; btn.disabled = false; }
         alert('Không thể kết nối Google: ' + e.message);
       }
@@ -1242,8 +1254,10 @@
     function performGoogleRedirect(clientId) {
       console.log('[LMS Login] client id loaded:', clientId);
       console.log('[LMS Login] redirecting to Google');
+      const dbg = document.getElementById('loginDebug');
+      if (dbg) dbg.textContent = 'Login debug: redirecting';
       
-      const btn = document.querySelector('#fallbackLoginBtn button');
+      const btn = document.getElementById('googleLoginButton');
       if (btn) {
         btn.textContent = 'Đang kết nối Google...';
         btn.disabled = true;
@@ -1271,6 +1285,7 @@
         window.location.href = targetUrl;
       } catch (err) {
         _isRedirecting = false;
+        if (dbg) dbg.textContent = 'Lỗi redirect: ' + err.message;
         console.error('[LMS Login] Redirect execution failed:', err);
         alert('Không thể chuyển hướng đăng nhập Google: ' + err.message);
         if (btn) {
@@ -1280,9 +1295,23 @@
       }
     }
 
+    // Direct event binder using pure DOM API
+    function bindLoginBtn() {
+      const btn = document.getElementById('googleLoginButton');
+      if (btn) {
+        // Remove existing listener if any by replacing the node or just resetting onclick
+        btn.onclick = null;
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          console.log('[LMS Login] Click handler fired via DOM event listener');
+          triggerGoogleLogin();
+        });
+      }
+    }
+
     // Event delegation fallback to ensure the click is always handled
     document.addEventListener("click", (event) => {
-      const btn = event.target.closest('#fallbackLoginBtn button');
+      const btn = event.target.closest('#googleLoginButton');
       if (btn) {
         console.log('[LMS Login] Click captured by event delegation');
         triggerGoogleLogin();
@@ -2385,6 +2414,7 @@
       const googleReady = await setupGoogleSignIn(config);
       
       showLoggedOutState();
+      bindLoginBtn();
       if (!googleReady) {
         document.getElementById("statusBox").innerHTML = `
           <div class="text-4xl mb-4">⚙️</div>
