@@ -492,6 +492,7 @@
 
     // Global Google Client ID (set after config loads)
     let _googleClientId = "";
+    let _isRedirecting = false;
     // Start fetching config immediately as script loads
     const configPromise = getPublicConfig();
     
@@ -1184,12 +1185,18 @@
     }
 
     function triggerGoogleLogin() {
-      // PRIMARY method: OAuth redirect flow - works on ALL browsers including iOS Safari
-      // (google.accounts.id.prompt() is blocked by Safari ITP - this is the correct fix)
+      console.log('[LMS Login] button clicked');
+      if (_isRedirecting) {
+        console.log('[LMS Login] already redirecting, skipping click');
+        return;
+      }
+      _isRedirecting = true;
+
       try {
         let clientId = _googleClientId;
+        console.log('[LMS Login] current _googleClientId:', clientId);
         if (!clientId) {
-          // Fallback if config is not resolved yet (very rare)
+          console.log('[LMS Login] Client ID empty, waiting for configPromise');
           const btn = document.querySelector('#fallbackLoginBtn button');
           if (btn) {
             btn.textContent = 'Đang khởi tạo kết nối...';
@@ -1197,21 +1204,26 @@
           }
           configPromise.then(config => {
             _googleClientId = config.googleClientId || "";
+            clientId = _googleClientId;
+            console.log('[LMS Login] config resolved, Client ID:', clientId);
             if (btn) {
               btn.textContent = 'Đăng nhập bằng Google';
               btn.disabled = false;
             }
-            if (_googleClientId) {
-              performGoogleRedirect(_googleClientId);
+            if (clientId) {
+              performGoogleRedirect(clientId);
             } else {
-              alert('Hệ thống chưa cấu hình Google Client ID.');
+              _isRedirecting = false;
+              alert('Hệ thống chưa cấu hình Google Client ID trên máy chủ Vercel. Vui lòng thiết lập biến môi trường.');
             }
           }).catch(err => {
+            console.error('[LMS Login] configPromise failed:', err);
+            _isRedirecting = false;
             if (btn) {
               btn.textContent = 'Đăng nhập bằng Google';
               btn.disabled = false;
             }
-            alert('Lỗi kết nối Google: ' + err.message);
+            alert('Lỗi kết nối máy chủ Google: ' + err.message);
           });
           return;
         }
@@ -1219,38 +1231,63 @@
         performGoogleRedirect(clientId);
 
       } catch(e) {
-        console.error('triggerGoogleLogin error:', e);
+        _isRedirecting = false;
+        console.error('[LMS Login] triggerGoogleLogin error:', e);
         const btn = document.querySelector('#fallbackLoginBtn button');
         if (btn) { btn.textContent = 'Đăng nhập bằng Google'; btn.disabled = false; }
-        alert('Không thể kết nối Google. Vui lòng mở bằng trình duyệt Safari/Chrome hoặc thử lại.');
+        alert('Không thể kết nối Google: ' + e.message);
       }
     }
 
     function performGoogleRedirect(clientId) {
+      console.log('[LMS Login] client id loaded:', clientId);
+      console.log('[LMS Login] redirecting to Google');
+      
       const btn = document.querySelector('#fallbackLoginBtn button');
       if (btn) {
         btn.textContent = 'Đang kết nối Google...';
         btn.disabled = true;
       }
 
-      // Build OAuth redirect URL - returns id_token in URL hash
-      const redirectUri = window.location.origin + window.location.pathname;
-      const nonce = Math.random().toString(36).substring(2) + Date.now().toString(36);
-      
-      const params = new URLSearchParams();
-      params.append('client_id', clientId);
-      params.append('redirect_uri', redirectUri);
-      params.append('response_type', 'id_token');
-      params.append('scope', 'openid email profile');
-      params.append('nonce', nonce);
-      params.append('prompt', 'select_account');
+      try {
+        // Build OAuth redirect URL - returns id_token in URL hash
+        const redirectUri = window.location.origin + window.location.pathname;
+        const nonce = Math.random().toString(36).substring(2) + Date.now().toString(36);
+        
+        const params = new URLSearchParams();
+        params.append('client_id', clientId);
+        params.append('redirect_uri', redirectUri);
+        params.append('response_type', 'id_token');
+        params.append('scope', 'openid email profile');
+        params.append('nonce', nonce);
+        params.append('prompt', 'select_account');
 
-      // Store nonce for verification (optional)
-      try { sessionStorage.setItem('gNonce', nonce); } catch(e) {}
+        // Store nonce for verification (optional)
+        try { sessionStorage.setItem('gNonce', nonce); } catch(e) {}
 
-      // Redirect to Google OAuth (works on Safari)
-      window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
+        const targetUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
+        console.log('[LMS Login] Redirecting to URL:', targetUrl);
+        
+        window.location.href = targetUrl;
+      } catch (err) {
+        _isRedirecting = false;
+        console.error('[LMS Login] Redirect execution failed:', err);
+        alert('Không thể chuyển hướng đăng nhập Google: ' + err.message);
+        if (btn) {
+          btn.textContent = 'Đăng nhập bằng Google';
+          btn.disabled = false;
+        }
+      }
     }
+
+    // Event delegation fallback to ensure the click is always handled
+    document.addEventListener("click", (event) => {
+      const btn = event.target.closest('#fallbackLoginBtn button');
+      if (btn) {
+        console.log('[LMS Login] Click captured by event delegation');
+        triggerGoogleLogin();
+      }
+    });
 
     // Recipe rendering functions
     function escapeHtml(text) {
