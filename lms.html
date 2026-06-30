@@ -489,6 +489,11 @@
     let currentLessons = [];
     let currentView = "home";
     let currentLessonIndex = 0;
+
+    // Global Google Client ID (set after config loads)
+    let _googleClientId = "";
+    // Start fetching config immediately as script loads
+    const configPromise = getPublicConfig();
     
     // Pagination parameters for Mobile Lesson Checklist
     let currentPage = 0;
@@ -1178,50 +1183,73 @@
       }
     }
 
-    async function triggerGoogleLogin() {
+    function triggerGoogleLogin() {
       // PRIMARY method: OAuth redirect flow - works on ALL browsers including iOS Safari
       // (google.accounts.id.prompt() is blocked by Safari ITP - this is the correct fix)
       try {
-        // Try to get clientId from global or fetch from API
         let clientId = _googleClientId;
         if (!clientId) {
-          const cfg = await getPublicConfig();
-          clientId = cfg.googleClientId || "";
-          _googleClientId = clientId;
-        }
-
-        if (!clientId) {
-          alert('Hệ thống chưa cấu hình đăng nhập Google. Vui lòng thử lại sau.');
+          // Fallback if config is not resolved yet (very rare)
+          const btn = document.querySelector('#fallbackLoginBtn button');
+          if (btn) {
+            btn.textContent = 'Đang khởi tạo kết nối...';
+            btn.disabled = true;
+          }
+          configPromise.then(config => {
+            _googleClientId = config.googleClientId || "";
+            if (btn) {
+              btn.textContent = 'Đăng nhập bằng Google';
+              btn.disabled = false;
+            }
+            if (_googleClientId) {
+              performGoogleRedirect(_googleClientId);
+            } else {
+              alert('Hệ thống chưa cấu hình Google Client ID.');
+            }
+          }).catch(err => {
+            if (btn) {
+              btn.textContent = 'Đăng nhập bằng Google';
+              btn.disabled = false;
+            }
+            alert('Lỗi kết nối Google: ' + err.message);
+          });
           return;
         }
 
-        // Show loading feedback on button
-        const btn = document.querySelector('#fallbackLoginBtn button');
-        if (btn) { btn.textContent = 'Đang mở trang Google...'; btn.disabled = true; }
-
-        // Build OAuth redirect URL - returns id_token in URL hash
-        const redirectUri = window.location.origin + window.location.pathname;
-        const nonce = Math.random().toString(36).substring(2) + Date.now().toString(36);
-        const params = new URLSearchParams({
-          client_id: clientId,
-          redirect_uri: redirectUri,
-          response_type: 'id_token',
-          scope: 'openid email profile',
-          nonce: nonce,
-          prompt: 'select_account'
-        });
-        // Store nonce for verification (optional)
-        try { sessionStorage.setItem('gNonce', nonce); } catch(e) {}
-
-        // Redirect to Google OAuth (works on Safari)
-        window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
+        performGoogleRedirect(clientId);
 
       } catch(e) {
         console.error('triggerGoogleLogin error:', e);
         const btn = document.querySelector('#fallbackLoginBtn button');
         if (btn) { btn.textContent = 'Đăng nhập bằng Google'; btn.disabled = false; }
-        alert('Không thể mở trang đăng nhập Google. Vui lòng thử lại.');
+        alert('Không thể kết nối Google. Vui lòng mở bằng trình duyệt Safari/Chrome hoặc thử lại.');
       }
+    }
+
+    function performGoogleRedirect(clientId) {
+      const btn = document.querySelector('#fallbackLoginBtn button');
+      if (btn) {
+        btn.textContent = 'Đang kết nối Google...';
+        btn.disabled = true;
+      }
+
+      // Build OAuth redirect URL - returns id_token in URL hash
+      const redirectUri = window.location.origin + window.location.pathname;
+      const nonce = Math.random().toString(36).substring(2) + Date.now().toString(36);
+      
+      const params = new URLSearchParams();
+      params.append('client_id', clientId);
+      params.append('redirect_uri', redirectUri);
+      params.append('response_type', 'id_token');
+      params.append('scope', 'openid email profile');
+      params.append('nonce', nonce);
+      params.append('prompt', 'select_account');
+
+      // Store nonce for verification (optional)
+      try { sessionStorage.setItem('gNonce', nonce); } catch(e) {}
+
+      // Redirect to Google OAuth (works on Safari)
+      window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
     }
 
     // Recipe rendering functions
@@ -2238,8 +2266,7 @@
       }
     }
 
-    // Global Google Client ID (set after config loads)
-    let _googleClientId = "";
+    // waitForGoogleLibrary checks if Google GIS API script has loaded
 
     async function waitForGoogleLibrary() {
       if (typeof google !== "undefined" && google.accounts && google.accounts.id) return;
@@ -2365,8 +2392,8 @@
       location.reload();
     }
 
-    // Initial load
-    window.onload = () => {
+    // Initial load - DOMContentLoaded fires much faster than window.onload
+    document.addEventListener("DOMContentLoaded", () => {
       // Setup right click block on video elements
       document.addEventListener("contextmenu", (event) => {
         if (event.target.closest("#mobileVideoBox, #desktopVideoContainer")) {
@@ -2376,7 +2403,7 @@
 
       // Initialize
       initGoogle();
-    };
+    });
 
     // Auto resize listener to handle design shift
     window.addEventListener("resize", () => {
