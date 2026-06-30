@@ -277,7 +277,7 @@
         </div>
 
         <!-- Hero Image Card -->
-        <div class="md:col-span-5 relative">
+        <div id="heroImageContainer" class="md:col-span-5 relative hidden">
           <div class="absolute -inset-1.5 bg-gradient-to-r from-brandOrange to-brandGreen rounded-3xl blur opacity-20"></div>
           <div class="relative bg-white p-3 rounded-2xl shadow-xl border border-brandBrown/5">
             <img id="heroImage" class="w-full aspect-[4/3] object-cover rounded-xl shadow-inner bg-brandGray opacity-0 transition-opacity duration-300" src="" alt="Banners">
@@ -629,6 +629,13 @@
     function setHeroImageSource(src) {
       const heroImage = document.getElementById("heroImage");
       if (!heroImage) return;
+
+      const container = document.getElementById("heroImageContainer");
+      if (src) {
+        if (container) container.classList.remove("hidden");
+      } else {
+        if (container) container.classList.add("hidden");
+      }
 
       heroImage.classList.add("opacity-0");
       heroImage.onload = () => heroImage.classList.remove("opacity-0");
@@ -2221,11 +2228,7 @@
           document.getElementById("courseSubtitle").innerText = config.courseInfo.subtitle;
         }
         if (config.courseInfo.heroImage) {
-          const img = document.getElementById("heroImage");
-          if (img) {
-            img.src = config.courseInfo.heroImage;
-            img.classList.remove("opacity-0");
-          }
+          setHeroImageSource(config.courseInfo.heroImage);
         }
       }
 
