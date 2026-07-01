@@ -293,22 +293,16 @@
         <p id="lessonCount" class="text-sm sm:text-base text-brandBrown/65 font-medium">Đăng nhập Gmail để truy cập bài học của bạn</p>
       </div>
 
-      <!-- Login prompt - shown before JS loads Google SDK -->
+      <!-- Login prompt - shown before JS loads -->
       <div id="statusBox" class="bg-white border border-brandBrown/10 rounded-2xl p-8 text-center max-w-xl mx-auto shadow-md">
         <div class="text-4xl mb-4">🔒</div>
         <p class="font-extrabold text-lg sm:text-xl text-brandBrown mb-2">Đăng nhập để vào học</p>
-        <p class="text-brandBrown/60 text-sm mb-5">Vui lòng đăng nhập đúng Gmail đã được cấp quyền khóa học.</p>
-        <!-- Google Sign-In button rendered by GIS SDK -->
-        <div id="statusGoogleBtn" style="display:flex;justify-content:center;min-height:44px;margin:1.2rem 0;"></div>
-        <!-- Fallback button: triggers google.accounts.id.prompt() via JS -->
-        <div id="fallbackLoginBtn" style="margin:0.5rem 0;">
-          <button id="googleLoginButton"
-             style="position: relative; z-index: 99999; pointer-events: auto; display:inline-flex;align-items:center;gap:10px;background:#4285F4;color:#fff;font-weight:700;font-size:0.95rem;padding:12px 24px;border-radius:8px;border:none;cursor:pointer;box-shadow:0 2px 8px rgba(66,133,244,0.3);width:100%;max-width:280px;justify-content:center;">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-            Đăng nhập bằng Google
-          </button>
-        </div>
-        <div id="loginDebug" style="margin-top: 10px; font-size: 0.85rem; color: #6b5c54; font-weight: bold; text-align: center;">Login debug: ready</div>
+        <p class="text-brandBrown/60 text-sm mb-6">Vui lòng đăng nhập đúng Gmail đã được cấp quyền khóa học.</p>
+        <a id="gLoginLink" href="#"
+           style="display:inline-flex;align-items:center;gap:10px;background:#4285F4;color:#fff;font-weight:700;font-size:1rem;padding:14px 28px;border-radius:8px;text-decoration:none;box-shadow:0 2px 8px rgba(66,133,244,0.35);max-width:300px;width:100%;justify-content:center;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+          Đang tải...
+        </a>
         <a href="https://yeunauan.live/my-courses"
            style="display:inline-flex;align-items:center;justify-content:center;gap:6px;margin-top:14px;padding:10px 20px;border-radius:999px;border:1px solid rgba(45,25,20,0.12);color:#6b5c54;font-size:0.85rem;font-weight:600;text-decoration:none;">
           Quay lại khóa học của tôi
@@ -491,12 +485,9 @@
     let currentView = "home";
     let currentLessonIndex = 0;
 
-    // Global Google Client ID (set after config loads)
+    // Google Client ID loaded from server config
     let _googleClientId = "";
-    let _isRedirecting = false;
-    // Start fetching config immediately as script loads
-    const configPromise = getPublicConfig();
-    
+
     // Pagination parameters for Mobile Lesson Checklist
     let currentPage = 0;
     const MOBILE_PAGE_SIZE = 5;
@@ -1118,21 +1109,12 @@
             statusBox.innerHTML = `
               <div class="text-4xl mb-4">🔒</div>
               <p class="font-extrabold text-lg sm:text-xl text-brandBrown mb-2">Đăng nhập để vào học</p>
-              <p class="text-brandBrown/60 text-sm mb-4">Vui lòng đăng nhập đúng Gmail đã được cấp quyền khóa học.</p>
-              
-              <div style="display:flex;justify-content:center;margin:1.5rem 0;">
-                <div id="statusGoogleBtn" class="min-h-[44px]"></div>
-              </div>
-
-              <div id="fallbackLoginBtn" style="display:flex;justify-content:center;margin:0.5rem 0;">
-                <button id="googleLoginButton"
-                   style="position: relative; z-index: 99999; pointer-events: auto; display:inline-flex;align-items:center;gap:10px;background:#4285F4;color:#fff;font-weight:700;font-size:0.95rem;padding:12px 24px;border-radius:8px;border:none;cursor:pointer;box-shadow:0 2px 8px rgba(66,133,244,0.3);">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-                  Đăng nhập bằng Google
-                </button>
-              </div>
-              <div id="loginDebug" style="margin-top: 10px; font-size: 0.85rem; color: #6b5c54; font-weight: bold; text-align: center;">Login debug: ready</div>
-
+              <p class="text-brandBrown/60 text-sm mb-6">Vui lòng đăng nhập đúng Gmail đã được cấp quyền khóa học.</p>
+              <a id="gLoginLink" href="#"
+                 style="display:inline-flex;align-items:center;gap:10px;background:#4285F4;color:#fff;font-weight:700;font-size:1rem;padding:14px 28px;border-radius:8px;text-decoration:none;box-shadow:0 2px 8px rgba(66,133,244,0.35);max-width:300px;width:100%;justify-content:center;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                Đang tải...
+              </a>
               <a href="https://yeunauan.live/my-courses" class="mt-4 inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full border border-brandBrown/10 text-brandBrown hover:bg-brandGray transition text-sm font-bold w-full">
                 Quay lại khóa học của tôi
               </a>
@@ -1141,182 +1123,47 @@
         }
       }
 
-      renderGoogleButton();
-
       const mobileAuth = document.getElementById("mobileLessonAuthIndicator");
       if (mobileAuth) {
         mobileAuth.innerText = "Chưa đăng nhập";
       }
-
-      bindLoginBtn();
     }
 
-    function renderGoogleButton() {
-      if (typeof google !== "undefined" && google.accounts && google.accounts.id) {
-        const headerBtn = document.getElementById("googleBtn");
-        if (headerBtn) {
-          headerBtn.innerHTML = "";
-          google.accounts.id.renderButton(headerBtn, {
-            theme: "outline",
-            size: "medium",
-            text: "signin_with",
-            shape: "pill"
-          });
-        }
-        
-        const cardBtn = document.getElementById("statusGoogleBtn");
-        if (cardBtn) {
-          cardBtn.innerHTML = "";
-          google.accounts.id.renderButton(cardBtn, {
-            theme: "filled_blue",
-            size: "large",
-            text: "signin_with",
-            shape: "rectangular",
-            width: 280
-          });
-          // Hide fallback button - Google SDK rendered successfully
-          const fb = document.getElementById("fallbackLoginBtn");
-          if (fb) fb.style.display = "none";
-        }
-      } else {
-        // Google SDK not ready yet - keep fallback visible, retry after 2s
-        setTimeout(() => {
-          if (typeof google !== "undefined" && google.accounts && google.accounts.id) {
-            renderGoogleButton();
-          }
-        }, 2000);
-      }
+    // ── Google OAuth Link-based Login (works on all browsers including Safari iOS) ──
+    //
+    // APPROACH: Use a native <a href="..."> link to navigate to Google OAuth.
+    //   - A native link click cannot be blocked by Safari security policies.
+    //   - No JavaScript click handler is needed.
+    //   - We pre-compute the OAuth URL and set it on the <a> element.
+    //
+    function buildOAuthUrl(clientId) {
+      const redirectUri = window.location.origin + window.location.pathname;
+      const nonce = Math.random().toString(36).substring(2, 18);
+      try { sessionStorage.setItem('lms_gnonce', nonce); } catch(e) {}
+      const params = new URLSearchParams({
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        response_type: 'id_token',
+        scope: 'openid email profile',
+        nonce: nonce,
+        prompt: 'select_account'
+      });
+      return 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
     }
 
-    function triggerGoogleLogin() {
-      console.log('[LMS Login] button clicked');
-      const dbg = document.getElementById('loginDebug');
-      if (dbg) dbg.textContent = 'Login debug: clicked';
-
-      if (_isRedirecting) {
-        console.log('[LMS Login] already redirecting, skipping click');
-        if (dbg) dbg.textContent = 'Login debug: already redirecting';
-        return;
-      }
-      _isRedirecting = true;
-
-      try {
-        let clientId = _googleClientId;
-        console.log('[LMS Login] current _googleClientId:', clientId);
+    // Sets href on all <a id="gLoginLink"> in the page (static + dynamic)
+    function updateLoginLink(clientId) {
+      document.querySelectorAll('#gLoginLink').forEach(link => {
         if (!clientId) {
-          console.log('[LMS Login] Client ID empty, waiting for configPromise');
-          if (dbg) dbg.textContent = 'Login debug: fetching config';
-          const btn = document.getElementById('googleLoginButton');
-          if (btn) {
-            btn.textContent = 'Đang khởi tạo kết nối...';
-            btn.disabled = true;
-          }
-          configPromise.then(config => {
-            _googleClientId = config.googleClientId || "";
-            clientId = _googleClientId;
-            console.log('[LMS Login] config resolved, Client ID:', clientId);
-            if (btn) {
-              btn.textContent = 'Đăng nhập bằng Google';
-              btn.disabled = false;
-            }
-            if (clientId) {
-              performGoogleRedirect(clientId);
-            } else {
-              _isRedirecting = false;
-              if (dbg) dbg.textContent = 'Lỗi cấu hình Google Client ID';
-              alert('Hệ thống chưa cấu hình Google Client ID trên máy chủ Vercel. Vui lòng thiết lập biến môi trường.');
-            }
-          }).catch(err => {
-            console.error('[LMS Login] configPromise failed:', err);
-            _isRedirecting = false;
-            if (btn) {
-              btn.textContent = 'Đăng nhập bằng Google';
-              btn.disabled = false;
-            }
-            if (dbg) dbg.textContent = 'Lỗi: ' + err.message;
-            alert('Lỗi kết nối máy chủ Google: ' + err.message);
-          });
+          link.textContent = 'Lỗi cấu hình - Liên hệ hỗ trợ';
+          link.style.background = '#dc2626';
+          link.href = 'https://yeunauan.live/my-courses';
           return;
         }
-
-        performGoogleRedirect(clientId);
-
-      } catch(e) {
-        _isRedirecting = false;
-        console.error('[LMS Login] triggerGoogleLogin error:', e);
-        if (dbg) dbg.textContent = 'Lỗi: ' + e.message;
-        const btn = document.getElementById('googleLoginButton');
-        if (btn) { btn.textContent = 'Đăng nhập bằng Google'; btn.disabled = false; }
-        alert('Không thể kết nối Google: ' + e.message);
-      }
+        link.href = buildOAuthUrl(clientId);
+        link.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg> Đăng nhập bằng Google`;
+      });
     }
-
-    function performGoogleRedirect(clientId) {
-      console.log('[LMS Login] client id loaded:', clientId);
-      console.log('[LMS Login] redirecting to Google');
-      const dbg = document.getElementById('loginDebug');
-      if (dbg) dbg.textContent = 'Login debug: redirecting';
-      
-      const btn = document.getElementById('googleLoginButton');
-      if (btn) {
-        btn.textContent = 'Đang kết nối Google...';
-        btn.disabled = true;
-      }
-
-      try {
-        // Build OAuth redirect URL - returns id_token in URL hash
-        const redirectUri = window.location.origin + window.location.pathname;
-        const nonce = Math.random().toString(36).substring(2) + Date.now().toString(36);
-        
-        const params = new URLSearchParams();
-        params.append('client_id', clientId);
-        params.append('redirect_uri', redirectUri);
-        params.append('response_type', 'id_token');
-        params.append('scope', 'openid email profile');
-        params.append('nonce', nonce);
-        params.append('prompt', 'select_account');
-
-        // Store nonce for verification (optional)
-        try { sessionStorage.setItem('gNonce', nonce); } catch(e) {}
-
-        const targetUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
-        console.log('[LMS Login] Redirecting to URL:', targetUrl);
-        
-        window.location.href = targetUrl;
-      } catch (err) {
-        _isRedirecting = false;
-        if (dbg) dbg.textContent = 'Lỗi redirect: ' + err.message;
-        console.error('[LMS Login] Redirect execution failed:', err);
-        alert('Không thể chuyển hướng đăng nhập Google: ' + err.message);
-        if (btn) {
-          btn.textContent = 'Đăng nhập bằng Google';
-          btn.disabled = false;
-        }
-      }
-    }
-
-    // Direct event binder using pure DOM API
-    function bindLoginBtn() {
-      const btn = document.getElementById('googleLoginButton');
-      if (btn) {
-        // Remove existing listener if any by replacing the node or just resetting onclick
-        btn.onclick = null;
-        btn.addEventListener('click', (e) => {
-          e.preventDefault();
-          console.log('[LMS Login] Click handler fired via DOM event listener');
-          triggerGoogleLogin();
-        });
-      }
-    }
-
-    // Event delegation fallback to ensure the click is always handled
-    document.addEventListener("click", (event) => {
-      const btn = event.target.closest('#googleLoginButton');
-      if (btn) {
-        console.log('[LMS Login] Click captured by event delegation');
-        triggerGoogleLogin();
-      }
-    });
 
     // Recipe rendering functions
     function escapeHtml(text) {
@@ -2388,39 +2235,45 @@
     }
 
     async function initGoogle() {
-      const configPromise = getPublicConfig();
-
-      // Check if returning from OAuth redirect (id_token in URL hash)
+      // 1. Check if returning from Google OAuth redirect (id_token in URL hash)
       if (await handleOAuthRedirect()) return;
 
+      // 2. Try to restore existing session
       if (await tryRestoreSession()) return;
-      
-      const config = await configPromise;
+
+      // 3. Fetch config from server (includes googleClientId and course info)
+      let config;
+      try {
+        config = await getPublicConfig();
+      } catch(e) {
+        config = { googleClientId: "" };
+      }
       _googleClientId = config.googleClientId || "";
 
-      // Render public course metadata immediately if available
+      // 4. Render course metadata
       if (config.courseInfo) {
         if (config.courseInfo.title) {
-          document.getElementById("courseTitle").innerHTML = config.courseInfo.title;
+          const el = document.getElementById("courseTitle");
+          if (el) el.innerHTML = config.courseInfo.title;
         }
         if (config.courseInfo.subtitle) {
-          document.getElementById("courseSubtitle").innerText = config.courseInfo.subtitle;
+          const el = document.getElementById("courseSubtitle");
+          if (el) el.innerText = config.courseInfo.subtitle;
         }
         if (config.courseInfo.heroImage) {
           setHeroImageSource(config.courseInfo.heroImage);
         }
       }
 
-      const googleReady = await setupGoogleSignIn(config);
-      
+      // 5. Show login UI
       showLoggedOutState();
-      bindLoginBtn();
-      if (!googleReady) {
-        document.getElementById("statusBox").innerHTML = `
-          <div class="text-4xl mb-4">⚙️</div>
-          <p class="font-extrabold text-lg sm:text-xl text-brandOrange mb-2">Chưa cấu hình GOOGLE_CLIENT_ID</p>
-          <p class="text-brandBrown/60 text-sm">Vui lòng thiết lập biến môi trường và tải lại trang.</p>
-        `;
+
+      // 6. Set href on the login link (the key step - no JS click handler needed)
+      if (_googleClientId) {
+        updateLoginLink(_googleClientId);
+      } else {
+        // Config not available - show error in the link itself
+        updateLoginLink("");
       }
     }
 
