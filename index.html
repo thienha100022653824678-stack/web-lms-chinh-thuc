@@ -293,21 +293,47 @@
         <p id="lessonCount" class="text-sm sm:text-base text-brandBrown/65 font-medium">Đăng nhập Gmail để truy cập bài học của bạn</p>
       </div>
 
-      <!-- Login prompt - shown before JS loads -->
+      <!-- Login prompt - uses HTML <form> so it works even if JavaScript fails -->
       <div id="statusBox" class="bg-white border border-brandBrown/10 rounded-2xl p-8 text-center max-w-xl mx-auto shadow-md">
         <div class="text-4xl mb-4">🔒</div>
         <p class="font-extrabold text-lg sm:text-xl text-brandBrown mb-2">Đăng nhập để vào học</p>
         <p class="text-brandBrown/60 text-sm mb-6">Vui lòng đăng nhập đúng Gmail đã được cấp quyền khóa học.</p>
-        <a id="gLoginLink" href="#"
-           style="display:inline-flex;align-items:center;gap:10px;background:#4285F4;color:#fff;font-weight:700;font-size:1rem;padding:14px 28px;border-radius:8px;text-decoration:none;box-shadow:0 2px 8px rgba(66,133,244,0.35);max-width:300px;width:100%;justify-content:center;">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-          Đăng nhập bằng Google
-        </a>
-        <a href="https://yeunauan.live/my-courses"
-           style="display:inline-flex;align-items:center;justify-content:center;gap:6px;margin-top:14px;padding:10px 20px;border-radius:999px;border:1px solid rgba(45,25,20,0.12);color:#6b5c54;font-size:0.85rem;font-weight:600;text-decoration:none;">
-          Quay lại khóa học của tôi
-        </a>
+        <form id="gLoginForm" action="https://accounts.google.com/o/oauth2/v2/auth" method="GET" style="display:inline-block;width:100%;max-width:300px;">
+          <input type="hidden" name="client_id" value="809903944513-bg6e9thu5j61m67kg3p1f8djhkfu3h69.apps.googleusercontent.com">
+          <input type="hidden" name="redirect_uri" value="https://www.daubepnho.store/lms.html">
+          <input type="hidden" name="response_type" value="id_token">
+          <input type="hidden" name="scope" value="openid email profile">
+          <input type="hidden" name="nonce" value="lmslogin">
+          <input type="hidden" name="prompt" value="select_account">
+          <input type="hidden" name="state" value="">
+          <button type="submit"
+            style="display:inline-flex;align-items:center;gap:10px;background:#4285F4;color:#fff;font-weight:700;font-size:1rem;padding:14px 28px;border-radius:8px;border:none;cursor:pointer;box-shadow:0 2px 8px rgba(66,133,244,0.35);width:100%;justify-content:center;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+            Đăng nhập bằng Google
+          </button>
+        </form>
+        <div style="margin-top:14px;">
+          <a href="https://yeunauan.live/my-courses"
+             style="display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 20px;border-radius:999px;border:1px solid rgba(45,25,20,0.12);color:#6b5c54;font-size:0.85rem;font-weight:600;text-decoration:none;">
+            Quay lại khóa học của tôi
+          </a>
+        </div>
       </div>
+      <!-- Mini script: set dynamic form values. Separate from main script so it runs even if main script errors -->
+      <script>
+        (function(){
+          try {
+            var course = (new URLSearchParams(window.location.search).get('course')) || 'banh-mi';
+            var f = document.getElementById('gLoginForm');
+            if (f) {
+              f.querySelector('[name=redirect_uri]').value = window.location.origin + '/lms.html';
+              f.querySelector('[name=nonce]').value = Math.random().toString(36).substr(2);
+              f.querySelector('[name=state]').value = course;
+            }
+            try { sessionStorage.setItem('lms_return_course', course); } catch(e) {}
+          } catch(e) { console.error('Login form setup error:', e); }
+        })();
+      </script>
 
       <!-- Lessons Grid/List for Desktop / List with pagination for Mobile -->
       <div id="lessonList" class="space-y-6 hidden">
@@ -469,7 +495,18 @@
     })();
 
     // Configuration values derived from URL query parameters and local storage
-    const COURSE = new URLSearchParams(window.location.search).get("course") || "banh-mi";
+    // Use 'let' so we can restore course from OAuth state param after redirect
+    let COURSE = new URLSearchParams(window.location.search).get("course");
+    // If returning from OAuth redirect (hash has id_token), restore course from state or sessionStorage
+    if (!COURSE && window.location.hash.includes('id_token=')) {
+      try {
+        var _hashParams = new URLSearchParams(window.location.hash.substring(1));
+        COURSE = _hashParams.get('state') || sessionStorage.getItem('lms_return_course') || 'banh-mi';
+      } catch(e) {
+        COURSE = sessionStorage.getItem('lms_return_course') || 'banh-mi';
+      }
+    }
+    if (!COURSE) COURSE = 'banh-mi';
     function switchLmsCourse(slug) {
       if (!slug) return;
       window.location.href = `?course=${encodeURIComponent(slug)}`;
@@ -490,28 +527,8 @@
     const GOOGLE_CLIENT_ID_HARDCODE = '809903944513-bg6e9thu5j61m67kg3p1f8djhkfu3h69.apps.googleusercontent.com';
     let _googleClientId = GOOGLE_CLIENT_ID_HARDCODE;
 
-    // Set the login link href RIGHT NOW, synchronously, before any async work.
-    // This runs immediately when the script tag is parsed — the DOM already has
-    // the static <a id="gLoginLink"> because it appears above this script tag.
-    (function setLoginLinkImmediate() {
-      const redirectUri = window.location.origin + window.location.pathname;
-      const nonce = Math.random().toString(36).substring(2, 18);
-      try { sessionStorage.setItem('lms_gnonce', nonce); } catch(e) {}
-      const params = new URLSearchParams({
-        client_id: GOOGLE_CLIENT_ID_HARDCODE,
-        redirect_uri: redirectUri,
-        response_type: 'id_token',
-        scope: 'openid email profile',
-        nonce: nonce,
-        prompt: 'select_account'
-      });
-      const oauthUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
-      const GOOGLE_ICON = '<svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>';
-      document.querySelectorAll('#gLoginLink').forEach(link => {
-        link.href = oauthUrl;
-        link.innerHTML = GOOGLE_ICON + ' Đăng nhập bằng Google';
-      });
-    })();
+    // Save course to sessionStorage for OAuth redirect recovery
+    try { sessionStorage.setItem('lms_return_course', COURSE); } catch(e) {}
 
     // Pagination parameters for Mobile Lesson Checklist
     let currentPage = 0;
@@ -1131,15 +1148,25 @@
               </a>
             `;
           } else {
+            const _loginFormNonce = Math.random().toString(36).substr(2);
             statusBox.innerHTML = `
               <div class="text-4xl mb-4">🔒</div>
               <p class="font-extrabold text-lg sm:text-xl text-brandBrown mb-2">Đăng nhập để vào học</p>
               <p class="text-brandBrown/60 text-sm mb-6">Vui lòng đăng nhập đúng Gmail đã được cấp quyền khóa học.</p>
-              <a id="gLoginLink" href="${buildOAuthUrl(_googleClientId)}"
-                 style="display:inline-flex;align-items:center;gap:10px;background:#4285F4;color:#fff;font-weight:700;font-size:1rem;padding:14px 28px;border-radius:8px;text-decoration:none;box-shadow:0 2px 8px rgba(66,133,244,0.35);max-width:300px;width:100%;justify-content:center;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-                Đăng nhập bằng Google
-              </a>
+              <form id="gLoginForm" action="https://accounts.google.com/o/oauth2/v2/auth" method="GET" style="display:inline-block;width:100%;max-width:300px;">
+                <input type="hidden" name="client_id" value="${GOOGLE_CLIENT_ID_HARDCODE}">
+                <input type="hidden" name="redirect_uri" value="${window.location.origin}/lms.html">
+                <input type="hidden" name="response_type" value="id_token">
+                <input type="hidden" name="scope" value="openid email profile">
+                <input type="hidden" name="nonce" value="${_loginFormNonce}">
+                <input type="hidden" name="prompt" value="select_account">
+                <input type="hidden" name="state" value="${COURSE}">
+                <button type="submit"
+                  style="display:inline-flex;align-items:center;gap:10px;background:#4285F4;color:#fff;font-weight:700;font-size:1rem;padding:14px 28px;border-radius:8px;border:none;cursor:pointer;box-shadow:0 2px 8px rgba(66,133,244,0.35);width:100%;justify-content:center;">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                  Đăng nhập bằng Google
+                </button>
+              </form>
               <a href="https://yeunauan.live/my-courses" class="mt-4 inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full border border-brandBrown/10 text-brandBrown hover:bg-brandGray transition text-sm font-bold w-full">
                 Quay lại khóa học của tôi
               </a>
@@ -2273,7 +2300,7 @@
       } catch(e) {
         config = { googleClientId: "" };
       }
-      _googleClientId = config.googleClientId || "";
+      _googleClientId = config.googleClientId || GOOGLE_CLIENT_ID_HARDCODE;
 
       // 4. Render course metadata
       if (config.courseInfo) {
@@ -2290,16 +2317,8 @@
         }
       }
 
-      // 5. Show login UI
+      // 5. Show login UI (form is already functional in HTML)
       showLoggedOutState();
-
-      // 6. Set href on the login link (the key step - no JS click handler needed)
-      if (_googleClientId) {
-        updateLoginLink(_googleClientId);
-      } else {
-        // Config not available - show error in the link itself
-        updateLoginLink("");
-      }
     }
 
     // Handle id_token returned in URL hash after Google OAuth redirect
