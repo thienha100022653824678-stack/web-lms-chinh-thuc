@@ -1,0 +1,11 @@
+{
+  "remoteName": "origin",
+  "projects": [
+    {
+      "id": "prj_TimQqrVhrOLW8y1KI464JBvajwlz",
+      "name": "web-lms-chinh-thuc",
+      "directory": ".",
+      "orgId": "team_cAthcmyw4079BDgelX0YjG9i"
+    }
+  ]
+}
