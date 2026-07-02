@@ -797,7 +797,10 @@
           localStorage.setItem(SESSION_KEY, data.sessionToken);
           localStorage.setItem("course_session_token", data.sessionToken);
         }
-        if (data && data.email) localStorage.setItem(SESSION_EMAIL_KEY, data.email);
+        if (data && data.email) {
+          localStorage.setItem(SESSION_EMAIL_KEY, data.email);
+          localStorage.setItem("last_student_email", data.email);
+        }
         if (data && data.sessionExpiresAt) localStorage.setItem(SESSION_EXP_KEY, String(data.sessionExpiresAt));
       } catch (err) {
         console.warn("Session saving failed:", err);
@@ -2265,6 +2268,13 @@
       const savedToken = getSavedSession();
       if (savedToken) {
         await loadCourseData({ sessionToken: savedToken });
+        return true;
+      }
+      // Auto-restore fallback for approved student email
+      const savedEmail = localStorage.getItem("course_session_email_" + COURSE) || localStorage.getItem("last_student_email");
+      if (savedEmail && savedEmail.includes("@")) {
+        console.log("Auto-restoring session for email:", savedEmail);
+        await loadCourseData({ email: savedEmail, course: COURSE });
         return true;
       }
       return false;
