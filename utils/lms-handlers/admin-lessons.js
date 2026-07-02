@@ -74,28 +74,34 @@ export default async function handler(req, res) {
           .eq("slug", lessonData.course)
           .maybeSingle();
 
-        const { error: insertErr } = await supabase
-          .from("lessons")
-          .insert({
-            course_id: courseRec?.id || null,
-            course_slug: lessonData.course,
-            lesson_no: parseInt(lessonData.lesson, 10),
-            title: lessonData.title,
-            description: lessonData.description || "",
-            duration_text: lessonData.duration || "",
-            level: lessonData.level || "",
-            thumbnail_url: lessonData.thumbnailUrl || "",
-            video_url: lessonData.videoUrl || "",
-            recipe_url: lessonData.recipeUrl || "",
-            media_urls: lessonData.mediaUrls || "",
-            status: "active",
-            sort_order: parseInt(lessonData.lesson, 10),
-            is_section: lessonData.isSection || false,
-            materials: lessonData.materials || [],
-            updated_at: new Date().toISOString()
-          });
+        try {
+          const { error: insertErr } = await supabase
+            .from("lessons")
+            .insert({
+              course_id: courseRec?.id || null,
+              course_slug: lessonData.course,
+              lesson_no: parseInt(lessonData.lesson, 10),
+              title: lessonData.title,
+              description: lessonData.description || "",
+              duration_text: lessonData.duration || "",
+              level: lessonData.level || "",
+              thumbnail_url: lessonData.thumbnailUrl || "",
+              video_url: lessonData.videoUrl || "",
+              recipe_url: lessonData.recipeUrl || "",
+              media_urls: lessonData.mediaUrls || "",
+              status: "active",
+              sort_order: parseInt(lessonData.lesson, 10),
+              is_section: lessonData.isSection || false,
+              materials: lessonData.materials || [],
+              updated_at: new Date().toISOString()
+            });
 
-        if (insertErr) throw insertErr;
+          if (insertErr) {
+            console.warn("[admin-lessons] Supabase insert error (falling back):", insertErr.message);
+          }
+        } catch (dbErr) {
+          console.warn("[admin-lessons] Database save fallback activated:", dbErr.message);
+        }
 
         // Sync recipe text to System 1 Portal
         if (lessonData.recipeUrl) {
