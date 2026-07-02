@@ -615,11 +615,6 @@ export async function resolveCourseFolderTree(drive, { course_slug, course_title
     return { courseFolderId, targetFolderId };
   }
 
-  if (type === "lesson_material") {
-    const targetFolderId = await getOrCreateFolder(drive, "Materials", lessonFolderId);
-    return { courseFolderId, targetFolderId };
-  }
-
   if (type === "lesson_media_image" || type === "lesson_media" || type === "lesson_media_video") {
     const mediaId = await getOrCreateFolder(drive, "Media", lessonFolderId);
     let targetFolderName = "Images";

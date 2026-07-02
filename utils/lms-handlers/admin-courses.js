@@ -18,11 +18,10 @@ export default async function handler(req, res) {
 
     // ── GET: Read courses list + Config ───────────────────────────────────────
     if (req.method === "GET") {
-      // 1. Get course details from courses table
+      // 1. Get course slugs from courses table
       const { data: courseRows, error: courseErr } = await supabase
         .from("courses")
-        .select("*")
-        .eq("active", true)
+        .select("slug")
         .order("sort_order", { ascending: true });
 
       if (courseErr) throw courseErr;
@@ -41,31 +40,6 @@ export default async function handler(req, res) {
           const valObj = row.value;
           const val = (valObj && typeof valObj === "object" && valObj.val !== undefined) ? valObj.val : valObj;
           config[row.key] = val;
-        });
-      }
-
-      // Merge courses table values as default/fallbacks into config if not already set in site_config
-      if (courseRows) {
-        courseRows.forEach(c => {
-          const slug = c.slug;
-          if (!config[`${slug}_title`]) {
-            config[`${slug}_title`] = c.title || "";
-          }
-          if (!config[`${slug}_subtitle`]) {
-            config[`${slug}_subtitle`] = c.subtitle || "";
-          }
-          if (!config[`${slug}_heroImage`]) {
-            const rawData = c.raw_data || {};
-            config[`${slug}_heroImage`] = c.image_url || rawData.heroImageUrl || rawData.bannerImageUrl || "";
-          }
-          if (!config[`${slug}_posterImage`]) {
-            const rawData = c.raw_data || {};
-            config[`${slug}_posterImage`] = rawData.posterImageUrl || "";
-          }
-          if (!config[`${slug}_qrImage`]) {
-            const rawData = c.raw_data || {};
-            config[`${slug}_qrImage`] = rawData.qrImageUrl || "";
-          }
         });
       }
 

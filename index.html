@@ -207,6 +207,64 @@
   </style>
 </head>
 <body class="min-h-screen flex flex-col selection:bg-brandOrange selection:text-white">
+  <!-- Diagnostic Banner for debugging user-agent and block logic -->
+  <div id="diag-banner" style="display:none; background:#000; color:#0f0; padding:12px; font-family:monospace; font-size:12px; position:fixed; top:0; left:0; width:100%; z-index:999999; text-align:left; word-break:break-all; border-bottom:2px solid #0f0;">
+    <strong>DIAGNOSTICS (?debug=1):</strong><br>
+    UA: <span id="diag-ua">Loading...</span><br>
+    vendor: <span id="diag-vendor">Loading...</span><br>
+    window.coccoc: <span id="diag-wcc">Loading...</span><br>
+    isCocCocBrowser(): <span id="diag-isc">Loading...</span><br>
+    window.webkit: <span id="diag-wk">Loading...</span>
+  </div>
+  <script>
+    (function() {
+      if (window.location.search.indexOf('debug=1') !== -1) {
+        var banner = document.getElementById('diag-banner');
+        if (banner) {
+          banner.style.display = 'block';
+          document.getElementById('diag-ua').innerText = navigator.userAgent;
+          document.getElementById('diag-vendor').innerText = navigator.vendor;
+          document.getElementById('diag-wcc').innerText = typeof window.coccoc !== 'undefined' ? 'Defined' : 'Undefined';
+          document.getElementById('diag-wk').innerText = typeof window.webkit !== 'undefined' ? 'Defined' : 'Undefined';
+          setTimeout(function() {
+            if (typeof isCocCocBrowser === 'function') {
+              document.getElementById('diag-isc').innerText = isCocCocBrowser() ? 'true' : 'false';
+            } else {
+              document.getElementById('diag-isc').innerText = 'isCocCocBrowser function not defined yet';
+            }
+            
+            // Inspect window.webkit.messageHandlers
+            var handlersList = [];
+            if (window.webkit && window.webkit.messageHandlers) {
+              try {
+                handlersList = Object.keys(window.webkit.messageHandlers);
+              } catch (e) {
+                handlersList = ["Error: " + e.message];
+              }
+            }
+            
+            // Inspect any window keys containing 'coc'
+            var cocKeys = [];
+            try {
+              for (var key in window) {
+                if (key.toLowerCase().indexOf('coc') !== -1) {
+                  cocKeys.push(key);
+                }
+              }
+            } catch (e) {
+              cocKeys = ["Error: " + e.message];
+            }
+            
+            // Add custom elements to banner
+            var extraDiv = document.createElement('div');
+            extraDiv.innerHTML = "<strong>WebKit Handlers:</strong> " + JSON.stringify(handlersList) + "<br>" +
+                                "<strong>Window 'coc' Keys:</strong> " + JSON.stringify(cocKeys);
+            banner.appendChild(extraDiv);
+          }, 500);
+        }
+      }
+    })();
+  </script>
 
   <!-- HOME VIEW CONTAINER -->
   <div id="homeView" class="flex-grow flex flex-col">
@@ -359,18 +417,6 @@
           Xem thêm <span>▼</span>
         </button>
       </div>
-
-      <!-- Materials Card -->
-      <div id="materialsCard" class="hidden mt-6 bg-white border border-brandBrown/5 rounded-2xl p-5 shadow-sm">
-        <div class="flex items-center justify-between border-b border-brandGray pb-3 mb-4">
-          <span class="font-black text-brandGreen text-base flex items-center gap-2">
-            <span>📎</span> TÀI LIỆU BÀI HỌC
-          </span>
-        </div>
-        <div id="materialsContent" class="space-y-3">
-          <!-- Populated by JS -->
-        </div>
-      </div>
     </div>
 
     <!-- Navigation Bar at Bottom -->
@@ -514,15 +560,6 @@
       return `https://drive.google.com/file/d/${fileId}/preview`;
     }
 
-    function normalizeGoogleDriveImageUrl(url) {
-      if (!url) return "";
-      const driveId = getGoogleDriveFileId(url);
-      if (driveId) {
-        return `https://drive.google.com/thumbnail?id=${driveId}&sz=w1000`;
-      }
-      return url;
-    }
-
     function openDriveVideo(url) {
       const previewUrl = normalizeGoogleDrivePreviewUrl(url) || url;
       window.open(previewUrl, "_blank", "noopener,noreferrer");
@@ -637,7 +674,7 @@
           heroImage.src = HERO_PLACEHOLDER_IMAGE;
         }
       };
-      heroImage.src = normalizeGoogleDriveImageUrl(src) || HERO_PLACEHOLDER_IMAGE;
+      heroImage.src = src || HERO_PLACEHOLDER_IMAGE;
     }
 
     async function refreshCourseDataBeforePlayIfNeeded(index) {
@@ -1112,41 +1149,6 @@
           ${lesson?.recipeTextError ? `<div class="text-[10px] text-brandBrown/50 mt-1">Lỗi: ${escapeHtml(lesson.recipeTextError)}</div>` : ''}
         </div>
       `;
-    function renderMaterials(materials) {
-      const card = document.getElementById("materialsCard");
-      const content = document.getElementById("materialsContent");
-      if (!card || !content) return;
-
-      if (!materials || !Array.isArray(materials) || materials.length === 0) {
-        card.classList.add("hidden");
-        return;
-      }
-
-      card.classList.remove("hidden");
-      content.innerHTML = materials.map(m => {
-        let typeIcon = "📄";
-        if (m.type === "pdf") typeIcon = "📕";
-        else if (m.type === "excel") typeIcon = "🟢";
-        else if (m.type === "word") typeIcon = "📘";
-        else if (m.type === "powerpoint") typeIcon = "📙";
-        else if (m.type === "text") typeIcon = "📝";
-
-        const fileId = getGoogleDriveFileId(m.url);
-        const viewUrl = fileId ? `https://drive.google.com/file/d/${fileId}/view?usp=drivesdk` : m.url;
-
-        return `
-          <div class="flex items-center justify-between p-3 sm:p-3.5 bg-brandGray/40 border border-brandBrown/5 rounded-2xl text-xs sm:text-sm gap-3 hover:bg-brandGray transition">
-            <div class="flex items-center gap-2.5 min-w-0">
-              <span class="text-lg shrink-0">${typeIcon}</span>
-              <span class="font-extrabold text-brandBrown truncate">${escapeHtml(m.name)}</span>
-            </div>
-            <div class="flex items-center gap-2 shrink-0">
-              <a href="${viewUrl}" target="_blank" class="px-3 py-1.5 bg-brandGreen hover:bg-brandGreenLight text-white font-bold rounded-lg transition text-[11px] sm:text-xs">Mở</a>
-              <a href="${m.url}" target="_blank" class="px-3 py-1.5 bg-white border border-brandGreen/35 hover:bg-brandCream text-brandGreen font-bold rounded-lg transition text-[11px] sm:text-xs">Tải xuống</a>
-            </div>
-          </div>
-        `;
-      }).join("");
     }
 
     // ── Parse mediaUrls ─────────────────────────────────────────────────────
@@ -1367,7 +1369,9 @@
             imgSrc = iframeMatch[1];
           }
           imgSrc = imgSrc.replace(/&amp;/g, "&").trim();
-          imgSrc = normalizeGoogleDriveImageUrl(imgSrc);
+
+          const driveMatch = imgSrc.match(/drive\.google\.com\/file\/d\/([^/]+)/);
+          if (driveMatch) imgSrc = `https://drive.google.com/uc?export=download&id=${driveMatch[1]}`;
           return `
             <div class="bg-white border border-brandBrown/5 rounded-2xl overflow-hidden shadow-sm mb-4">
               ${safeTitle ? `<div class="px-4 pt-4 font-bold text-sm text-brandBrown">${safeTitle}</div>` : ""}
@@ -1414,180 +1418,93 @@
       });
     }
 
-    // Toggle collapse helper
-    window.toggleSectionCollapse = function(sectionId) {
-      const content = document.getElementById(`content-${sectionId}`);
-      const chevron = document.getElementById(`chevron-${sectionId}`);
-      if (!content || !chevron) return;
-      
-      if (content.classList.contains("hidden")) {
-        content.classList.remove("hidden");
-        chevron.style.transform = "rotate(0deg)";
-      } else {
-        content.classList.add("hidden");
-        chevron.style.transform = "rotate(-90deg)";
-      }
-    };
-
     // Lesson Checklist Renderer
     function renderLessons(lessons) {
       const list = document.getElementById("lessonList");
       if (!list) return;
       list.innerHTML = "";
 
-      const totalLessons = lessons.filter(l => !l.isSection).length;
-      if (lessons.length === 0) {
+      const total = lessons.length;
+      if (total === 0) {
         list.innerHTML = `<p class="text-center font-bold text-brandBrown/50 py-8">Không tìm thấy bài học nào.</p>`;
         return;
       }
 
-      const hasSections = lessons.some(l => l.isSection);
+      // Check device state
       const mobileMode = isMobileDevice();
 
-      if (!hasSections) {
-        // FLAT LIST MODE (Backward Compatibility)
-        let renderSet = lessons;
-        let pageCount = Math.max(1, Math.ceil(lessons.length / MOBILE_PAGE_SIZE));
-        if (mobileMode) {
-          if (currentPage >= pageCount) currentPage = 0;
-          renderSet = lessons.slice(currentPage * MOBILE_PAGE_SIZE, currentPage * MOBILE_PAGE_SIZE + MOBILE_PAGE_SIZE);
-        }
-
-        renderSet.forEach((l, idx) => {
-          const globalIdx = mobileMode ? currentPage * MOBILE_PAGE_SIZE + idx : idx;
-          const item = document.createElement("div");
-          item.className = "bg-white border border-brandBrown/5 rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition duration-200 grid gap-4 sm:grid-cols-[180px_1fr] md:grid-cols-[240px_1fr_200px] items-center";
-
-          const thumb = normalizeGoogleDriveImageUrl(l.thumbnailUrl || HERO_PLACEHOLDER_IMAGE);
-
-          item.innerHTML = `
-            <!-- Thumbnail -->
-            <div class="relative aspect-video rounded-xl overflow-hidden shadow-inner border border-brandBrown/5 cursor-pointer bg-brandGray flex-shrink-0" onclick="window.location.href='/lesson.html?id=${l.id}'">
-              <img class="w-full h-full object-cover transition transform hover:scale-105" src="${thumb}" alt="Lesson Thumbnail">
-              <span class="absolute inset-0 m-auto w-12 h-12 rounded-full bg-brandGreen/90 text-white flex items-center justify-center shadow-lg text-lg">▶</span>
-            </div>
-
-            <!-- Description -->
-            <div class="flex flex-col min-w-0">
-              <div class="flex items-center gap-2 mb-2 flex-wrap">
-                <span class="px-2 py-0.5 rounded bg-brandGreen/10 text-brandGreen font-bold text-[10px] sm:text-xs">BÀI ${l.lesson || globalIdx + 1}</span>
-                <span class="text-[11px] sm:text-xs text-brandBrown/50 font-bold">⏱ ${l.duration || "N/A"}</span>
-                <span class="text-[11px] sm:text-xs text-brandBrown/50 font-bold">▥ ${l.level || "Cơ bản"}</span>
-              </div>
-              <h3 class="font-extrabold text-base sm:text-lg text-brandBrown hover:text-brandGreen cursor-pointer truncate mb-1" onclick="window.location.href='/lesson.html?id=${l.id}'">
-                ${l.title || "Bài Học"}
-              </h3>
-              <p class="text-xs sm:text-sm text-brandBrown/70 line-clamp-2 leading-relaxed">
-                ${l.description || "Chưa có mô tả ngắn."}
-              </p>
-            </div>
-
-            <!-- Buttons area -->
-            <div class="flex sm:flex-col gap-2.5 sm:pl-4 sm:border-l border-brandBrown/5 justify-center sm:justify-end">
-              <button class="w-full sm:px-6 py-2.5 bg-brandGreen hover:bg-brandGreenLight text-white font-bold text-xs sm:text-sm rounded-xl transition duration-150 shadow-sm flex items-center justify-center gap-1.5" onclick="window.location.href='/lesson.html?id=${l.id}'">
-                🎬 XEM BÀI HỌC
-              </button>
-            </div>
-          `;
-          list.appendChild(item);
-        });
-
-        // Mobile Pagination controls
-        if (mobileMode && lessons.length > MOBILE_PAGE_SIZE) {
-          const paginator = document.createElement("div");
-          paginator.className = "flex flex-col items-center gap-3 mt-8 pt-4 border-t border-brandBrown/5";
-
-          const dots = Array.from({ length: pageCount }).map((_, i) => `
-            <button class="w-2.5 h-2.5 rounded-full transition duration-150 ${i === currentPage ? 'bg-brandGreen scale-125' : 'bg-brandBrown/20'}" onclick="goLessonPage(${i})"></button>
-          `).join("");
-
-          paginator.innerHTML = `
-            <div class="flex items-center gap-6">
-              <button class="w-10 h-10 rounded-full bg-white border border-brandBrown/10 flex items-center justify-center font-bold text-brandBrown hover:bg-brandCream shadow-sm" onclick="changeLessonPage(-1)">‹</button>
-              <div class="flex items-center gap-2.5">${dots}</div>
-              <button class="w-10 h-10 rounded-full bg-white border border-brandBrown/10 flex items-center justify-center font-bold text-brandBrown hover:bg-brandCream shadow-sm" onclick="changeLessonPage(1)">›</button>
-            </div>
-            <span class="text-xs text-brandBrown/65 font-bold">Trang ${currentPage + 1} / ${pageCount}</span>
-          `;
-          list.appendChild(paginator);
-        }
-      } else {
-        // SECTION GROUPED MODE
-        let sectionCounter = 0;
-        let lessonCounter = 0;
-        let currentSectionContainer = null;
-        let currentSectionId = "";
-
-        lessons.forEach((l, idx) => {
-          if (l.isSection) {
-            sectionCounter++;
-            lessonCounter = 0;
-            currentSectionId = `sec-${sectionCounter}`;
-
-            const sectionHeader = document.createElement("div");
-            sectionHeader.className = "bg-white/80 border border-brandBrown/5 rounded-3xl p-5 shadow-sm mb-6";
-            sectionHeader.innerHTML = `
-              <div onclick="toggleSectionCollapse('${currentSectionId}')" class="flex items-center justify-between cursor-pointer py-1.5 select-none">
-                <div class="flex items-center gap-2.5">
-                  <span class="text-[10px] font-black px-2.5 py-1 rounded bg-brandGreen text-white tracking-wider uppercase">📁 CHƯƠNG ${sectionCounter}</span>
-                  <h3 class="font-extrabold text-base sm:text-lg text-brandBrown">${escapeHtml(l.title)}</h3>
-                </div>
-                <span id="chevron-${currentSectionId}" class="text-brandBrown/60 font-bold transition transform duration-200">▼</span>
-              </div>
-              <div id="content-${currentSectionId}" class="mt-5 pl-4 border-l-2 border-brandGreen/10 space-y-5 transition-all duration-300">
-              </div>
-            `;
-
-            list.appendChild(sectionHeader);
-            currentSectionContainer = document.getElementById(`content-${currentSectionId}`);
-          } else {
-            lessonCounter++;
-            const item = document.createElement("div");
-            item.className = "bg-white border border-brandBrown/5 rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition duration-200 grid gap-4 sm:grid-cols-[180px_1fr] md:grid-cols-[240px_1fr_200px] items-center";
-
-            const thumb = normalizeGoogleDriveImageUrl(l.thumbnailUrl || HERO_PLACEHOLDER_IMAGE);
-
-            item.innerHTML = `
-              <!-- Thumbnail -->
-              <div class="relative aspect-video rounded-xl overflow-hidden shadow-inner border border-brandBrown/5 cursor-pointer bg-brandGray flex-shrink-0" onclick="window.location.href='/lesson.html?id=${l.id}'">
-                <img class="w-full h-full object-cover transition transform hover:scale-105" src="${thumb}" alt="Lesson Thumbnail">
-                <span class="absolute inset-0 m-auto w-12 h-12 rounded-full bg-brandGreen/90 text-white flex items-center justify-center shadow-lg text-lg">▶</span>
-              </div>
-
-              <!-- Description -->
-              <div class="flex flex-col min-w-0">
-                <div class="flex items-center gap-2 mb-2 flex-wrap">
-                  <span class="px-2 py-0.5 rounded bg-brandGreen/10 text-brandGreen font-bold text-[10px] sm:text-xs">BÀI ${lessonCounter}</span>
-                  <span class="text-[11px] sm:text-xs text-brandBrown/50 font-bold">⏱ ${l.duration || "N/A"}</span>
-                  <span class="text-[11px] sm:text-xs text-brandBrown/50 font-bold">▥ ${l.level || "Cơ bản"}</span>
-                </div>
-                <h3 class="font-extrabold text-base sm:text-lg text-brandBrown hover:text-brandGreen cursor-pointer truncate mb-1" onclick="window.location.href='/lesson.html?id=${l.id}'">
-                  ${l.title || "Bài Học"}
-                </h3>
-                <p class="text-xs sm:text-sm text-brandBrown/70 line-clamp-2 leading-relaxed">
-                  ${l.description || "Chưa có mô tả ngắn."}
-                </p>
-              </div>
-
-              <!-- Buttons area -->
-              <div class="flex sm:flex-col gap-2.5 sm:pl-4 sm:border-l border-brandBrown/5 justify-center sm:justify-end">
-                <button class="w-full sm:px-6 py-2.5 bg-brandGreen hover:bg-brandGreenLight text-white font-bold text-xs sm:text-sm rounded-xl transition duration-150 shadow-sm flex items-center justify-center gap-1.5" onclick="window.location.href='/lesson.html?id=${l.id}'">
-                  🎬 XEM BÀI HỌC
-                </button>
-              </div>
-            `;
-
-            if (currentSectionContainer) {
-              currentSectionContainer.appendChild(item);
-            } else {
-              item.className += " mb-4";
-              list.appendChild(item);
-            }
-          }
-        });
+      // On mobile, paginated lists
+      let renderSet = lessons;
+      let pageCount = Math.max(1, Math.ceil(total / MOBILE_PAGE_SIZE));
+      if (mobileMode) {
+        if (currentPage >= pageCount) currentPage = 0;
+        renderSet = lessons.slice(currentPage * MOBILE_PAGE_SIZE, currentPage * MOBILE_PAGE_SIZE + MOBILE_PAGE_SIZE);
       }
 
-      document.getElementById("lessonCount").innerText = `${totalLessons} bài học được biên soạn chuẩn khoa học`;
+      renderSet.forEach((l, idx) => {
+        const globalIdx = mobileMode ? currentPage * MOBILE_PAGE_SIZE + idx : idx;
+        const item = document.createElement("div");
+        item.className = "bg-white border border-brandBrown/5 rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition duration-200 grid gap-4 sm:grid-cols-[180px_1fr] md:grid-cols-[240px_1fr_200px] items-center";
+
+        const thumb = l.thumbnailUrl || HERO_PLACEHOLDER_IMAGE;
+
+        item.innerHTML = `
+          <!-- Thumbnail -->
+          <div class="relative aspect-video rounded-xl overflow-hidden shadow-inner border border-brandBrown/5 cursor-pointer bg-brandGray flex-shrink-0" onclick="window.location.href='/lesson.html?id=${l.id}'">
+            <img class="w-full h-full object-cover transition transform hover:scale-105" src="${thumb}" alt="Lesson Thumbnail">
+            <span class="absolute inset-0 m-auto w-12 h-12 rounded-full bg-brandGreen/90 text-white flex items-center justify-center shadow-lg text-lg">▶</span>
+          </div>
+
+          <!-- Description -->
+          <div class="flex flex-col min-w-0">
+            <div class="flex items-center gap-2 mb-2 flex-wrap">
+              <span class="px-2 py-0.5 rounded bg-brandGreen/10 text-brandGreen font-bold text-[10px] sm:text-xs">BÀI ${l.lesson || globalIdx + 1}</span>
+              <span class="text-[11px] sm:text-xs text-brandBrown/50 font-bold">⏱ ${l.duration || "N/A"}</span>
+              <span class="text-[11px] sm:text-xs text-brandBrown/50 font-bold">▥ ${l.level || "Cơ bản"}</span>
+            </div>
+            <h3 class="font-extrabold text-base sm:text-lg text-brandBrown hover:text-brandGreen cursor-pointer truncate mb-1" onclick="window.location.href='/lesson.html?id=${l.id}'">
+              ${l.title || "Bài Học"}
+            </h3>
+            <p class="text-xs sm:text-sm text-brandBrown/70 line-clamp-2 leading-relaxed">
+              ${l.description || "Chưa có mô tả ngắn."}
+            </p>
+          </div>
+
+          <!-- Buttons area (Visible beautifully on Desktop, or as quick access) -->
+          <div class="flex sm:flex-col gap-2.5 sm:pl-4 sm:border-l border-brandBrown/5 justify-end">
+            <button class="flex-1 sm:flex-none px-4 py-2.5 bg-brandGreen hover:bg-brandGreenLight text-white font-bold text-xs sm:text-sm rounded-xl transition duration-150 shadow-sm" onclick="window.location.href='/lesson.html?id=${l.id}'">
+              🎬 XEM BÀI HỌC
+            </button>
+            <button class="flex-1 sm:flex-none px-4 py-2.5 bg-white border border-brandGreen/35 hover:bg-brandCream text-brandGreen font-bold text-xs sm:text-sm rounded-xl transition duration-150" onclick="window.location.href='/lesson.html?id=${l.id}#recipe'">
+              📄 CÔNG THỨC
+            </button>
+          </div>
+        `;
+
+        list.appendChild(item);
+      });
+
+      // Mobile Pagination controls
+      if (mobileMode && total > MOBILE_PAGE_SIZE) {
+        const paginator = document.createElement("div");
+        paginator.className = "flex flex-col items-center gap-3 mt-8 pt-4 border-t border-brandBrown/5";
+
+        const dots = Array.from({ length: pageCount }).map((_, i) => `
+          <button class="w-2.5 h-2.5 rounded-full transition duration-150 ${i === currentPage ? 'bg-brandGreen scale-125' : 'bg-brandBrown/20'}" onclick="goLessonPage(${i})"></button>
+        `).join("");
+
+        paginator.innerHTML = `
+          <div class="flex items-center gap-6">
+            <button class="w-10 h-10 rounded-full bg-white border border-brandBrown/10 flex items-center justify-center font-bold text-brandBrown hover:bg-brandCream shadow-sm" onclick="changeLessonPage(-1)">‹</button>
+            <div class="flex items-center gap-2.5">${dots}</div>
+            <button class="w-10 h-10 rounded-full bg-white border border-brandBrown/10 flex items-center justify-center font-bold text-brandBrown hover:bg-brandCream shadow-sm" onclick="changeLessonPage(1)">›</button>
+          </div>
+          <span class="text-xs text-brandBrown/65 font-bold">Trang ${currentPage + 1} / ${pageCount}</span>
+        `;
+        list.appendChild(paginator);
+      }
+
+      document.getElementById("lessonCount").innerText = `${total} bài học được biên soạn chuẩn khoa học`;
       document.getElementById("statusBox").classList.add("hidden");
       list.classList.remove("hidden");
     }
@@ -1726,22 +1643,8 @@
       currentLessonIndex = Math.max(0, Math.min(index, currentLessons.length - 1));
       const l = currentLessons[currentLessonIndex] || {};
 
-      let lessonNumber = currentLessonIndex + 1;
-      const hasSections = currentLessons.some(c => c.isSection);
-      if (hasSections) {
-        let count = 0;
-        for (let i = 0; i <= currentLessonIndex; i++) {
-          if (currentLessons[i].isSection) {
-            count = 0;
-          } else {
-            count++;
-          }
-        }
-        lessonNumber = count;
-      }
-
       document.getElementById("mobileLessonHeaderTitle").innerText = l.title || "Chi Tiết Bài Học";
-      document.getElementById("mobileLessonSub").innerText = `BÀI ${lessonNumber}`;
+      document.getElementById("mobileLessonSub").innerText = `BÀI ${l.lesson || currentLessonIndex + 1}`;
       document.getElementById("mobileLessonTitle").innerText = l.title || "Bài Học";
 
       // Setup recipe
@@ -1753,61 +1656,37 @@
       // Render media phụ (video Bunny, YouTube, ảnh) từ mediaUrls
       renderMediaItems(l);
 
-      // Render materials
-      renderMaterials(l.materials || []);
-
-      // Set video box preview state & Empty Video Hiding
+      // Set video box preview state
       destroyWatermark();
       const videoBox = document.getElementById("mobileVideoBox");
-      const hasVideo = l.videoUrl && l.videoUrl.trim() !== "";
-      
-      if (!hasVideo) {
-        const hasImage = l.thumbnailUrl && l.thumbnailUrl.trim() !== "" && !l.thumbnailUrl.includes("placeholder");
-        if (hasImage) {
-          if (videoBox) {
-            videoBox.classList.remove("hidden");
-            videoBox.innerHTML = `
-              <div id="mobileVideoWrapper" class="relative w-full h-full flex-grow flex items-center justify-center bg-black">
-                <img id="mobileVideoThumb" class="absolute inset-0 w-full h-full object-cover opacity-100" src="${normalizeGoogleDriveImageUrl(l.thumbnailUrl)}" alt="Thumbnail">
+      const isDrive = l.videoProvider === "google_drive_preview" || isGoogleDriveVideoUrl(l.videoUrl);
+      if (isDrive) {
+        const previewUrl = normalizeGoogleDrivePreviewUrl(l.videoUrl || l.secureVideoUrl);
+        const fileId = getGoogleDriveFileId(l.videoUrl || l.secureVideoUrl);
+        const returnUrl = window.location.origin + window.location.pathname + '?course=' + encodeURIComponent(COURSE) + '&lesson=' + currentLessonIndex;
+        const playerUrl = `/gdrive-player.html?id=${fileId}&returnUrl=${encodeURIComponent(returnUrl)}`;
+        videoBox.innerHTML = `
+          <div id="mobileVideoWrapper" class="relative w-full h-full flex-grow flex items-center justify-center bg-black">
+            <iframe src="${previewUrl}" class="w-full h-full border-0 absolute inset-0 z-0 opacity-40" style="pointer-events: none;"></iframe>
+            <div class="absolute inset-0 z-10 flex flex-col items-center justify-center text-center p-4 cursor-pointer" onclick="sessionStorage.setItem('courseReturnUrl', '${returnUrl}'); window.location.href='${playerUrl}'">
+              <div class="bg-brandGreen hover:bg-brandGreen/95 text-white font-extrabold text-base sm:text-lg px-6 py-3.5 rounded-full shadow-lg transition transform active:scale-95 mb-2.5">
+                ▶ Ấn vào đây để xem video
               </div>
-            `;
-          }
-        } else {
-          if (videoBox) videoBox.classList.add("hidden");
-        }
+              <div class="text-xs sm:text-sm text-white/90 font-bold tracking-wide">
+                Video sẽ mở bằng Google Drive
+              </div>
+            </div>
+          </div>
+        `;
       } else {
-        if (videoBox) {
-          videoBox.classList.remove("hidden");
-          const isDrive = l.videoProvider === "google_drive_preview" || isGoogleDriveVideoUrl(l.videoUrl);
-          if (isDrive) {
-            const previewUrl = normalizeGoogleDrivePreviewUrl(l.videoUrl || l.secureVideoUrl);
-            const fileId = getGoogleDriveFileId(l.videoUrl || l.secureVideoUrl);
-            const returnUrl = window.location.origin + window.location.pathname + '?course=' + encodeURIComponent(COURSE) + '&lesson=' + currentLessonIndex;
-            const playerUrl = `/gdrive-player.html?id=${fileId}&returnUrl=${encodeURIComponent(returnUrl)}`;
-            videoBox.innerHTML = `
-              <div id="mobileVideoWrapper" class="relative w-full h-full flex-grow flex items-center justify-center bg-black">
-                <iframe src="${previewUrl}" class="w-full h-full border-0 absolute inset-0 z-0 opacity-40" style="pointer-events: none;"></iframe>
-                <div class="absolute inset-0 z-10 flex flex-col items-center justify-center text-center p-4 cursor-pointer" onclick="sessionStorage.setItem('courseReturnUrl', '${returnUrl}'); window.location.href='${playerUrl}'">
-                  <div class="bg-brandGreen hover:bg-brandGreen/95 text-white font-extrabold text-base sm:text-lg px-6 py-3.5 rounded-full shadow-lg transition transform active:scale-95 mb-2.5">
-                    ▶ Ấn vào đây để xem video
-                  </div>
-                  <div class="text-xs sm:text-sm text-white/90 font-bold tracking-wide">
-                    Video sẽ mở bằng Google Drive
-                  </div>
-                </div>
-              </div>
-            `;
-          } else {
-            videoBox.innerHTML = `
-              <div id="mobileVideoWrapper" class="relative w-full h-full flex-grow flex items-center justify-center bg-black">
-                <img id="mobileVideoThumb" class="absolute inset-0 w-full h-full object-cover opacity-75" src="${normalizeGoogleDriveImageUrl(l.thumbnailUrl || HERO_PLACEHOLDER_IMAGE)}" alt="Thumbnail">
-                <button class="relative z-10 w-16 h-16 rounded-full bg-brandGreen/90 hover:bg-brandGreen text-white text-2xl flex items-center justify-center shadow-lg transition transform active:scale-95" onclick="playMobileLessonVideo()">
-                  ▶
-                </button>
-              </div>
-            `;
-          }
-        }
+        videoBox.innerHTML = `
+          <div id="mobileVideoWrapper" class="relative w-full h-full flex-grow flex items-center justify-center bg-black">
+            <img id="mobileVideoThumb" class="absolute inset-0 w-full h-full object-cover opacity-75" src="${l.thumbnailUrl || HERO_PLACEHOLDER_IMAGE}" alt="Thumbnail">
+            <button class="relative z-10 w-16 h-16 rounded-full bg-brandGreen/90 hover:bg-brandGreen text-white text-2xl flex items-center justify-center shadow-lg transition transform active:scale-95" onclick="playMobileLessonVideo()">
+              ▶
+            </button>
+          </div>
+        `;
       }
 
       // Show mobile view
@@ -1917,24 +1796,16 @@
     }
 
     function openPrevLesson() {
-      let idx = currentLessonIndex - 1;
-      while (idx >= 0 && currentLessons[idx].isSection) {
-        idx--;
-      }
-      if (idx >= 0) {
-        openLessonDetail(idx);
+      if (currentLessonIndex > 0) {
+        openLessonDetail(currentLessonIndex - 1);
       } else {
         alert("Đây là bài học đầu tiên.");
       }
     }
 
     function openNextLesson() {
-      let idx = currentLessonIndex + 1;
-      while (idx < currentLessons.length && currentLessons[idx].isSection) {
-        idx++;
-      }
-      if (idx < currentLessons.length) {
-        openLessonDetail(idx);
+      if (currentLessonIndex < currentLessons.length - 1) {
+        openLessonDetail(currentLessonIndex + 1);
       } else {
         alert("Đây là bài học cuối cùng.");
       }

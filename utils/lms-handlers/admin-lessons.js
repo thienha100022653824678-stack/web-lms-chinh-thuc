@@ -45,9 +45,7 @@ export default async function handler(req, res) {
         videoUrl: l.video_url || "",
         recipeUrl: l.recipe_url || "",
         mediaUrls: l.media_urls || "",
-        status: l.status || "active",
-        isSection: l.is_section || false,
-        materials: l.materials || []
+        status: l.status || "active"
       }));
 
       return res.status(200).json({ success: true, lessons: formattedLessons });
@@ -90,8 +88,6 @@ export default async function handler(req, res) {
             media_urls: lessonData.mediaUrls || "",
             status: "active",
             sort_order: parseInt(lessonData.lesson, 10),
-            is_section: lessonData.isSection || false,
-            materials: lessonData.materials || [],
             updated_at: new Date().toISOString()
           });
 
@@ -158,8 +154,6 @@ export default async function handler(req, res) {
             media_urls: lessonData.mediaUrls || "",
             status: lessonData.status || "active",
             sort_order: parseInt(lessonData.lesson, 10),
-            is_section: lessonData.isSection || false,
-            materials: lessonData.materials || [],
             updated_at: new Date().toISOString()
           })
           .eq("course_slug", originalCourse)
@@ -194,44 +188,6 @@ export default async function handler(req, res) {
         }
 
         return res.status(200).json({ success: true, message: "Cập nhật bài học thành công" });
-      }
-
-      // Action: REORDER
-      if (action === "reorder") {
-        const { course, orderedIds } = req.body || {};
-        if (!course || !Array.isArray(orderedIds)) {
-          return res.status(400).json({ success: false, error: "Thiếu tham số course hoặc orderedIds" });
-        }
-
-        // To prevent UNIQUE constraint conflicts on lesson_no,
-        // we first assign temporary negative numbers, then positive numbers.
-        for (let i = 0; i < orderedIds.length; i++) {
-          const { error: tempErr } = await supabase
-            .from("lessons")
-            .update({
-              lesson_no: -(i + 1),
-              sort_order: -(i + 1),
-              updated_at: new Date().toISOString()
-            })
-            .eq("id", orderedIds[i])
-            .eq("course_slug", course);
-          if (tempErr) throw tempErr;
-        }
-
-        for (let i = 0; i < orderedIds.length; i++) {
-          const { error: finalErr } = await supabase
-            .from("lessons")
-            .update({
-              lesson_no: i + 1,
-              sort_order: i + 1,
-              updated_at: new Date().toISOString()
-            })
-            .eq("id", orderedIds[i])
-            .eq("course_slug", course);
-          if (finalErr) throw finalErr;
-        }
-
-        return res.status(200).json({ success: true, message: "Đã sắp xếp lại bài học thành công" });
       }
 
       // Action: DELETE (Soft delete)

@@ -288,8 +288,6 @@ export default async function handler(req, res) {
       mediaUrls: lessonData.media_urls || "",
       views: lessonData.views || 0,
       status: lessonData.status || "active",
-      isSection: lessonData.is_section || false,
-      materials: lessonData.materials || [],
       recipeText
     };
 
