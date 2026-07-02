@@ -64,7 +64,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,600;0,700;0,800;1,600&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://accounts.google.com/gsi/client"></script>
+  <!-- Google GIS removed: login handled by pure HTML form redirect -->
 
   <!-- Tailwind Configuration for Theme Colors -->
   <script>
@@ -225,8 +225,7 @@
 
         <!-- Auth Area -->
         <div id="loginArea">
-          <!-- Default State: Loading / Empty button placeholder -->
-          <div id="googleBtn" class="min-h-[40px] flex items-center justify-end"></div>
+          <!-- Populated by JS: showLoggedInState or showLoggedOutState -->
         </div>
       </div>
     </header>
@@ -1058,7 +1057,7 @@
 
     function showLoggedOutState(isUnauthorized = false, email = '') {
       const headerArea = document.getElementById("loginArea");
-      headerArea.innerHTML = `<div id="googleBtn" class="min-h-[40px] flex items-center justify-end"></div>`;
+      headerArea.innerHTML = '';
       
       const ua = navigator.userAgent;
       const isIOS = /iPhone|iPad|iPod/i.test(ua);
@@ -1124,7 +1123,9 @@
                 <strong class="text-brandOrange break-all">${escapeHtml(email)}</strong>
               </p>
               <div style="display:flex;justify-content:center;margin:1.5rem 0;">
-                <div id="statusGoogleBtn" class="min-h-[44px]"></div>
+                <a href="?course=${COURSE}" class="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full bg-brandGreen text-white font-bold text-sm w-full max-w-[280px]">
+                  Thử đăng nhập lại
+                </a>
               </div>
               <a href="https://yeunauan.live/my-courses" class="mt-4 inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full border border-brandBrown/10 text-brandBrown hover:bg-brandGray transition text-sm font-bold w-full">
                 Quay lại khóa học của tôi
@@ -2243,23 +2244,8 @@
 
     // waitForGoogleLibrary checks if Google GIS API script has loaded
 
-    async function waitForGoogleLibrary() {
-      if (typeof google !== "undefined" && google.accounts && google.accounts.id) return;
-      await new Promise((resolve, reject) => {
-        let count = 0;
-        const interval = setInterval(() => {
-          count++;
-          if (typeof google !== "undefined" && google.accounts && google.accounts.id) {
-            clearInterval(interval);
-            resolve();
-          }
-          if (count > 80) {
-            clearInterval(interval);
-            reject(new Error("Không thể tải Google Sign-In Client SDK"));
-          }
-        }, 100);
-      });
-    }
+    // Google GIS library removed - login handled by pure HTML form
+    // setupGoogleSignIn and waitForGoogleLibrary are no longer needed
 
     async function getPublicConfig() {
       try {
@@ -2269,21 +2255,6 @@
       } catch (err) {
         console.error("Config fetch failed:", err);
         return { googleClientId: "" };
-      }
-    }
-
-    async function setupGoogleSignIn(config) {
-      if (!config.googleClientId) return false;
-      try {
-        await waitForGoogleLibrary();
-        google.accounts.id.initialize({
-          client_id: config.googleClientId,
-          callback: (response) => loadCourseData({ credential: response.credential })
-        });
-        return true;
-      } catch (err) {
-        console.error("Init Google accounts failed:", err);
-        return false;
       }
     }
 
