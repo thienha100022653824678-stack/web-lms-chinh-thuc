@@ -91,14 +91,18 @@ export default async function handler(req, res) {
           updated_at: new Date().toISOString()
         };
 
-        let { error: insertErr } = await supabase.from("lessons").insert(insertPayload);
+    let { error: insertErr } = await supabase.from("lessons").insert(insertPayload);
 
-        // Fallback: If is_section column does not exist in Supabase schema yet, retry without is_section
-        if (insertErr && (insertErr.message?.includes("is_section") || insertErr.code === "PGRST204" || insertErr.message?.includes("column"))) {
-          console.warn("[admin-lessons] is_section column missing in DB, retrying insert without it...");
+        // Fallback: If insert fails for any reason (e.g. is_section column missing), retry without is_section
+        if (insertErr) {
+          console.warn("[admin-lessons] Insert with is_section failed:", insertErr.message, "- retrying without is_section...");
           delete insertPayload.is_section;
           const retryRes = await supabase.from("lessons").insert(insertPayload);
-          insertErr = retryRes.error;
+          if (!retryRes.error) {
+            insertErr = null;
+          } else {
+            console.error("[admin-lessons] Insert retry also failed:", retryRes.error.message);
+          }
         }
 
         if (insertErr) throw insertErr;
@@ -172,16 +176,20 @@ export default async function handler(req, res) {
           .eq("course_slug", originalCourse)
           .eq("lesson_no", parseInt(originalLesson, 10));
 
-        // Fallback: If is_section column does not exist in Supabase schema yet, retry without is_section
-        if (updateErr && (updateErr.message?.includes("is_section") || updateErr.code === "PGRST204" || updateErr.message?.includes("column"))) {
-          console.warn("[admin-lessons] is_section column missing in DB, retrying update without it...");
+        // Fallback: If update fails for any reason, retry without is_section
+        if (updateErr) {
+          console.warn("[admin-lessons] Update with is_section failed:", updateErr.message, "- retrying without is_section...");
           delete updatePayload.is_section;
           const retryRes = await supabase
             .from("lessons")
             .update(updatePayload)
             .eq("course_slug", originalCourse)
             .eq("lesson_no", parseInt(originalLesson, 10));
-          updateErr = retryRes.error;
+          if (!retryRes.error) {
+            updateErr = null;
+          } else {
+            console.error("[admin-lessons] Update retry also failed:", retryRes.error.message);
+          }
         }
 
         if (updateErr) throw updateErr;
@@ -242,7 +250,7 @@ export default async function handler(req, res) {
     console.error("[admin-lessons] Error:", err);
     return res.status(500).json({
       success: false,
-      error: "Lỗi server trong admin-lessons",
+      error: `Lỗi server trong admin-lessons: ${err.message || String(err)}`,
       message: err.message
     });
   }
