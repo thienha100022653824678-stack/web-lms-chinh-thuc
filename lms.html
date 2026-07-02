@@ -2296,7 +2296,29 @@
       showLoggedOutState();
     }
 
+    // UI Debugger helper for mobile devices (renders visible debug box at bottom of page)
+    function showDebugLog(step, detail, isError = false) {
+      let box = document.getElementById("uiDebugBox");
+      if (!box) {
+        box = document.createElement("div");
+        box.id = "uiDebugBox";
+        box.style.cssText = "position:fixed;bottom:10px;left:10px;right:10px;z-index:99999;background:rgba(0,0,0,0.92);color:#00ff66;font-family:monospace;font-size:11px;padding:12px;border-radius:10px;max-height:220px;overflow-y:auto;border:1px solid #00ff66;box-shadow:0 10px 25px rgba(0,0,0,0.8);";
+        box.innerHTML = `<div style="font-weight:bold;color:#fff;border-bottom:1px solid #444;padding-bottom:4px;margin-bottom:6px;display:flex;justify-space-between;"><span>🔍 LMS LIVE DEBUGGER</span><button onclick="this.parentElement.parentElement.remove()" style="color:#ff4444;font-weight:bold;background:none;border:none;cursor:pointer">✕ ĐÓNG</button></div><div id="uiDebugLogs"></div>`;
+        document.body.appendChild(box);
+      }
+      const logsContainer = document.getElementById("uiDebugLogs");
+      if (logsContainer) {
+        const line = document.createElement("div");
+        line.style.cssText = `margin-bottom:4px;word-break:break-all;${isError ? 'color:#ff5555;font-weight:bold;' : ''}`;
+        const time = new Date().toLocaleTimeString();
+        line.innerText = `[${time}] ${step}: ${detail}`;
+        logsContainer.appendChild(line);
+        box.scrollTop = box.scrollHeight;
+      }
+    }
+
     async function processCodeExchange(authCode) {
+      showDebugLog("BƯỚC 3 (Redirect)", "Nhận code thành công từ Google. Độ dài: " + (authCode ? authCode.length : 0));
       const statusBox = document.getElementById('statusBox');
       if (statusBox) {
         statusBox.innerHTML = `
@@ -2307,6 +2329,7 @@
       }
 
       try {
+        showDebugLog("BƯỚC 4 (Fetch API)", "Gửi code đến exchange-code.js...");
         const response = await fetch('/api/lms/portal?endpoint=exchange-code', {
           method: 'POST',
           credentials: 'include',
@@ -2318,9 +2341,11 @@
           })
         });
 
+        showDebugLog("BƯỚC 5 (Google Exchange)", "HTTP Status: " + response.status);
         const data = await response.json();
 
         if (!response.ok || !data.allowed) {
+          showDebugLog("BƯỚC 5 (Lỗi Exchange)", "Allowed: false, error=" + (data.error || "unk"), true);
           if (response.status === 401) {
             throw new Error((data.error || 'Xác thực Google thất bại') + (data.detail ? ': ' + data.detail : ''));
           }
@@ -2334,13 +2359,20 @@
           throw new Error(data.error || 'Lỗi không xác định (HTTP ' + response.status + ')');
         }
 
+        showDebugLog("BƯỚC 5 (Thành công)", "Google xác thực OK. Email: " + data.email);
+        showDebugLog("BƯỚC 6 (Session)", "Received sessionToken: " + !!data.sessionToken);
+
         // Clean URL on success
         const cleanUrl = window.location.origin + '/lms.html?course=' + encodeURIComponent(COURSE);
         history.replaceState(null, '', cleanUrl);
 
         // SUCCESS! Save session and show course
         saveSession(data);
+        showDebugLog("BƯỚC 7 (LocalStorage)", "Saved sessionToken to localStorage: " + !!getSavedSession());
+        
         showLoggedInState(data.email);
+        showDebugLog("BƯỚC 12 (Render UI)", "Hiển thị bài học thành công cho: " + data.email);
+
         if (data.courseInfo) {
           if (data.courseInfo.title) {
             const el = document.getElementById('courseTitle');
@@ -2362,6 +2394,7 @@
         return true;
 
       } catch(e) {
+        showDebugLog("CẢNH BÁO", "Lỗi xử lý: " + e.message, true);
         console.error('Code exchange error:', e);
         if (statusBox) {
           statusBox.innerHTML = `
@@ -2384,6 +2417,7 @@
       const authCode = urlParams.get('code');
 
       if (authCode) {
+        showDebugLog("BƯỚC 1 & 2", "Đã phát hiện ?code= trong URL!");
         return await processCodeExchange(authCode);
       }
       return false;

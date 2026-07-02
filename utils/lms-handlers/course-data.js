@@ -265,8 +265,21 @@ export default async function handler(req, res) {
     const authHeader = req.headers?.authorization || req.headers?.Authorization || "";
     const bearerToken = authHeader.replace(/^Bearer\s+/i, "").trim();
 
-    // Prioritize: 1. Cookie, 2. Bearer Header, 3. Body sessionToken
-    const sToken = cookies[SESSION_COOKIE] || bearerToken || sessionToken;
+    // Determine token source
+    let tokenSource = "none";
+    let sToken = "";
+    if (cookies[SESSION_COOKIE]) {
+      sToken = cookies[SESSION_COOKIE];
+      tokenSource = "cookie";
+    } else if (bearerToken) {
+      sToken = bearerToken;
+      tokenSource = "authorization_header";
+    } else if (sessionToken) {
+      sToken = sessionToken;
+      tokenSource = "request_body";
+    }
+
+    console.log(`[course-data] Session token check for course=${courseSlug}, source=${tokenSource}, tokenPresent=${!!sToken}`);
 
     let email = null;
     let fromSession = false;
@@ -276,14 +289,19 @@ export default async function handler(req, res) {
       if (decoded && decoded.email) {
         email = decoded.email;
         fromSession = true;
+        console.log(`[course-data] Verified session token for email=${email} (source=${tokenSource})`);
+      } else {
+        console.warn(`[course-data] Failed to verify session token from source=${tokenSource}`);
       }
     }
 
     if (!email && credential) {
       email = await verifyGoogleIdToken(credential);
+      console.log(`[course-data] Verified Google idToken credential for email=${email}`);
     }
 
     if (!email) {
+      console.warn(`[course-data] 401: No valid email found in session or credential`);
       return res.status(401).json({
         allowed: false,
         error: "Missing or expired login session",
@@ -292,17 +310,23 @@ export default async function handler(req, res) {
     }
 
     // 1. Fetch all active course enrollments for this student
+    console.log(`[course-data] Querying enrollments for email=${email}`);
     const { data: enrollments, error: enrollError } = await supabase
       .from("student_enrollments")
       .select("course_slug, status")
       .eq("email", email)
       .in("status", ["active", "approved", "approved_ready", "completed"]);
 
-    if (enrollError) throw enrollError;
+    if (enrollError) {
+      console.error("[course-data] Supabase enrollError:", enrollError);
+      throw enrollError;
+    }
 
     const allowedCourses = (enrollments || []).map(e => e.course_slug);
+    console.log(`[course-data] Found ${enrollments?.length || 0} enrollments for ${email}:`, JSON.stringify(enrollments));
 
     if (allowedCourses.length === 0) {
+      console.warn(`[course-data] 403: Email ${email} has 0 allowed courses`);
       return res.status(403).json({
         allowed: false,
         email,
@@ -316,6 +340,7 @@ export default async function handler(req, res) {
 
     // Check if the student is enrolled in the target course
     if (!allowedCourses.includes(activeCourseSlug)) {
+      console.warn(`[course-data] 403: Email ${email} not enrolled in activeCourseSlug=${activeCourseSlug}. Allowed:`, allowedCourses);
       return res.status(403).json({
         allowed: false,
         email,

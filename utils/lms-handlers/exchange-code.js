@@ -28,6 +28,8 @@ export default async function handler(req, res) {
     const { code, redirectUri, course } = req.body || {};
     if (!code) return res.status(400).json({ allowed: false, error: "Missing authorization code" });
 
+    console.log(`[exchange-code] Received request for course=${course}, code length=${code ? code.length : 0}`);
+
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
     if (!clientId || !clientSecret) {
@@ -49,12 +51,14 @@ export default async function handler(req, res) {
     });
     const tokenData = await tokenResponse.json();
     if (!tokenResponse.ok || tokenData.error) {
-      console.error("[exchange-code] Token exchange failed:", tokenData);
+      console.error("[exchange-code] Google token exchange failed (HTTP " + tokenResponse.status + "):", tokenData);
       return res.status(401).json({
         allowed: false, error: "Google token exchange failed",
         detail: tokenData.error_description || tokenData.error || "Unknown error"
       });
     }
+
+    console.log("[exchange-code] Google token exchange SUCCESSFUL");
 
     // 2. Decode id_token (we trust Google's token endpoint response)
     const idToken = tokenData.id_token;
@@ -65,7 +69,11 @@ export default async function handler(req, res) {
       const parts = idToken.split(".");
       const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
       email = normalizeEmail(payload.email);
-      if (payload.aud !== clientId) return res.status(401).json({ allowed: false, error: "Token audience mismatch" });
+      console.log(`[exchange-code] Decoded email from id_token: ${email}`);
+      if (payload.aud !== clientId) {
+        console.error(`[exchange-code] Token audience mismatch: ${payload.aud} !== ${clientId}`);
+        return res.status(401).json({ allowed: false, error: "Token audience mismatch" });
+      }
     } catch (decodeErr) {
       console.error("[exchange-code] Failed to decode id_token:", decodeErr);
       return res.status(401).json({ allowed: false, error: "Invalid id_token format" });
@@ -74,17 +82,25 @@ export default async function handler(req, res) {
 
     // 3. Check enrollment
     const courseSlug = String(course || "").trim();
+    console.log(`[exchange-code] Querying enrollments for email=${email}, target course=${courseSlug}`);
     const { data: enrollments, error: enrollError } = await supabase
       .from("student_enrollments").select("course_slug, status").eq("email", email).in("status", ["active", "approved", "approved_ready", "completed"]);
-    if (enrollError) throw enrollError;
+    if (enrollError) {
+      console.error("[exchange-code] Supabase enrollments query error:", enrollError);
+      throw enrollError;
+    }
+
+    console.log(`[exchange-code] Found ${enrollments?.length || 0} enrollments:`, JSON.stringify(enrollments));
 
     const allowedCourses = (enrollments || []).map(e => e.course_slug);
     if (allowedCourses.length === 0) {
+      console.warn(`[exchange-code] 403: Email ${email} has 0 active enrollments`);
       return res.status(403).json({ allowed: false, email, error: "Student has no active course enrollments" });
     }
 
     const activeCourseSlug = courseSlug && allowedCourses.includes(courseSlug) ? courseSlug : allowedCourses[0];
     if (courseSlug && !allowedCourses.includes(courseSlug)) {
+      console.warn(`[exchange-code] 403: Email ${email} not enrolled in target course ${courseSlug}. Allowed:`, allowedCourses);
       return res.status(403).json({
         allowed: false, email,
         error: "Tai khoan " + email + " chua kich hoat khoa hoc nay.",
@@ -126,7 +142,9 @@ export default async function handler(req, res) {
 
     // 5. Create session & return
     const newSession = createStudentSession(email);
-    res.setHeader("Set-Cookie", SESSION_COOKIE + "=" + encodeURIComponent(newSession.token) + "; " + cookieOptions(newSession.expiresAt - Date.now()));
+    const cookieHeader = SESSION_COOKIE + "=" + encodeURIComponent(newSession.token) + "; " + cookieOptions(newSession.expiresAt - Date.now());
+    res.setHeader("Set-Cookie", cookieHeader);
+    console.log(`[exchange-code] SUCCESS! Created session for ${email}, Set-Cookie header length=${cookieHeader.length}`);
 
     return res.status(200).json({
       allowed: true, apiVersion: "premium-bunny-stream-v1", email,
