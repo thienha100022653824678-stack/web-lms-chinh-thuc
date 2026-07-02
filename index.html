@@ -2364,31 +2364,12 @@
         const cleanUrl = window.location.origin + '/lms.html?course=' + encodeURIComponent(COURSE);
         history.replaceState(null, '', cleanUrl);
 
-        // SUCCESS! Save session and show course
+        // SUCCESS! Save session and immediately load course data
         saveSession(data);
         showDebugLog("BƯỚC 7 (LocalStorage)", "Saved sessionToken to localStorage: " + !!getSavedSession());
-        
-        showLoggedInState(data.email);
-        showDebugLog("BƯỚC 12 (Render UI)", "Hiển thị bài học thành công cho: " + data.email);
 
-        if (data.courseInfo) {
-          if (data.courseInfo.title) {
-            const el = document.getElementById('courseTitle');
-            if (el) el.innerHTML = data.courseInfo.title;
-          }
-          if (data.courseInfo.subtitle) {
-            const el = document.getElementById('courseSubtitle');
-            if (el) el.innerText = data.courseInfo.subtitle;
-          }
-          if (data.courseInfo.heroImage) setHeroImageSource(data.courseInfo.heroImage);
-        }
-        if (data.lessons) {
-          currentLessons = data.lessons;
-          renderLessons(data.lessons);
-        }
-        if (data.allowedCourses && data.allowedCourses.length > 1) {
-          renderCourseSwitcher(data.allowedCourses, COURSE);
-        }
+        showDebugLog("BƯỚC 8 (Load Lessons)", "Calling loadCourseData for course: " + COURSE);
+        await loadCourseData({ sessionToken: data.sessionToken, course: COURSE });
         return true;
 
       } catch(e) {
