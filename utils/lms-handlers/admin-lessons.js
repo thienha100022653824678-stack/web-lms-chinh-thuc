@@ -73,25 +73,33 @@ export default async function handler(req, res) {
           .eq("slug", lessonData.course)
           .maybeSingle();
 
-        const { error: insertErr } = await supabase
-          .from("lessons")
-          .insert({
-            course_id: courseRec?.id || null,
-            course_slug: lessonData.course,
-            lesson_no: parseInt(lessonData.lesson, 10),
-            title: lessonData.title,
-            description: lessonData.description || "",
-            duration_text: lessonData.duration || "",
-            level: lessonData.level || "",
-            thumbnail_url: lessonData.thumbnailUrl || "",
-            video_url: lessonData.videoUrl || "",
-            recipe_url: lessonData.recipeUrl || "",
-            media_urls: lessonData.mediaUrls || "",
-            is_section: Boolean(lessonData.isSection),
-            status: "active",
-            sort_order: parseInt(lessonData.lesson, 10),
-            updated_at: new Date().toISOString()
-          });
+        const insertPayload = {
+          course_id: courseRec?.id || null,
+          course_slug: lessonData.course,
+          lesson_no: parseInt(lessonData.lesson, 10),
+          title: lessonData.title,
+          description: lessonData.description || "",
+          duration_text: lessonData.duration || "",
+          level: lessonData.level || "",
+          thumbnail_url: lessonData.thumbnailUrl || "",
+          video_url: lessonData.videoUrl || "",
+          recipe_url: lessonData.recipeUrl || "",
+          media_urls: lessonData.mediaUrls || "",
+          is_section: Boolean(lessonData.isSection),
+          status: "active",
+          sort_order: parseInt(lessonData.lesson, 10),
+          updated_at: new Date().toISOString()
+        };
+
+        let { error: insertErr } = await supabase.from("lessons").insert(insertPayload);
+
+        // Fallback: If is_section column does not exist in Supabase schema yet, retry without is_section
+        if (insertErr && (insertErr.message?.includes("is_section") || insertErr.code === "PGRST204" || insertErr.message?.includes("column"))) {
+          console.warn("[admin-lessons] is_section column missing in DB, retrying insert without it...");
+          delete insertPayload.is_section;
+          const retryRes = await supabase.from("lessons").insert(insertPayload);
+          insertErr = retryRes.error;
+        }
 
         if (insertErr) throw insertErr;
 
@@ -140,27 +148,41 @@ export default async function handler(req, res) {
           .eq("slug", lessonData.course)
           .maybeSingle();
 
-        const { error: updateErr } = await supabase
+        const updatePayload = {
+          course_id: courseRec?.id || null,
+          course_slug: lessonData.course,
+          lesson_no: parseInt(lessonData.lesson, 10),
+          title: lessonData.title,
+          description: lessonData.description || "",
+          duration_text: lessonData.duration || "",
+          level: lessonData.level || "",
+          thumbnail_url: lessonData.thumbnailUrl || "",
+          video_url: lessonData.videoUrl || "",
+          recipe_url: lessonData.recipeUrl || "",
+          media_urls: lessonData.mediaUrls || "",
+          is_section: Boolean(lessonData.isSection),
+          status: lessonData.status || "active",
+          sort_order: parseInt(lessonData.lesson, 10),
+          updated_at: new Date().toISOString()
+        };
+
+        let { error: updateErr } = await supabase
           .from("lessons")
-          .update({
-            course_id: courseRec?.id || null,
-            course_slug: lessonData.course,
-            lesson_no: parseInt(lessonData.lesson, 10),
-            title: lessonData.title,
-            description: lessonData.description || "",
-            duration_text: lessonData.duration || "",
-            level: lessonData.level || "",
-            thumbnail_url: lessonData.thumbnailUrl || "",
-            video_url: lessonData.videoUrl || "",
-            recipe_url: lessonData.recipeUrl || "",
-            media_urls: lessonData.mediaUrls || "",
-            is_section: Boolean(lessonData.isSection),
-            status: lessonData.status || "active",
-            sort_order: parseInt(lessonData.lesson, 10),
-            updated_at: new Date().toISOString()
-          })
+          .update(updatePayload)
           .eq("course_slug", originalCourse)
           .eq("lesson_no", parseInt(originalLesson, 10));
+
+        // Fallback: If is_section column does not exist in Supabase schema yet, retry without is_section
+        if (updateErr && (updateErr.message?.includes("is_section") || updateErr.code === "PGRST204" || updateErr.message?.includes("column"))) {
+          console.warn("[admin-lessons] is_section column missing in DB, retrying update without it...");
+          delete updatePayload.is_section;
+          const retryRes = await supabase
+            .from("lessons")
+            .update(updatePayload)
+            .eq("course_slug", originalCourse)
+            .eq("lesson_no", parseInt(originalLesson, 10));
+          updateErr = retryRes.error;
+        }
 
         if (updateErr) throw updateErr;
 
