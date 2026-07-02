@@ -262,7 +262,11 @@ export default async function handler(req, res) {
     const { credential, sessionToken, course } = req.body || {};
     const courseSlug = String(course || "").trim();
     const cookies = parseCookies(req);
-    const sToken = sessionToken || cookies[SESSION_COOKIE];
+    const authHeader = req.headers?.authorization || req.headers?.Authorization || "";
+    const bearerToken = authHeader.replace(/^Bearer\s+/i, "").trim();
+
+    // Prioritize: 1. Cookie, 2. Bearer Header, 3. Body sessionToken
+    const sToken = cookies[SESSION_COOKIE] || bearerToken || sessionToken;
 
     let email = null;
     let fromSession = false;
