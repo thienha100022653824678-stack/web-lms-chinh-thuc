@@ -1460,6 +1460,14 @@
         `;
         list.appendChild(paginator);
       }
+
+      const lessonCountEl = document.getElementById("lessonCount");
+      if (lessonCountEl) {
+        lessonCountEl.innerText = `${realLessons.length} bài học được biên soạn chuẩn khoa học`;
+      }
+      const statusBox = document.getElementById("statusBox");
+      if (statusBox) statusBox.classList.add("hidden");
+      if (list) list.classList.remove("hidden");
     }
 
     function toggleChapterSection(secId) {
@@ -1473,26 +1481,6 @@
         sec.classList.add("hidden");
         if (icon) icon.style.transform = "rotate(-90deg)";
       }
-    }ter gap-3 mt-8 pt-4 border-t border-brandBrown/5";
-
-        const dots = Array.from({ length: pageCount }).map((_, i) => `
-          <button class="w-2.5 h-2.5 rounded-full transition duration-150 ${i === currentPage ? 'bg-brandGreen scale-125' : 'bg-brandBrown/20'}" onclick="goLessonPage(${i})"></button>
-        `).join("");
-
-        paginator.innerHTML = `
-          <div class="flex items-center gap-6">
-            <button class="w-10 h-10 rounded-full bg-white border border-brandBrown/10 flex items-center justify-center font-bold text-brandBrown hover:bg-brandCream shadow-sm" onclick="changeLessonPage(-1)">‹</button>
-            <div class="flex items-center gap-2.5">${dots}</div>
-            <button class="w-10 h-10 rounded-full bg-white border border-brandBrown/10 flex items-center justify-center font-bold text-brandBrown hover:bg-brandCream shadow-sm" onclick="changeLessonPage(1)">›</button>
-          </div>
-          <span class="text-xs text-brandBrown/65 font-bold">Trang ${currentPage + 1} / ${pageCount}</span>
-        `;
-        list.appendChild(paginator);
-      }
-
-      document.getElementById("lessonCount").innerText = `${total} bài học được biên soạn chuẩn khoa học`;
-      document.getElementById("statusBox").classList.add("hidden");
-      list.classList.remove("hidden");
     }
 
     function changeLessonPage(delta) {
