@@ -1329,10 +1329,47 @@
       if (percentText) percentText.innerText = "0%";
     }
 
+    function calculateNextLessonNumber(isSectionChecked = false) {
+      if (isSectionChecked) {
+        // If creating a section, return total items + 1 for sort_order / unique ID
+        return STATE.lessons.length + 1;
+      }
+
+      const hasSection = STATE.lessons.some(l => l.isSection);
+      if (!hasSection) {
+        // No sections exist: count only real lessons (is_section = false) + 1
+        const realLessons = STATE.lessons.filter(l => !l.isSection);
+        return realLessons.length + 1;
+      }
+
+      // If sections exist: count real lessons under the LAST section
+      let lastSectionIdx = -1;
+      for (let i = STATE.lessons.length - 1; i >= 0; i--) {
+        if (STATE.lessons[i].isSection) {
+          lastSectionIdx = i;
+          break;
+        }
+      }
+
+      if (lastSectionIdx === -1) {
+        return STATE.lessons.filter(l => !l.isSection).length + 1;
+      }
+
+      // Count real lessons after the last section
+      let countInCurrentSection = 0;
+      for (let i = lastSectionIdx + 1; i < STATE.lessons.length; i++) {
+        if (!STATE.lessons[i].isSection) {
+          countInCurrentSection++;
+        }
+      }
+      return countInCurrentSection + 1;
+    }
+
     function toggleSectionMode(isSection) {
       const detailFields = document.getElementById("lessonDetailFields");
       const titleLabel = document.getElementById("fTitleLabel");
       const titleInput = document.getElementById("fTitle");
+      const lessonInput = document.getElementById("fLesson");
 
       if (detailFields) {
         if (isSection) {
@@ -1347,6 +1384,11 @@
       }
       if (titleInput && isSection && !titleInput.value) {
         titleInput.placeholder = "Ví dụ: CHƯƠNG 1 — Giới thiệu khóa học";
+      }
+
+      // Update fLesson dynamically when toggling checkbox in create mode
+      if (lessonInput && !STATE.isEditMode) {
+        lessonInput.value = calculateNextLessonNumber(isSection);
       }
     }
 
@@ -1367,14 +1409,14 @@
       badge.className = "text-[9px] font-black tracking-wider px-2.5 py-1 rounded-full bg-blue-50 text-blue-600 uppercase";
 
       document.getElementById("fCourse").value = course;
-      document.getElementById("fLesson").value = STATE.lessons.length + 1;
+      document.getElementById("fIsSection").checked = false;
+      toggleSectionMode(false);
+      document.getElementById("fLesson").value = calculateNextLessonNumber(false);
       document.getElementById("fTitle").value = "";
       document.getElementById("fDescription").value = "";
       document.getElementById("fDuration").value = "";
       document.getElementById("fLevel").value = "Cơ bản";
       document.getElementById("fStatus").value = "active";
-      document.getElementById("fIsSection").checked = false;
-      toggleSectionMode(false);
       document.getElementById("fThumbnailUrl").value = "";
       document.getElementById("fVideoUrl").value = "";
       document.getElementById("fRecipeUrl").value = "";
