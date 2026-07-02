@@ -326,7 +326,7 @@
         (function(){
           try {
             var params = new URLSearchParams(window.location.search);
-            var course = params.get('course') || params.get('state') || sessionStorage.getItem('lms_return_course') || 'banhmi4k';
+            var course = params.get('course') || 'banh-mi';
             var f = document.getElementById('gLoginForm');
             if (f) {
               f.querySelector('[name=redirect_uri]').value = window.location.origin + '/lms.html';
@@ -499,9 +499,11 @@
     // Configuration values derived from URL query parameters and local storage
     // Use 'let' so we can restore course from OAuth state param after redirect
     const _urlParams = new URLSearchParams(window.location.search);
-    let COURSE = _urlParams.get("course") || _urlParams.get("state") || sessionStorage.getItem("lms_return_course") || "banhmi4k";
-    // Ensure COURSE is synced back to sessionStorage
-    try { sessionStorage.setItem("lms_return_course", COURSE); } catch(e) {}
+    let COURSE = _urlParams.get("course");
+    // If returning from OAuth redirect (code or id_token in URL), restore course from state or sessionStorage
+    if (!COURSE) {
+      COURSE = _urlParams.get('state') || sessionStorage.getItem('lms_return_course') || 'banh-mi';
+    }
     function switchLmsCourse(slug) {
       if (!slug) return;
       window.location.href = `?course=${encodeURIComponent(slug)}`;
@@ -793,14 +795,8 @@
 
     function saveSession(data) {
       try {
-        if (data && data.sessionToken) {
-          localStorage.setItem(SESSION_KEY, data.sessionToken);
-          localStorage.setItem("course_session_token", data.sessionToken);
-        }
-        if (data && data.email) {
-          localStorage.setItem(SESSION_EMAIL_KEY, data.email);
-          localStorage.setItem("last_student_email", data.email);
-        }
+        if (data && data.sessionToken) localStorage.setItem(SESSION_KEY, data.sessionToken);
+        if (data && data.email) localStorage.setItem(SESSION_EMAIL_KEY, data.email);
         if (data && data.sessionExpiresAt) localStorage.setItem(SESSION_EXP_KEY, String(data.sessionExpiresAt));
       } catch (err) {
         console.warn("Session saving failed:", err);
@@ -812,7 +808,7 @@
       let token = null;
       let exp = 0;
       try {
-        token = localStorage.getItem(SESSION_KEY) || localStorage.getItem("course_session_token");
+        token = localStorage.getItem(SESSION_KEY);
         exp = Number(localStorage.getItem(SESSION_EXP_KEY) || 0);
       } catch (err) {
         console.warn("Reading session from localStorage failed:", err);
@@ -2155,17 +2151,11 @@
       `;
 
       try {
-        const savedToken = getSavedSession();
-        const payload = { course: COURSE, sessionToken: savedToken, ...authPayload };
-        const headers = { "Content-Type": "application/json" };
-        if (savedToken) {
-          headers["Authorization"] = `Bearer ${savedToken}`;
-        }
-
+        const payload = { course: COURSE, ...authPayload };
         const response = await fetch("/api/lms/portal?endpoint=course-data", {
           method: "POST",
-          credentials: "include",
-          headers,
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
         });
 
@@ -2195,13 +2185,6 @@
         // Save session & setup views
         saveSession(data);
         showLoggedInState(data.email);
-
-        // Hide statusBox login container and unhide lessonList container
-        statusBox.classList.add("hidden");
-        const lessonList = document.getElementById("lessonList");
-        if (lessonList) {
-          lessonList.classList.remove("hidden");
-        }
 
         // Populate course switcher if student has multiple active courses
         if (data.allowedCourses && data.allowedCourses.length > 1) {
@@ -2253,6 +2236,11 @@
       }
     }
 
+    // waitForGoogleLibrary checks if Google GIS API script has loaded
+
+    // Google GIS library removed - login handled by pure HTML form
+    // setupGoogleSignIn and waitForGoogleLibrary are no longer needed
+
     async function getPublicConfig() {
       try {
         const res = await fetch(`/api/lms/portal?endpoint=public-config&course=${encodeURIComponent(COURSE)}`);
@@ -2270,30 +2258,31 @@
         await loadCourseData({ sessionToken: savedToken });
         return true;
       }
-      // Auto-restore fallback for approved student email
-      const savedEmail = localStorage.getItem("course_session_email_" + COURSE) || localStorage.getItem("last_student_email");
-      if (savedEmail && savedEmail.includes("@")) {
-        console.log("Auto-restoring session for email:", savedEmail);
-        await loadCourseData({ email: savedEmail, course: COURSE });
-        return true;
-      }
       return false;
     }
 
     async function initGoogle() {
-      // 1. Check if returning from Google OAuth redirect
-      if (await handleOAuthRedirect()) return;
+      // Check if we were expecting to return from Google OAuth
+      let wasLoggingIn = false;
+      try {
+        wasLoggingIn = sessionStorage.getItem('lms_logging_in') === 'true';
+        sessionStorage.removeItem('lms_logging_in');
+      } catch(e) {}
+
+      // 1. Check if returning from Google OAuth redirect (id_token in URL hash)
+      if (await handleOAuthRedirect(wasLoggingIn)) return;
 
       // 2. Try to restore existing session
       if (await tryRestoreSession()) return;
 
-      // 3. Fetch config from server
+      // 3. Fetch config from server (includes googleClientId and course info)
       let config;
       try {
         config = await getPublicConfig();
       } catch(e) {
         config = { googleClientId: "" };
       }
+      _googleClientId = config.googleClientId || GOOGLE_CLIENT_ID_HARDCODE;
 
       // 4. Render course metadata
       if (config.courseInfo) {
@@ -2310,121 +2299,125 @@
         }
       }
 
-      // 5. Show login UI
+      // 5. Show login UI (form is already functional in HTML)
       showLoggedOutState();
     }
 
-    // UI Debugger helper for mobile devices (renders visible debug box at bottom of page)
-    function showDebugLog(step, detail, isError = false) {
-      let box = document.getElementById("uiDebugBox");
-      if (!box) {
-        box = document.createElement("div");
-        box.id = "uiDebugBox";
-        box.style.cssText = "position:fixed;bottom:10px;left:10px;right:10px;z-index:99999;background:rgba(0,0,0,0.92);color:#00ff66;font-family:monospace;font-size:11px;padding:12px;border-radius:10px;max-height:220px;overflow-y:auto;border:1px solid #00ff66;box-shadow:0 10px 25px rgba(0,0,0,0.8);";
-        box.innerHTML = `<div style="font-weight:bold;color:#fff;border-bottom:1px solid #444;padding-bottom:4px;margin-bottom:6px;display:flex;justify-space-between;"><span>🔍 LMS LIVE DEBUGGER</span><button onclick="this.parentElement.parentElement.remove()" style="color:#ff4444;font-weight:bold;background:none;border:none;cursor:pointer">✕ ĐÓNG</button></div><div id="uiDebugLogs"></div>`;
-        document.body.appendChild(box);
-      }
-      const logsContainer = document.getElementById("uiDebugLogs");
-      if (logsContainer) {
-        const line = document.createElement("div");
-        line.style.cssText = `margin-bottom:4px;word-break:break-all;${isError ? 'color:#ff5555;font-weight:bold;' : ''}`;
-        const time = new Date().toLocaleTimeString();
-        line.innerText = `[${time}] ${step}: ${detail}`;
-        logsContainer.appendChild(line);
-        box.scrollTop = box.scrollHeight;
-      }
-    }
-
-    async function processCodeExchange(authCode) {
-      showDebugLog("BƯỚC 3 (Redirect)", "Nhận code thành công từ Google. Độ dài: " + (authCode ? authCode.length : 0));
-      const statusBox = document.getElementById('statusBox');
-      if (statusBox) {
-        statusBox.innerHTML = `
-          <div class="text-4xl mb-4">⏳</div>
-          <p class="font-extrabold text-lg sm:text-xl text-brandBrown mb-2">Đang xác thực Gmail...</p>
-          <p class="text-brandBrown/60 text-sm">Vui lòng chờ trong giây lát</p>
-        `;
-      }
-
-      try {
-        showDebugLog("BƯỚC 4 (Fetch API)", "Gửi code đến exchange-code.js...");
-        const response = await fetch('/api/lms/portal?endpoint=exchange-code', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            code: authCode,
-            redirectUri: window.location.origin + '/lms.html',
-            course: COURSE
-          })
-        });
-
-        showDebugLog("BƯỚC 5 (Google Exchange)", "HTTP Status: " + response.status);
-        const data = await response.json();
-
-        if (!response.ok || !data.allowed) {
-          showDebugLog("BƯỚC 5 (Lỗi Exchange)", "Allowed: false, error=" + (data.error || "unk"), true);
-          if (response.status === 401) {
-            throw new Error((data.error || 'Xác thực Google thất bại') + (data.detail ? ': ' + data.detail : ''));
-          }
-          if (response.status === 403) {
-            clearSession();
-            const cleanUrl = window.location.origin + '/lms.html?course=' + encodeURIComponent(COURSE);
-            history.replaceState(null, '', cleanUrl);
-            showLoggedOutState(true, data.email || '');
-            return true;
-          }
-          throw new Error(data.error || 'Lỗi không xác định (HTTP ' + response.status + ')');
-        }
-
-        showDebugLog("BƯỚC 5 (Thành công)", "Google xác thực OK. Email: " + data.email);
-        showDebugLog("BƯỚC 6 (Session)", "Received sessionToken: " + !!data.sessionToken);
-
-        // Clean URL on success
-        const cleanUrl = window.location.origin + '/lms.html?course=' + encodeURIComponent(COURSE);
-        history.replaceState(null, '', cleanUrl);
-
-        // SUCCESS! Save session and immediately load course data
-        saveSession(data);
-        showDebugLog("BƯỚC 7 (LocalStorage)", "Saved sessionToken to localStorage: " + !!getSavedSession());
-
-        showDebugLog("BƯỚC 8 (Load Lessons)", "Calling loadCourseData for course: " + COURSE);
-        await loadCourseData({ sessionToken: data.sessionToken, course: COURSE });
-        return true;
-
-      } catch(e) {
-        showDebugLog("CẢNH BÁO", "Lỗi xử lý: " + e.message, true);
-        console.error('Code exchange error:', e);
-        if (statusBox) {
-          statusBox.innerHTML = `
-            <div class="text-4xl mb-4">🚨</div>
-            <p class="font-extrabold text-lg sm:text-xl text-brandOrange mb-2">Lỗi xác thực Google</p>
-            <p class="text-brandBrown/80 font-mono text-xs max-w-md mx-auto leading-relaxed mb-4 bg-red-50 p-3 rounded-lg border border-red-200 break-all text-left">
-              ${escapeHtml(e.message || String(e))}
-            </p>
-            <a href="?course=${COURSE}" class="mt-4 inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full bg-brandGreen text-white font-bold text-sm w-full max-w-[280px]">
-              Thử đăng nhập lại
-            </a>
-          `;
-        }
-        return true;
-      }
-    }
-
-    async function handleOAuthRedirect() {
+    // Handle authorization code returned in URL query params after Google OAuth redirect
+    // Also supports legacy id_token in hash for backward compatibility
+    async function handleOAuthRedirect(wasLoggingIn) {
       const urlParams = new URLSearchParams(window.location.search);
       const authCode = urlParams.get('code');
+      const hash = window.location.hash;
 
+      // Authorization Code Flow (primary - recommended by Google)
       if (authCode) {
-        showDebugLog("BƯỚC 1 & 2", "Đã phát hiện ?code= trong URL!");
-        // Force DOM unhide of lessons container immediately
-        const sb = document.getElementById("statusBox");
-        if (sb) sb.classList.add("hidden");
-        const ll = document.getElementById("lessonList");
-        if (ll) ll.classList.remove("hidden");
+        const statusBox = document.getElementById('statusBox');
+        if (statusBox) {
+          statusBox.innerHTML = `
+            <div class="text-4xl mb-4">⏳</div>
+            <p class="font-extrabold text-lg sm:text-xl text-brandBrown mb-2">Đang xác thực Gmail...</p>
+            <p class="text-brandBrown/60 text-sm">Vui lòng chờ trong giây lát</p>
+          `;
+        }
 
-        return await processCodeExchange(authCode);
+        try {
+          // Exchange code for tokens + course data via server
+          const response = await fetch('/api/lms/portal?endpoint=exchange-code', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              code: authCode,
+              redirectUri: window.location.origin + '/lms.html',
+              course: COURSE
+            })
+          });
+
+          const data = await response.json();
+
+          if (!response.ok || !data.allowed) {
+            if (response.status === 401) {
+              throw new Error((data.error || 'Xác thực Google thất bại') + (data.detail ? ': ' + data.detail : ''));
+            }
+            if (response.status === 403) {
+              clearSession();
+              // Clean URL
+              const cleanUrl = window.location.origin + '/lms.html?course=' + encodeURIComponent(COURSE);
+              history.replaceState(null, '', cleanUrl);
+              showLoggedOutState(true, data.email || '');
+              return true;
+            }
+            throw new Error(data.error || 'Lỗi không xác định (HTTP ' + response.status + ')');
+          }
+
+          // Clean URL on success
+          const cleanUrl = window.location.origin + '/lms.html?course=' + encodeURIComponent(COURSE);
+          history.replaceState(null, '', cleanUrl);
+
+          // SUCCESS! Save session and show course
+          saveSession(data);
+          showLoggedInState(data.email);
+          if (data.courseInfo) {
+            if (data.courseInfo.title) {
+              const el = document.getElementById('courseTitle');
+              if (el) el.innerHTML = data.courseInfo.title;
+            }
+            if (data.courseInfo.subtitle) {
+              const el = document.getElementById('courseSubtitle');
+              if (el) el.innerText = data.courseInfo.subtitle;
+            }
+            if (data.courseInfo.heroImage) setHeroImageSource(data.courseInfo.heroImage);
+          }
+          if (data.lessons) {
+            currentLessons = data.lessons;
+            renderLessons(data.lessons);
+          }
+          if (data.allowedCourses && data.allowedCourses.length > 1) {
+            renderCourseSwitcher(data.allowedCourses, COURSE);
+          }
+          return true;
+
+        } catch(e) {
+          console.error('Code exchange error:', e);
+          const statusBox = document.getElementById('statusBox');
+          if (statusBox) {
+            statusBox.innerHTML = `
+              <div class="text-4xl mb-4">🚨</div>
+              <p class="font-extrabold text-lg sm:text-xl text-brandOrange mb-2">Lỗi xác thực Google</p>
+              <p class="text-brandBrown/80 font-mono text-xs max-w-md mx-auto leading-relaxed mb-4 bg-red-50 p-3 rounded-lg border border-red-200 break-all text-left">
+                ${escapeHtml(e.message || String(e))}
+              </p>
+              <a href="?course=${COURSE}" class="mt-4 inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full bg-brandGreen text-white font-bold text-sm w-full max-w-[280px]">
+                Thử đăng nhập lại
+              </a>
+            `;
+          }
+          return true;
+        }
       }
+
+      // Legacy: implicit flow (id_token in hash) - backward compatibility
+      if (hash && hash.includes('id_token=')) {
+        const statusBox = document.getElementById('statusBox');
+        if (statusBox) {
+          statusBox.innerHTML = `
+            <div class="text-4xl mb-4">⏳</div>
+            <p class="font-extrabold text-lg sm:text-xl text-brandBrown mb-2">Đang xác thực Gmail...</p>
+          `;
+        }
+        try {
+          const params = new URLSearchParams(hash.substring(1));
+          const idToken = params.get('id_token');
+          if (!idToken) throw new Error('Missing id_token in hash');
+          history.replaceState(null, '', window.location.pathname + '?course=' + encodeURIComponent(COURSE));
+          await loadCourseData({ credential: idToken });
+          return true;
+        } catch(e) {
+          console.error('Legacy OAuth error:', e);
+          return false;
+        }
+      }
+
       return false;
     }
 

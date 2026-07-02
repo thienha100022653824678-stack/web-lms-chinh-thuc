@@ -1,7 +1,6 @@
 import { supabase } from "../supabase.js";
 import {
   normalizeEmail,
-  isAdminEmail,
   verifyStudentSession,
   createStudentSession,
   verifyGoogleIdToken,
@@ -263,24 +262,7 @@ export default async function handler(req, res) {
     const { credential, sessionToken, course } = req.body || {};
     const courseSlug = String(course || "").trim();
     const cookies = parseCookies(req);
-    const authHeader = req.headers?.authorization || req.headers?.Authorization || "";
-    const bearerToken = authHeader.replace(/^Bearer\s+/i, "").trim();
-
-    // Determine token source
-    let tokenSource = "none";
-    let sToken = "";
-    if (cookies[SESSION_COOKIE]) {
-      sToken = cookies[SESSION_COOKIE];
-      tokenSource = "cookie";
-    } else if (bearerToken) {
-      sToken = bearerToken;
-      tokenSource = "authorization_header";
-    } else if (sessionToken) {
-      sToken = sessionToken;
-      tokenSource = "request_body";
-    }
-
-    console.log(`[course-data] Session token check for course=${courseSlug}, source=${tokenSource}, tokenPresent=${!!sToken}`);
+    const sToken = sessionToken || cookies[SESSION_COOKIE];
 
     let email = null;
     let fromSession = false;
@@ -290,19 +272,14 @@ export default async function handler(req, res) {
       if (decoded && decoded.email) {
         email = decoded.email;
         fromSession = true;
-        console.log(`[course-data] Verified session token for email=${email} (source=${tokenSource})`);
-      } else {
-        console.warn(`[course-data] Failed to verify session token from source=${tokenSource}`);
       }
     }
 
     if (!email && credential) {
       email = await verifyGoogleIdToken(credential);
-      console.log(`[course-data] Verified Google idToken credential for email=${email}`);
     }
 
     if (!email) {
-      console.warn(`[course-data] 401: No valid email found in session or credential`);
       return res.status(401).json({
         allowed: false,
         error: "Missing or expired login session",
@@ -310,43 +287,31 @@ export default async function handler(req, res) {
       });
     }
 
-    // 1. Fetch all active course enrollments & Admin privileges
-    console.log(`[course-data] Querying enrollments for email=${email}`);
-    const isAdmin = isAdminEmail(email);
-    let allowedCourses = [];
+    // 1. Fetch all active course enrollments for this student
+    const { data: enrollments, error: enrollError } = await supabase
+      .from("student_enrollments")
+      .select("course_slug, status")
+      .eq("email", email)
+      .in("status", ["active", "approved", "approved_ready", "completed"]);
 
-    if (isAdmin) {
-      console.log(`[course-data] Admin access granted for email=${email}`);
-      allowedCourses = [courseSlug || "banhmi4k", "banhmi4k", "heomoixaolan", "test-bake_1"];
-    } else {
-      const { data: enrollments, error: enrollError } = await supabase
-        .from("student_enrollments")
-        .select("course_slug, status")
-        .eq("email", email)
-        .in("status", ["active", "approved", "approved_ready", "completed"]);
+    if (enrollError) throw enrollError;
 
-      if (enrollError) {
-        console.error("[course-data] Supabase enrollError:", enrollError);
-        throw enrollError;
-      }
-      allowedCourses = (enrollments || []).map(e => e.course_slug);
-    }
-
-    console.log(`[course-data] Allowed courses for ${email}:`, allowedCourses);
+    const allowedCourses = (enrollments || []).map(e => e.course_slug);
 
     if (allowedCourses.length === 0) {
-      console.warn(`[course-data] 403: Email ${email} has 0 allowed courses`);
       return res.status(403).json({
         allowed: false,
         email,
-        error: "Tai khoan Gmail " + email + " chua duoc cap quyen hoc khoá nay."
+        error: "Student has no active course enrollments"
       });
     }
 
-    const activeCourseSlug = courseSlug ? courseSlug : (allowedCourses[0] || "banhmi4k");
+    // If no course is specified in request, default to the first allowed course
+    // If a course is specified, use it directly so the check below can return 403 if unauthorized
+    const activeCourseSlug = courseSlug ? courseSlug : allowedCourses[0];
 
-    if (!allowedCourses.includes(activeCourseSlug) && !isAdmin) {
-      console.warn(`[course-data] 403: Email ${email} not enrolled in activeCourseSlug=${activeCourseSlug}. Allowed:`, allowedCourses);
+    // Check if the student is enrolled in the target course
+    if (!allowedCourses.includes(activeCourseSlug)) {
       return res.status(403).json({
         allowed: false,
         email,
@@ -355,82 +320,67 @@ export default async function handler(req, res) {
       });
     }
 
-    // 2. Load Config & Lessons safely
-    let courseInfo = {
-      title: "Khóa Học Bánh Mì 4K",
-      subtitle: "Bí quyết kinh doanh bánh mì giòn tan chuẩn vị",
-      heroImage: ""
+    // 2. Load Config from site_config table
+    const { data: configRows } = await supabase.from("site_config").select("key, value");
+    const rawConfig = {};
+    if (configRows) {
+      configRows.forEach(row => {
+        const valObj = row.value;
+        const val = (valObj && typeof valObj === "object" && valObj.val !== undefined) ? valObj.val : valObj;
+        rawConfig[row.key] = val;
+      });
+    }
+
+    // 2.5 Load from courses table
+    const { data: courseRow } = await supabase
+      .from("courses")
+      .select("title, subtitle, image_url, raw_data")
+      .eq("slug", activeCourseSlug)
+      .maybeSingle();
+
+    const courseRawData = (courseRow && courseRow.raw_data) || {};
+
+    // Map course-prefixed config values to clean names for the active course with db fallbacks
+    const courseInfo = {
+      title: (courseRow && courseRow.title) || rawConfig[`${activeCourseSlug}_title`] || rawConfig.title || "Culinary Academy",
+      subtitle: (courseRow && courseRow.subtitle) || rawConfig[`${activeCourseSlug}_subtitle`] || rawConfig.subtitle || "",
+      heroImage: (courseRow && courseRow.image_url) || courseRawData.heroImageUrl || courseRawData.bannerImageUrl || rawConfig[`${activeCourseSlug}_heroImage`] || rawConfig[`${activeCourseSlug}_banner_url`] || rawConfig[`${activeCourseSlug}_image_url`] || rawConfig[`${activeCourseSlug}_thumbnail_url`] || rawConfig.heroImage || ""
     };
-    let lessons = [];
 
-    try {
-      const { data: configRows } = await supabase.from("site_config").select("key, value");
-      const rawConfig = {};
-      if (configRows) {
-        configRows.forEach(row => {
-          const valObj = row.value;
-          const val = (valObj && typeof valObj === "object" && valObj.val !== undefined) ? valObj.val : valObj;
-          rawConfig[row.key] = val;
-        });
-      }
+    // 3. Load Lessons from Supabase
+    const { data: lessonsRows, error: lessonsError } = await supabase
+      .from("lessons")
+      .select("*")
+      .eq("course_slug", activeCourseSlug)
+      .neq("status", "hidden")
+      .order("lesson_no", { ascending: true });
 
-      const { data: courseRow } = await supabase
-        .from("courses")
-        .select("title, subtitle, image_url, raw_data")
-        .eq("slug", activeCourseSlug)
-        .maybeSingle();
+    if (lessonsError) throw lessonsError;
 
-      const courseRawData = (courseRow && courseRow.raw_data) || {};
+    // Map columns from Supabase schema to match the legacy frontend expectation
+    let lessons = (lessonsRows || []).map(l => {
+      const securedVideo = signBunnyEmbedUrl(l.video_url || "");
+      const securedMedia = signMediaUrls(l.media_urls || "");
 
-      if (courseRow || Object.keys(rawConfig).length > 0) {
-        courseInfo = {
-          title: (courseRow && courseRow.title) || rawConfig[`${activeCourseSlug}_title`] || rawConfig.title || "Khóa Học Bánh Mì 4K",
-          subtitle: (courseRow && courseRow.subtitle) || rawConfig[`${activeCourseSlug}_subtitle`] || rawConfig.subtitle || "Bí quyết kinh doanh bánh mì giòn tan chuẩn vị",
-          heroImage: (courseRow && courseRow.image_url) || courseRawData.heroImageUrl || courseRawData.bannerImageUrl || rawConfig[`${activeCourseSlug}_heroImage`] || rawConfig[`${activeCourseSlug}_banner_url`] || rawConfig[`${activeCourseSlug}_image_url`] || rawConfig[`${activeCourseSlug}_thumbnail_url`] || rawConfig.heroImage || ""
-        };
-      }
-
-      const { data: lessonsRows } = await supabase
-        .from("lessons")
-        .select("*")
-        .eq("course_slug", activeCourseSlug)
-        .neq("status", "hidden")
-        .order("lesson_no", { ascending: true });
-
-      if (lessonsRows && lessonsRows.length > 0) {
-        lessons = lessonsRows.map(l => {
-          const securedVideo = signBunnyEmbedUrl(l.video_url || "");
-          const securedMedia = signMediaUrls(l.media_urls || "");
-
-          return {
-            id: l.id,
-            course: l.course_slug,
-            lesson: l.lesson_no,
-            title: l.title,
-            description: l.description || "",
-            duration: l.duration_text || "",
-            level: l.level || "",
-            thumbnailUrl: l.thumbnail_url || "",
-            videoUrl: l.video_url || "",
-            recipeUrl: l.recipe_url || "",
-            mediaUrls: securedMedia,
-            views: l.views || 0,
-            status: l.status || "active",
-            isSection: l.is_section || false,
-            materials: l.materials || [],
-            ...securedVideo
-          };
-        });
-      }
-    } catch (loadErr) {
-      console.warn("[course-data] Non-critical error loading lessons table:", loadErr.message);
-    }
-
-    // Fallback if DB lessons is empty for banhmi4k
-    if (lessons.length === 0 && activeCourseSlug === "banhmi4k") {
-      const { BANHMI4K_LESSONS } = await import("./banhmi4k-lessons.js");
-      lessons = BANHMI4K_LESSONS;
-    }
+      return {
+        id: l.id,
+        course: l.course_slug,
+        lesson: l.lesson_no,
+        title: l.title,
+        description: l.description || "",
+        duration: l.duration_text || "",
+        level: l.level || "",
+        thumbnailUrl: l.thumbnail_url || "",
+        videoUrl: l.video_url || "",
+        recipeUrl: l.recipe_url || "",
+        mediaUrls: securedMedia,
+        views: l.views || 0,
+        status: l.status || "active",
+        isSection: l.is_section || false,
+        materials: l.materials || [],
+        ...securedVideo
+      };
+    });
 
     // Fetch Google Docs recipe contents
     lessons = await Promise.all(lessons.map(attachRecipeText));
