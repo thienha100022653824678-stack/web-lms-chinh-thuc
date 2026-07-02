@@ -80,26 +80,35 @@ export default async function handler(req, res) {
     }
     if (!email) return res.status(401).json({ allowed: false, error: "No email in token" });
 
-    // 3. Check enrollment
+    // 3. Check enrollment & Admin privileges
     const courseSlug = String(course || "").trim();
     console.log(`[exchange-code] Querying enrollments for email=${email}, target course=${courseSlug}`);
-    const { data: enrollments, error: enrollError } = await supabase
-      .from("student_enrollments").select("course_slug, status").eq("email", email).in("status", ["active", "approved", "approved_ready", "completed"]);
-    if (enrollError) {
-      console.error("[exchange-code] Supabase enrollments query error:", enrollError);
-      throw enrollError;
+    
+    const isAdmin = isAdminEmail(email);
+    let allowedCourses = [];
+
+    if (isAdmin) {
+      console.log(`[exchange-code] Admin login detected for email=${email}`);
+      allowedCourses = [courseSlug || "banhmi4k", "banhmi4k", "heomoixaolan", "test-bake_1"];
+    } else {
+      const { data: enrollments, error: enrollError } = await supabase
+        .from("student_enrollments").select("course_slug, status").eq("email", email).in("status", ["active", "approved", "approved_ready", "completed"]);
+      if (enrollError) {
+        console.error("[exchange-code] Supabase enrollments query error:", enrollError);
+        throw enrollError;
+      }
+      allowedCourses = (enrollments || []).map(e => e.course_slug);
     }
 
-    console.log(`[exchange-code] Found ${enrollments?.length || 0} enrollments:`, JSON.stringify(enrollments));
+    console.log(`[exchange-code] Allowed courses for ${email}:`, allowedCourses);
 
-    const allowedCourses = (enrollments || []).map(e => e.course_slug);
     if (allowedCourses.length === 0) {
       console.warn(`[exchange-code] 403: Email ${email} has 0 active enrollments`);
-      return res.status(403).json({ allowed: false, email, error: "Student has no active course enrollments" });
+      return res.status(403).json({ allowed: false, email, error: "Tai khoan Gmail " + email + " chua duoc cap quyen hoc khoá nay." });
     }
 
-    const activeCourseSlug = courseSlug && allowedCourses.includes(courseSlug) ? courseSlug : allowedCourses[0];
-    if (courseSlug && !allowedCourses.includes(courseSlug)) {
+    const activeCourseSlug = courseSlug && allowedCourses.includes(courseSlug) ? courseSlug : (allowedCourses[0] || "banhmi4k");
+    if (courseSlug && !allowedCourses.includes(courseSlug) && !isAdmin) {
       console.warn(`[exchange-code] 403: Email ${email} not enrolled in target course ${courseSlug}. Allowed:`, allowedCourses);
       return res.status(403).json({
         allowed: false, email,

@@ -309,37 +309,42 @@ export default async function handler(req, res) {
       });
     }
 
-    // 1. Fetch all active course enrollments for this student
+    // 1. Fetch all active course enrollments & Admin privileges
     console.log(`[course-data] Querying enrollments for email=${email}`);
-    const { data: enrollments, error: enrollError } = await supabase
-      .from("student_enrollments")
-      .select("course_slug, status")
-      .eq("email", email)
-      .in("status", ["active", "approved", "approved_ready", "completed"]);
+    const isAdmin = isAdminEmail(email);
+    let allowedCourses = [];
 
-    if (enrollError) {
-      console.error("[course-data] Supabase enrollError:", enrollError);
-      throw enrollError;
+    if (isAdmin) {
+      console.log(`[course-data] Admin access granted for email=${email}`);
+      allowedCourses = [courseSlug || "banhmi4k", "banhmi4k", "heomoixaolan", "test-bake_1"];
+    } else {
+      const { data: enrollments, error: enrollError } = await supabase
+        .from("student_enrollments")
+        .select("course_slug, status")
+        .eq("email", email)
+        .in("status", ["active", "approved", "approved_ready", "completed"]);
+
+      if (enrollError) {
+        console.error("[course-data] Supabase enrollError:", enrollError);
+        throw enrollError;
+      }
+      allowedCourses = (enrollments || []).map(e => e.course_slug);
     }
 
-    const allowedCourses = (enrollments || []).map(e => e.course_slug);
-    console.log(`[course-data] Found ${enrollments?.length || 0} enrollments for ${email}:`, JSON.stringify(enrollments));
+    console.log(`[course-data] Allowed courses for ${email}:`, allowedCourses);
 
     if (allowedCourses.length === 0) {
       console.warn(`[course-data] 403: Email ${email} has 0 allowed courses`);
       return res.status(403).json({
         allowed: false,
         email,
-        error: "Student has no active course enrollments"
+        error: "Tai khoan Gmail " + email + " chua duoc cap quyen hoc khoá nay."
       });
     }
 
-    // If no course is specified in request, default to the first allowed course
-    // If a course is specified, use it directly so the check below can return 403 if unauthorized
-    const activeCourseSlug = courseSlug ? courseSlug : allowedCourses[0];
+    const activeCourseSlug = courseSlug ? courseSlug : (allowedCourses[0] || "banhmi4k");
 
-    // Check if the student is enrolled in the target course
-    if (!allowedCourses.includes(activeCourseSlug)) {
+    if (!allowedCourses.includes(activeCourseSlug) && !isAdmin) {
       console.warn(`[course-data] 403: Email ${email} not enrolled in activeCourseSlug=${activeCourseSlug}. Allowed:`, allowedCourses);
       return res.status(403).json({
         allowed: false,
