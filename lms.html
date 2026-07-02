@@ -298,7 +298,7 @@
         <div class="text-4xl mb-4">🔒</div>
         <p class="font-extrabold text-lg sm:text-xl text-brandBrown mb-2">Đăng nhập để vào học</p>
         <p class="text-brandBrown/60 text-sm mb-6">Vui lòng đăng nhập đúng Gmail đã được cấp quyền khóa học.</p>
-        <form id="gLoginForm" action="https://accounts.google.com/o/oauth2/v2/auth" method="GET" style="display:inline-block;width:100%;max-width:300px;">
+        <form id="gLoginForm" action="https://accounts.google.com/o/oauth2/v2/auth" method="GET" style="display:inline-block;width:100%;max-width:300px;" onsubmit="try{sessionStorage.setItem('lms_logging_in','true')}catch(e){}">
           <input type="hidden" name="client_id" value="809903944513-bg6e9thu5j61m67kg3p1f8djhkfu3h69.apps.googleusercontent.com">
           <input type="hidden" name="redirect_uri" value="https://www.daubepnho.store/lms.html">
           <input type="hidden" name="response_type" value="id_token">
@@ -1153,7 +1153,7 @@
               <div class="text-4xl mb-4">🔒</div>
               <p class="font-extrabold text-lg sm:text-xl text-brandBrown mb-2">Đăng nhập để vào học</p>
               <p class="text-brandBrown/60 text-sm mb-6">Vui lòng đăng nhập đúng Gmail đã được cấp quyền khóa học.</p>
-              <form id="gLoginForm" action="https://accounts.google.com/o/oauth2/v2/auth" method="GET" style="display:inline-block;width:100%;max-width:300px;">
+              <form id="gLoginForm" action="https://accounts.google.com/o/oauth2/v2/auth" method="GET" style="display:inline-block;width:100%;max-width:300px;" onsubmit="try{sessionStorage.setItem('lms_logging_in','true')}catch(e){}">
                 <input type="hidden" name="client_id" value="${GOOGLE_CLIENT_ID_HARDCODE}">
                 <input type="hidden" name="redirect_uri" value="${window.location.origin}/lms.html">
                 <input type="hidden" name="response_type" value="id_token">
@@ -2171,8 +2171,15 @@
           }
           statusBox.innerHTML = `
             <div class="text-4xl mb-4">📡</div>
-            <p class="font-extrabold text-lg sm:text-xl text-brandBrown mb-2">Lỗi kết nối</p>
-            <p class="text-brandBrown/60 text-sm">Máy chủ đang gặp sự cố. Vui lòng tải lại trang sau ít phút.</p>
+            <p class="font-extrabold text-lg sm:text-xl text-brandOrange mb-2">Lỗi kết nối máy chủ</p>
+            <p class="text-brandBrown/60 text-sm max-w-sm mx-auto leading-relaxed mb-4">
+              Mã phản hồi: ${response.status}<br/>
+              Chi tiết: ${escapeHtml(data.error || data.detail || "Không có thông tin chi tiết từ máy chủ.")}<br/>
+              Lớp học: ${escapeHtml(COURSE)}
+            </p>
+            <a href="?course=${COURSE}" class="mt-4 inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full border border-brandBrown/10 text-brandBrown hover:bg-brandGray transition text-sm font-bold w-full">
+              Thử lại
+            </a>
           `;
           return;
         }
@@ -2287,8 +2294,15 @@
     }
 
     async function initGoogle() {
+      // Check if we were expecting to return from Google OAuth
+      let wasLoggingIn = false;
+      try {
+        wasLoggingIn = sessionStorage.getItem('lms_logging_in') === 'true';
+        sessionStorage.removeItem('lms_logging_in');
+      } catch(e) {}
+
       // 1. Check if returning from Google OAuth redirect (id_token in URL hash)
-      if (await handleOAuthRedirect()) return;
+      if (await handleOAuthRedirect(wasLoggingIn)) return;
 
       // 2. Try to restore existing session
       if (await tryRestoreSession()) return;
@@ -2322,8 +2336,30 @@
     }
 
     // Handle id_token returned in URL hash after Google OAuth redirect
-    async function handleOAuthRedirect() {
+    async function handleOAuthRedirect(wasLoggingIn) {
       const hash = window.location.hash;
+      const search = window.location.search;
+
+      // If we were expecting to return from login, but no hash is found
+      if (wasLoggingIn && (!hash || !hash.includes('id_token='))) {
+        const statusBox = document.getElementById('statusBox');
+        if (statusBox) {
+          statusBox.innerHTML = `
+            <div class="text-4xl mb-4">🚨</div>
+            <p class="font-extrabold text-lg sm:text-xl text-brandOrange mb-2">Lỗi phản hồi từ Google</p>
+            <p class="text-brandBrown/60 text-sm max-w-sm mx-auto leading-relaxed mb-4">
+              Không nhận được mã xác thực (id_token) từ Google.<br/>
+              <b>Hash:</b> ${escapeHtml(hash || "(trống)")}<br/>
+              <b>Search:</b> ${escapeHtml(search || "(trống)")}
+            </p>
+            <a href="?course=${COURSE}" class="mt-4 inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full border border-brandBrown/10 text-brandBrown hover:bg-brandGray transition text-sm font-bold w-full">
+              Thử đăng nhập lại
+            </a>
+          `;
+          return true; // Stop here so it doesn't get overwritten!
+        }
+      }
+
       if (!hash || !hash.includes('id_token=')) return false;
 
       // Show loading state
@@ -2338,7 +2374,9 @@
       try {
         const params = new URLSearchParams(hash.substring(1));
         const idToken = params.get('id_token');
-        if (!idToken) return false;
+        if (!idToken) {
+          throw new Error("Không thể tìm thấy tham số id_token trong hash: " + hash);
+        }
 
         // Clear hash from URL without reload
         history.replaceState(null, '', window.location.pathname + window.location.search);
@@ -2347,7 +2385,20 @@
         return true;
       } catch(e) {
         console.error('OAuth redirect handling error:', e);
-        return false;
+        if (statusBox) {
+          statusBox.innerHTML = `
+            <div class="text-4xl mb-4">🚨</div>
+            <p class="font-extrabold text-lg sm:text-xl text-brandOrange mb-2">Lỗi xử lý xác thực</p>
+            <p class="text-brandBrown/60 text-sm max-w-sm mx-auto leading-relaxed mb-4">
+              Chi tiết lỗi: ${escapeHtml(e.message || String(e))}<br/>
+              Stack: ${escapeHtml(e.stack || "")}
+            </p>
+            <a href="?course=${COURSE}" class="mt-4 inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full border border-brandBrown/10 text-brandBrown hover:bg-brandGray transition text-sm font-bold w-full">
+              Quay lại trang đăng nhập
+            </a>
+          `;
+        }
+        return true; // Return true so it doesn't get overwritten!
       }
     }
 
