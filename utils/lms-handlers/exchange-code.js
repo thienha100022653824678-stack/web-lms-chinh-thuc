@@ -1,6 +1,7 @@
 import { supabase } from "../supabase.js";
 import {
   normalizeEmail,
+  isAdminEmail,
   createStudentSession,
   cookieOptions,
   signBunnyEmbedUrl,
