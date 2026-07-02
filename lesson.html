@@ -1019,13 +1019,29 @@
 
         courseLessonsList = data.lessons || [];
 
-        // Build sidebar
+        // Build sidebar with Chapter Sections support
         const sidebar = document.getElementById("sidebarLessonList");
         sidebar.innerHTML = "";
         
-        const currentIdx = courseLessonsList.findIndex(l => l.id === LESSON_ID);
+        const hasSection = courseLessonsList.some(l => l.isSection);
+        let currentSectionIndex = 0;
+        let lessonInChapterCounter = 0;
 
         courseLessonsList.forEach((l, idx) => {
+          if (l.isSection) {
+            currentSectionIndex++;
+            lessonInChapterCounter = 0;
+
+            const secDiv = document.createElement("div");
+            secDiv.className = "mt-3 mb-1 pt-2 border-t border-brandBrown/10 text-[10px] font-black text-brandGreen uppercase tracking-wider flex items-center gap-1.5 px-1";
+            secDiv.innerHTML = `<span>📁</span> <span>CHƯƠNG ${currentSectionIndex}: ${escapeHtml(l.title)}</span>`;
+            sidebar.appendChild(secDiv);
+            return;
+          }
+
+          lessonInChapterCounter++;
+          const displayLessonNo = hasSection ? lessonInChapterCounter : (l.lesson || (idx + 1));
+
           const isActive = l.id === LESSON_ID;
           const a = document.createElement("a");
           a.href = `/lesson.html?id=${l.id}`;
@@ -1033,7 +1049,7 @@
             isActive
               ? "bg-brandGreen/10 border-brandGreen/25 text-brandGreen font-extrabold"
               : "bg-transparent border-transparent hover:bg-brandGray text-brandBrown/80"
-          }`;
+          } ${hasSection ? "ml-2" : ""}`;
 
           const thumb = normalizeGoogleDriveImageUrl(l.thumbnailUrl || HERO_PLACEHOLDER_IMAGE);
           a.innerHTML = `
@@ -1042,7 +1058,7 @@
               ${isActive ? '<div class="absolute inset-0 bg-brandGreen/40 flex items-center justify-center text-white text-[10px]">▶</div>' : ''}
             </div>
             <div class="min-w-0 flex-grow">
-              <div class="text-[9px] uppercase tracking-wider text-brandBrown/40">Bài ${l.lesson || idx + 1}</div>
+              <div class="text-[9px] uppercase tracking-wider text-brandBrown/40">Bài ${displayLessonNo}</div>
               <div class="truncate text-xs leading-normal mt-0.5">${escapeHtml(l.title)}</div>
             </div>
           `;
