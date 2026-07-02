@@ -207,6 +207,64 @@
   </style>
 </head>
 <body class="min-h-screen flex flex-col selection:bg-brandOrange selection:text-white">
+  <!-- Diagnostic Banner for debugging user-agent and block logic -->
+  <div id="diag-banner" style="display:none; background:#000; color:#0f0; padding:12px; font-family:monospace; font-size:12px; position:fixed; top:0; left:0; width:100%; z-index:999999; text-align:left; word-break:break-all; border-bottom:2px solid #0f0;">
+    <strong>DIAGNOSTICS (?debug=1):</strong><br>
+    UA: <span id="diag-ua">Loading...</span><br>
+    vendor: <span id="diag-vendor">Loading...</span><br>
+    window.coccoc: <span id="diag-wcc">Loading...</span><br>
+    isCocCocBrowser(): <span id="diag-isc">Loading...</span><br>
+    window.webkit: <span id="diag-wk">Loading...</span>
+  </div>
+  <script>
+    (function() {
+      if (window.location.search.indexOf('debug=1') !== -1) {
+        var banner = document.getElementById('diag-banner');
+        if (banner) {
+          banner.style.display = 'block';
+          document.getElementById('diag-ua').innerText = navigator.userAgent;
+          document.getElementById('diag-vendor').innerText = navigator.vendor;
+          document.getElementById('diag-wcc').innerText = typeof window.coccoc !== 'undefined' ? 'Defined' : 'Undefined';
+          document.getElementById('diag-wk').innerText = typeof window.webkit !== 'undefined' ? 'Defined' : 'Undefined';
+          setTimeout(function() {
+            if (typeof isCocCocBrowser === 'function') {
+              document.getElementById('diag-isc').innerText = isCocCocBrowser() ? 'true' : 'false';
+            } else {
+              document.getElementById('diag-isc').innerText = 'isCocCocBrowser function not defined yet';
+            }
+            
+            // Inspect window.webkit.messageHandlers
+            var handlersList = [];
+            if (window.webkit && window.webkit.messageHandlers) {
+              try {
+                handlersList = Object.keys(window.webkit.messageHandlers);
+              } catch (e) {
+                handlersList = ["Error: " + e.message];
+              }
+            }
+            
+            // Inspect any window keys containing 'coc'
+            var cocKeys = [];
+            try {
+              for (var key in window) {
+                if (key.toLowerCase().indexOf('coc') !== -1) {
+                  cocKeys.push(key);
+                }
+              }
+            } catch (e) {
+              cocKeys = ["Error: " + e.message];
+            }
+            
+            // Add custom elements to banner
+            var extraDiv = document.createElement('div');
+            extraDiv.innerHTML = "<strong>WebKit Handlers:</strong> " + JSON.stringify(handlersList) + "<br>" +
+                                "<strong>Window 'coc' Keys:</strong> " + JSON.stringify(cocKeys);
+            banner.appendChild(extraDiv);
+          }, 500);
+        }
+      }
+    })();
+  </script>
 
   <!-- HOME VIEW CONTAINER -->
   <div id="homeView" class="flex-grow flex flex-col">
@@ -502,15 +560,6 @@
       return `https://drive.google.com/file/d/${fileId}/preview`;
     }
 
-    function normalizeGoogleDriveImageUrl(url) {
-      if (!url) return "";
-      const driveId = getGoogleDriveFileId(url);
-      if (driveId) {
-        return `https://drive.google.com/thumbnail?id=${driveId}&sz=w1000`;
-      }
-      return url;
-    }
-
     function openDriveVideo(url) {
       const previewUrl = normalizeGoogleDrivePreviewUrl(url) || url;
       window.open(previewUrl, "_blank", "noopener,noreferrer");
@@ -625,7 +674,7 @@
           heroImage.src = HERO_PLACEHOLDER_IMAGE;
         }
       };
-      heroImage.src = normalizeGoogleDriveImageUrl(src) || HERO_PLACEHOLDER_IMAGE;
+      heroImage.src = src || HERO_PLACEHOLDER_IMAGE;
     }
 
     async function refreshCourseDataBeforePlayIfNeeded(index) {
@@ -1320,7 +1369,9 @@
             imgSrc = iframeMatch[1];
           }
           imgSrc = imgSrc.replace(/&amp;/g, "&").trim();
-          imgSrc = normalizeGoogleDriveImageUrl(imgSrc);
+
+          const driveMatch = imgSrc.match(/drive\.google\.com\/file\/d\/([^/]+)/);
+          if (driveMatch) imgSrc = `https://drive.google.com/uc?export=download&id=${driveMatch[1]}`;
           return `
             <div class="bg-white border border-brandBrown/5 rounded-2xl overflow-hidden shadow-sm mb-4">
               ${safeTitle ? `<div class="px-4 pt-4 font-bold text-sm text-brandBrown">${safeTitle}</div>` : ""}
@@ -1335,7 +1386,39 @@
             </div>`;
         }
 
-        // Lesson Checklist Renderer (Collapsible Accordion Chapters & Dynamic Lesson Numbering)
+        return ""; // unknown type
+      }).filter(Boolean).join("");
+
+      if (!html) {
+        section.classList.add("hidden");
+        section.innerHTML = "";
+        return;
+      }
+
+      section.innerHTML = `
+        <div class="font-black text-brandGreen text-base flex items-center gap-2 mb-3">
+          <span>🎬</span> TÀI LIỆU BỔ SUNG
+        </div>
+        ${html}
+      `;
+      section.classList.remove("hidden");
+
+      // Áp dụng watermark overlay động cho từng container video Bunny phụ
+      const bunnyContainers = section.querySelectorAll("[data-bunny-media-container]");
+      bunnyContainers.forEach(container => {
+        createWatermark(container, getSavedEmail());
+      });
+
+      // Kích hoạt hiển thị cảnh báo sau 5 giây cho video Bunny nếu load chậm/trắng
+      const warnings = section.querySelectorAll("[data-bunny-warning]");
+      warnings.forEach(w => {
+        setTimeout(() => {
+          if (w) w.classList.remove("hidden");
+        }, 5000);
+      });
+    }
+
+    // Lesson Checklist Renderer
     function renderLessons(lessons) {
       const list = document.getElementById("lessonList");
       if (!list) return;
@@ -1347,16 +1430,10 @@
         return;
       }
 
-      // Filter real non-section lessons count for summary
-      const realLessons = lessons.filter(l => !l.isSection);
-      const lessonCountEl = document.getElementById("lessonCount");
-      if (lessonCountEl) {
-        lessonCountEl.innerText = `${realLessons.length} bài học được biên soạn chuẩn khoa học`;
-      }
-
       // Check device state
       const mobileMode = isMobileDevice();
 
+      // On mobile, paginated lists
       let renderSet = lessons;
       let pageCount = Math.max(1, Math.ceil(total / MOBILE_PAGE_SIZE));
       if (mobileMode) {
@@ -1364,46 +1441,12 @@
         renderSet = lessons.slice(currentPage * MOBILE_PAGE_SIZE, currentPage * MOBILE_PAGE_SIZE + MOBILE_PAGE_SIZE);
       }
 
-      const hasSection = lessons.some(l => l.isSection);
-      let currentSectionIndex = 0;
-      let lessonInChapterCounter = 0;
-      let currentContainer = list;
-
       renderSet.forEach((l, idx) => {
-        // Render Section/Chapter Header with Accordion toggle
-        if (l.isSection) {
-          currentSectionIndex++;
-          lessonInChapterCounter = 0; // Reset lesson counter to 1 for each chapter
-
-          const chapterBox = document.createElement("div");
-          chapterBox.className = "col-span-full mt-6 mb-3 bg-white border border-brandGreen/15 rounded-2xl overflow-hidden shadow-sm";
-          
-          const sectionId = `chapter_sec_${currentSectionIndex}`;
-          
-          chapterBox.innerHTML = `
-            <div class="px-5 py-3.5 bg-brandGreen/5 hover:bg-brandGreen/10 cursor-pointer transition flex items-center justify-between select-none" onclick="toggleChapterSection('${sectionId}')">
-              <div class="flex items-center gap-3">
-                <span id="icon_${sectionId}" class="text-xs font-black text-brandGreen transition-transform transform rotate-0">▼</span>
-                <span class="text-xs font-black px-2.5 py-1 rounded-md bg-brandGreen text-white uppercase tracking-wider">CHƯƠNG ${currentSectionIndex}</span>
-                <h2 class="text-sm sm:text-base font-extrabold text-brandBrown">${escapeHtml(l.title || "Tên Chương")}</h2>
-              </div>
-              ${l.description ? `<span class="text-xs text-brandBrown/50 font-semibold hidden md:inline">${escapeHtml(l.description)}</span>` : ""}
-            </div>
-            <div id="${sectionId}" class="p-4 space-y-3 bg-slate-50/50"></div>
-          `;
-          
-          list.appendChild(chapterBox);
-          currentContainer = chapterBox.querySelector(`#${sectionId}`);
-          return;
-        }
-
-        lessonInChapterCounter++;
-        const displayLessonNo = hasSection ? lessonInChapterCounter : (l.lesson || (idx + 1));
-
+        const globalIdx = mobileMode ? currentPage * MOBILE_PAGE_SIZE + idx : idx;
         const item = document.createElement("div");
         item.className = "bg-white border border-brandBrown/5 rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition duration-200 grid gap-4 sm:grid-cols-[180px_1fr] md:grid-cols-[240px_1fr_200px] items-center";
 
-        const thumb = normalizeGoogleDriveImageUrl(l.thumbnailUrl || HERO_PLACEHOLDER_IMAGE);
+        const thumb = l.thumbnailUrl || HERO_PLACEHOLDER_IMAGE;
 
         item.innerHTML = `
           <!-- Thumbnail -->
@@ -1415,19 +1458,19 @@
           <!-- Description -->
           <div class="flex flex-col min-w-0">
             <div class="flex items-center gap-2 mb-2 flex-wrap">
-              <span class="px-2 py-0.5 rounded bg-brandGreen/10 text-brandGreen font-bold text-[10px] sm:text-xs">BÀI ${displayLessonNo}</span>
+              <span class="px-2 py-0.5 rounded bg-brandGreen/10 text-brandGreen font-bold text-[10px] sm:text-xs">BÀI ${l.lesson || globalIdx + 1}</span>
               <span class="text-[11px] sm:text-xs text-brandBrown/50 font-bold">⏱ ${l.duration || "N/A"}</span>
               <span class="text-[11px] sm:text-xs text-brandBrown/50 font-bold">▥ ${l.level || "Cơ bản"}</span>
             </div>
             <h3 class="font-extrabold text-base sm:text-lg text-brandBrown hover:text-brandGreen cursor-pointer truncate mb-1" onclick="window.location.href='/lesson.html?id=${l.id}'">
-              ${escapeHtml(l.title || "Bài Học")}
+              ${l.title || "Bài Học"}
             </h3>
             <p class="text-xs sm:text-sm text-brandBrown/70 line-clamp-2 leading-relaxed">
-              ${escapeHtml(l.description || "Chưa có mô tả ngắn.")}
+              ${l.description || "Chưa có mô tả ngắn."}
             </p>
           </div>
 
-          <!-- Buttons area -->
+          <!-- Buttons area (Visible beautifully on Desktop, or as quick access) -->
           <div class="flex sm:flex-col gap-2.5 sm:pl-4 sm:border-l border-brandBrown/5 justify-end">
             <button class="flex-1 sm:flex-none px-4 py-2.5 bg-brandGreen hover:bg-brandGreenLight text-white font-bold text-xs sm:text-sm rounded-xl transition duration-150 shadow-sm" onclick="window.location.href='/lesson.html?id=${l.id}'">
               🎬 XEM BÀI HỌC
@@ -1438,7 +1481,7 @@
           </div>
         `;
 
-        currentContainer.appendChild(item);
+        list.appendChild(item);
       });
 
       // Mobile Pagination controls
@@ -1461,26 +1504,9 @@
         list.appendChild(paginator);
       }
 
-      const lessonCountEl = document.getElementById("lessonCount");
-      if (lessonCountEl) {
-        lessonCountEl.innerText = `${realLessons.length} bài học được biên soạn chuẩn khoa học`;
-      }
-      const statusBox = document.getElementById("statusBox");
-      if (statusBox) statusBox.classList.add("hidden");
-      if (list) list.classList.remove("hidden");
-    }
-
-    function toggleChapterSection(secId) {
-      const sec = document.getElementById(secId);
-      const icon = document.getElementById(`icon_${secId}`);
-      if (!sec) return;
-      if (sec.classList.contains("hidden")) {
-        sec.classList.remove("hidden");
-        if (icon) icon.style.transform = "rotate(0deg)";
-      } else {
-        sec.classList.add("hidden");
-        if (icon) icon.style.transform = "rotate(-90deg)";
-      }
+      document.getElementById("lessonCount").innerText = `${total} bài học được biên soạn chuẩn khoa học`;
+      document.getElementById("statusBox").classList.add("hidden");
+      list.classList.remove("hidden");
     }
 
     function changeLessonPage(delta) {
@@ -1655,7 +1681,7 @@
       } else {
         videoBox.innerHTML = `
           <div id="mobileVideoWrapper" class="relative w-full h-full flex-grow flex items-center justify-center bg-black">
-            <img id="mobileVideoThumb" class="absolute inset-0 w-full h-full object-cover opacity-75" src="${normalizeGoogleDriveImageUrl(l.thumbnailUrl || HERO_PLACEHOLDER_IMAGE)}" alt="Thumbnail">
+            <img id="mobileVideoThumb" class="absolute inset-0 w-full h-full object-cover opacity-75" src="${l.thumbnailUrl || HERO_PLACEHOLDER_IMAGE}" alt="Thumbnail">
             <button class="relative z-10 w-16 h-16 rounded-full bg-brandGreen/90 hover:bg-brandGreen text-white text-2xl flex items-center justify-center shadow-lg transition transform active:scale-95" onclick="playMobileLessonVideo()">
               ▶
             </button>
