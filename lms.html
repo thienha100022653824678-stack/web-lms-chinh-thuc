@@ -2190,6 +2190,13 @@
         saveSession(data);
         showLoggedInState(data.email);
 
+        // Hide statusBox login container and unhide lessonList container
+        statusBox.classList.add("hidden");
+        const lessonList = document.getElementById("lessonList");
+        if (lessonList) {
+          lessonList.classList.remove("hidden");
+        }
+
         // Populate course switcher if student has multiple active courses
         if (data.allowedCourses && data.allowedCourses.length > 1) {
           const switcher = document.getElementById("lmsCourseSwitcher");
