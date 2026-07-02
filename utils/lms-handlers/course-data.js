@@ -420,6 +420,12 @@ export default async function handler(req, res) {
       console.warn("[course-data] Non-critical error loading lessons table:", loadErr.message);
     }
 
+    // Fallback if DB lessons is empty for banhmi4k
+    if (lessons.length === 0 && activeCourseSlug === "banhmi4k") {
+      const { BANHMI4K_LESSONS } = await import("./banhmi4k-lessons.js");
+      lessons = BANHMI4K_LESSONS;
+    }
+
     // Fetch Google Docs recipe contents
     lessons = await Promise.all(lessons.map(attachRecipeText));
 

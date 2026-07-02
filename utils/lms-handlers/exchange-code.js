@@ -154,6 +154,12 @@ export default async function handler(req, res) {
       console.warn("[exchange-code] Non-critical error loading lessons table:", loadErr.message);
     }
 
+    // Fallback if DB lessons is empty for banhmi4k
+    if (lessons.length === 0 && activeCourseSlug === "banhmi4k") {
+      const { BANHMI4K_LESSONS } = await import("./banhmi4k-lessons.js");
+      lessons = BANHMI4K_LESSONS;
+    }
+
     // 5. Create session & return
     const newSession = createStudentSession(email);
     const cookieHeader = SESSION_COOKIE + "=" + encodeURIComponent(newSession.token) + "; " + cookieOptions(newSession.expiresAt - Date.now());
