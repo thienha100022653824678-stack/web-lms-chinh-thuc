@@ -4,9 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Học Nấu Ăn Online - Giáo Trình Dạy Nghề Chuyên Nghiệp</title>
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-  <meta http-equiv="Pragma" content="no-cache" />
-  <meta http-equiv="Expires" content="0" />
 
   <!-- ══ EARLY Cốc Cốc block – must be FIRST script, runs sync while parser is in <head> ══ -->
   <script>
@@ -64,7 +61,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,600;0,700;0,800;1,600&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Google GIS removed: login handled by pure HTML form redirect -->
+  <script src="https://accounts.google.com/gsi/client"></script>
 
   <!-- Tailwind Configuration for Theme Colors -->
   <script>
@@ -225,7 +222,8 @@
 
         <!-- Auth Area -->
         <div id="loginArea">
-          <!-- Populated by JS: showLoggedInState or showLoggedOutState -->
+          <!-- Default State: Loading / Empty button placeholder -->
+          <div id="googleBtn" class="min-h-[40px] flex items-center justify-end"></div>
         </div>
       </div>
     </header>
@@ -279,7 +277,7 @@
         </div>
 
         <!-- Hero Image Card -->
-        <div id="heroImageContainer" class="md:col-span-5 relative hidden">
+        <div class="md:col-span-5 relative">
           <div class="absolute -inset-1.5 bg-gradient-to-r from-brandOrange to-brandGreen rounded-3xl blur opacity-20"></div>
           <div class="relative bg-white p-3 rounded-2xl shadow-xl border border-brandBrown/5">
             <img id="heroImage" class="w-full aspect-[4/3] object-cover rounded-xl shadow-inner bg-brandGray opacity-0 transition-opacity duration-300" src="" alt="Banners">
@@ -295,47 +293,12 @@
         <p id="lessonCount" class="text-sm sm:text-base text-brandBrown/65 font-medium">Đăng nhập Gmail để truy cập bài học của bạn</p>
       </div>
 
-      <!-- Login prompt - uses HTML <form> so it works even if JavaScript fails -->
+      <!-- Unauthorized status / Prompt login -->
       <div id="statusBox" class="bg-white border border-brandBrown/10 rounded-2xl p-8 text-center max-w-xl mx-auto shadow-md">
-        <div class="text-4xl mb-4">🔒</div>
-        <p class="font-extrabold text-lg sm:text-xl text-brandBrown mb-2">Đăng nhập để vào học</p>
-        <p class="text-brandBrown/60 text-sm mb-6">Vui lòng đăng nhập đúng Gmail đã được cấp quyền khóa học.</p>
-        <form id="gLoginForm" action="https://accounts.google.com/o/oauth2/v2/auth" method="GET" style="display:inline-block;width:100%;max-width:300px;" onsubmit="try{sessionStorage.setItem('lms_logging_in','true')}catch(e){}">
-          <input type="hidden" name="client_id" value="809903944513-bg6e9thu5j61m67kg3p1f8djhkfu3h69.apps.googleusercontent.com">
-          <input type="hidden" name="redirect_uri" value="https://www.daubepnho.store/lms.html">
-          <input type="hidden" name="response_type" value="code">
-          <input type="hidden" name="scope" value="openid email profile">
-          <input type="hidden" name="prompt" value="select_account">
-          <input type="hidden" name="access_type" value="online">
-          <input type="hidden" name="state" value="">
-          <button type="submit"
-            style="display:inline-flex;align-items:center;gap:10px;background:#4285F4;color:#fff;font-weight:700;font-size:1rem;padding:14px 28px;border-radius:8px;border:none;cursor:pointer;box-shadow:0 2px 8px rgba(66,133,244,0.35);width:100%;justify-content:center;">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-            Đăng nhập bằng Google
-          </button>
-        </form>
-        <div style="margin-top:14px;">
-          <a href="https://yeunauan.live/my-courses"
-             style="display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 20px;border-radius:999px;border:1px solid rgba(45,25,20,0.12);color:#6b5c54;font-size:0.85rem;font-weight:600;text-decoration:none;">
-            Quay lại khóa học của tôi
-          </a>
-        </div>
+        <div class="text-4xl mb-4">🔑</div>
+        <p class="font-extrabold text-lg sm:text-xl text-brandBrown mb-2">Vui lòng đăng nhập Gmail</p>
+        <p class="text-brandBrown/60 text-sm">Hệ thống sẽ tự động kiểm tra quyền học dựa trên tài khoản Gmail đã đăng ký khóa học này.</p>
       </div>
-      <!-- Mini script: set dynamic form values. Separate from main script so it runs even if main script errors -->
-      <script>
-        (function(){
-          try {
-            var params = new URLSearchParams(window.location.search);
-            var course = params.get('course') || 'banh-mi';
-            var f = document.getElementById('gLoginForm');
-            if (f) {
-              f.querySelector('[name=redirect_uri]').value = window.location.origin + '/lms.html';
-              f.querySelector('[name=state]').value = course;
-            }
-            try { sessionStorage.setItem('lms_return_course', course); } catch(e) {}
-          } catch(e) { console.error('Login form setup error:', e); }
-        })();
-      </script>
 
       <!-- Lessons Grid/List for Desktop / List with pagination for Mobile -->
       <div id="lessonList" class="space-y-6 hidden">
@@ -497,13 +460,7 @@
     })();
 
     // Configuration values derived from URL query parameters and local storage
-    // Use 'let' so we can restore course from OAuth state param after redirect
-    const _urlParams = new URLSearchParams(window.location.search);
-    let COURSE = _urlParams.get("course");
-    // If returning from OAuth redirect (code or id_token in URL), restore course from state or sessionStorage
-    if (!COURSE) {
-      COURSE = _urlParams.get('state') || sessionStorage.getItem('lms_return_course') || 'banh-mi';
-    }
+    const COURSE = new URLSearchParams(window.location.search).get("course") || "banh-mi";
     function switchLmsCourse(slug) {
       if (!slug) return;
       window.location.href = `?course=${encodeURIComponent(slug)}`;
@@ -518,15 +475,7 @@
     let currentLessons = [];
     let currentView = "home";
     let currentLessonIndex = 0;
-
-    // Google Client ID — public value (not a secret), used to build OAuth URL.
-    // Hardcoded here so login link works IMMEDIATELY without any async fetch.
-    const GOOGLE_CLIENT_ID_HARDCODE = '809903944513-bg6e9thu5j61m67kg3p1f8djhkfu3h69.apps.googleusercontent.com';
-    let _googleClientId = GOOGLE_CLIENT_ID_HARDCODE;
-
-    // Save course to sessionStorage for OAuth redirect recovery
-    try { sessionStorage.setItem('lms_return_course', COURSE); } catch(e) {}
-
+    
     // Pagination parameters for Mobile Lesson Checklist
     let currentPage = 0;
     const MOBILE_PAGE_SIZE = 5;
@@ -680,13 +629,6 @@
     function setHeroImageSource(src) {
       const heroImage = document.getElementById("heroImage");
       if (!heroImage) return;
-
-      const container = document.getElementById("heroImageContainer");
-      if (src) {
-        if (container) container.classList.remove("hidden");
-      } else {
-        if (container) container.classList.add("hidden");
-      }
 
       heroImage.classList.add("opacity-0");
       heroImage.onload = () => heroImage.classList.remove("opacity-0");
@@ -1050,128 +992,10 @@
       }
     }
 
-    function showLoggedOutState(isUnauthorized = false, email = '') {
+    function showLoggedOutState() {
       const headerArea = document.getElementById("loginArea");
-      headerArea.innerHTML = '';
-      
-      const ua = navigator.userAgent;
-      const isIOS = /iPhone|iPad|iPod/i.test(ua);
-      const isZalo = /Zalo/i.test(ua);
-      const isFB = /(FBAN|FBAV)/i.test(ua);
-      const isInAppIOS = isIOS && (isZalo || isFB);
-
-      if (isInAppIOS) {
-        if (!document.getElementById("floatArrowStyle")) {
-          const style = document.createElement("style");
-          style.id = "floatArrowStyle";
-          style.innerHTML = `
-            @keyframes floatArrow {
-              0% { transform: translate(0, 0) scale(1); }
-              100% { transform: translate(4px, -4px) scale(1.15); }
-            }
-          `;
-          document.head.appendChild(style);
-        }
-
-        let arrowOverlay = document.getElementById("inAppArrowOverlay");
-        if (!arrowOverlay) {
-          arrowOverlay = document.createElement("div");
-          arrowOverlay.id = "inAppArrowOverlay";
-          arrowOverlay.style.cssText = "position:fixed;top:12px;right:16px;z-index:9999;display:flex;flex-direction:column;align-items:flex-end;pointer-events:none;";
-          arrowOverlay.innerHTML = `
-            <div style="font-size:2rem;line-height:1;color:#fbbf24;animation:floatArrow 0.8s infinite alternate ease-in-out;margin-bottom:4px;">↗️</div>
-            <div style="background:#fbbf24;color:#000;padding:6px 12px;border-radius:8px;font-size:0.85rem;font-weight:bold;box-shadow:0 4px 12px rgba(0,0,0,0.5);white-space:nowrap;">Bấm dấu ⋯ ở đây</div>
-          `;
-          document.body.appendChild(arrowOverlay);
-        }
-      }
-
-      const statusBox = document.getElementById("statusBox");
-      if (statusBox) {
-        if (isUnauthorized) {
-          if (isInAppIOS) {
-            statusBox.innerHTML = `
-              <div class="text-4xl mb-4">⚠️</div>
-              <p class="font-extrabold text-lg sm:text-xl text-brandOrange mb-2">Gmail này chưa được cấp quyền học khóa này</p>
-              <p class="text-brandBrown/60 text-sm max-w-sm mx-auto leading-relaxed mb-4">
-                Bạn đang đăng nhập bằng:<br/>
-                <strong class="text-brandOrange break-all">${escapeHtml(email)}</strong>
-              </p>
-              <div style="background:rgba(251,191,36,0.05);padding:14px;border-radius:12px;border:1px solid rgba(251,191,36,0.2);text-align:left;margin-top:1.5rem;margin-bottom:1rem;">
-                <div style="font-weight:bold;color:#fbbf24;font-size:0.85rem;margin-bottom:6px;display:flex;align-items:center;gap:4px;">
-                  💡 Đang mở trong Zalo/Facebook?
-                </div>
-                <p style="font-size:0.85rem;color:#9ca3af;line-height:1.45;margin:0;">
-                  Bấm dấu <strong style="color:#fff">⋯</strong> ở góc trên bên phải ➔ chọn <strong style="color:#fff">“Mở bằng Safari”</strong> hoặc <strong style="color:#fff">“Mở bằng trình duyệt”</strong> để đăng nhập Gmail.
-                </p>
-              </div>
-              <a href="https://yeunauan.live/my-courses" class="mt-4 inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full border border-brandBrown/10 text-brandBrown hover:bg-brandGray transition text-sm font-bold w-full">
-                Quay lại khóa học của tôi
-              </a>
-            `;
-          } else {
-            statusBox.innerHTML = `
-              <div class="text-4xl mb-4">⚠️</div>
-              <p class="font-extrabold text-lg sm:text-xl text-brandOrange mb-2">Gmail này chưa được cấp quyền học khóa này</p>
-              <p class="text-brandBrown/60 text-sm max-w-sm mx-auto leading-relaxed mb-4">
-                Bạn đang đăng nhập bằng:<br/>
-                <strong class="text-brandOrange break-all">${escapeHtml(email)}</strong>
-              </p>
-              <div style="display:flex;justify-content:center;margin:1.5rem 0;">
-                <a href="?course=${COURSE}" class="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full bg-brandGreen text-white font-bold text-sm w-full max-w-[280px]">
-                  Thử đăng nhập lại
-                </a>
-              </div>
-              <a href="https://yeunauan.live/my-courses" class="mt-4 inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full border border-brandBrown/10 text-brandBrown hover:bg-brandGray transition text-sm font-bold w-full">
-                Quay lại khóa học của tôi
-              </a>
-            `;
-          }
-        } else {
-          if (isInAppIOS) {
-            statusBox.innerHTML = `
-              <div class="text-4xl mb-4">🔒</div>
-              <p class="font-extrabold text-lg sm:text-xl text-brandBrown mb-2">Bạn đã thanh toán thành công, tiếp tục mở mục Quản lý khóa học để xem</p>
-              
-              <div style="background:rgba(251,191,36,0.05);padding:14px;border-radius:12px;border:1px solid rgba(251,191,36,0.2);text-align:left;margin-top:1.5rem;margin-bottom:1rem;">
-                <div style="font-weight:bold;color:#fbbf24;font-size:0.85rem;margin-bottom:6px;display:flex;align-items:center;gap:4px;">
-                  💡 Đang mở trong Zalo/Facebook?
-                </div>
-                <p style="font-size:0.85rem;color:#9ca3af;line-height:1.45;margin:0;">
-                  Bấm dấu <strong style="color:#fff">⋯</strong> ở góc trên bên phải ➔ chọn <strong style="color:#fff">“Mở bằng Safari”</strong> hoặc <strong style="color:#fff">“Mở bằng trình duyệt”</strong> để đăng nhập Gmail.
-                </p>
-              </div>
-              
-              <a href="https://yeunauan.live/my-courses" class="mt-4 inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full border border-brandBrown/10 text-brandBrown hover:bg-brandGray transition text-sm font-bold w-full">
-                Quay lại khóa học của tôi
-              </a>
-            `;
-          } else {
-            statusBox.innerHTML = `
-              <div class="text-4xl mb-4">🔒</div>
-              <p class="font-extrabold text-lg sm:text-xl text-brandBrown mb-2">Đăng nhập để vào học</p>
-              <p class="text-brandBrown/60 text-sm mb-6">Vui lòng đăng nhập đúng Gmail đã được cấp quyền khóa học.</p>
-              <form id="gLoginForm" action="https://accounts.google.com/o/oauth2/v2/auth" method="GET" style="display:inline-block;width:100%;max-width:300px;" onsubmit="try{sessionStorage.setItem('lms_logging_in','true')}catch(e){}">
-                <input type="hidden" name="client_id" value="${GOOGLE_CLIENT_ID_HARDCODE}">
-                <input type="hidden" name="redirect_uri" value="${window.location.origin}/lms.html">
-                <input type="hidden" name="response_type" value="code">
-                <input type="hidden" name="scope" value="openid email profile">
-                <input type="hidden" name="prompt" value="select_account">
-                <input type="hidden" name="access_type" value="online">
-                <input type="hidden" name="state" value="${COURSE}">
-                <button type="submit"
-                  style="display:inline-flex;align-items:center;gap:10px;background:#4285F4;color:#fff;font-weight:700;font-size:1rem;padding:14px 28px;border-radius:8px;border:none;cursor:pointer;box-shadow:0 2px 8px rgba(66,133,244,0.35);width:100%;justify-content:center;">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-                  Đăng nhập bằng Google
-                </button>
-              </form>
-              <a href="https://yeunauan.live/my-courses" class="mt-4 inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full border border-brandBrown/10 text-brandBrown hover:bg-brandGray transition text-sm font-bold w-full">
-                Quay lại khóa học của tôi
-              </a>
-            `;
-          }
-        }
-      }
+      headerArea.innerHTML = `<div id="googleBtn" class="min-h-[40px] flex items-center justify-end"></div>`;
+      renderGoogleButton();
 
       const mobileAuth = document.getElementById("mobileLessonAuthIndicator");
       if (mobileAuth) {
@@ -1179,40 +1003,19 @@
       }
     }
 
-    // ── Google OAuth Link-based Login (works on all browsers including Safari iOS) ──
-    //
-    // APPROACH: Use a native <a href="..."> link to navigate to Google OAuth.
-    //   - A native link click cannot be blocked by Safari security policies.
-    //   - No JavaScript click handler is needed.
-    //   - We pre-compute the OAuth URL and set it on the <a> element.
-    //
-    function buildOAuthUrl(clientId) {
-      const redirectUri = window.location.origin + window.location.pathname;
-      const nonce = Math.random().toString(36).substring(2, 18);
-      try { sessionStorage.setItem('lms_gnonce', nonce); } catch(e) {}
-      const params = new URLSearchParams({
-        client_id: clientId,
-        redirect_uri: redirectUri,
-        response_type: 'id_token',
-        scope: 'openid email profile',
-        nonce: nonce,
-        prompt: 'select_account'
-      });
-      return 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
-    }
-
-    // Sets href on all <a id="gLoginLink"> in the page (static + dynamic)
-    function updateLoginLink(clientId) {
-      document.querySelectorAll('#gLoginLink').forEach(link => {
-        if (!clientId) {
-          link.textContent = 'Lỗi cấu hình - Liên hệ hỗ trợ';
-          link.style.background = '#dc2626';
-          link.href = 'https://yeunauan.live/my-courses';
-          return;
-        }
-        link.href = buildOAuthUrl(clientId);
-        link.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg> Đăng nhập bằng Google`;
-      });
+    // Main Google GSI Button render
+    function renderGoogleButton() {
+      const btnContainer = document.getElementById("googleBtn");
+      if (!btnContainer) return;
+      if (typeof google !== "undefined" && google.accounts && google.accounts.id) {
+        btnContainer.innerHTML = "";
+        google.accounts.id.renderButton(btnContainer, {
+          theme: "outline",
+          size: "medium",
+          text: "signin_with",
+          shape: "pill"
+        });
+      }
     }
 
     // Recipe rendering functions
@@ -2164,20 +1967,20 @@
         if (!response.ok || !data.allowed) {
           if (response.status === 401 || response.status === 403) {
             clearSession();
-            showLoggedOutState(true, data.email || "của bạn");
+            statusBox.innerHTML = `
+              <div class="text-4xl mb-4">⚠️</div>
+              <p class="font-extrabold text-lg sm:text-xl text-brandOrange mb-2">Không có quyền truy cập</p>
+              <p class="text-brandBrown/60 text-sm max-w-sm mx-auto leading-relaxed">
+                Tài khoản Gmail <b>${escapeHtml(data.email || "của bạn")}</b> chưa được đăng ký khóa học này. Vui lòng đăng nhập đúng tài khoản hoặc liên hệ admin.
+              </p>
+            `;
+            showLoggedOutState();
             return;
           }
           statusBox.innerHTML = `
             <div class="text-4xl mb-4">📡</div>
-            <p class="font-extrabold text-lg sm:text-xl text-brandOrange mb-2">Lỗi kết nối máy chủ</p>
-            <p class="text-brandBrown/60 text-sm max-w-sm mx-auto leading-relaxed mb-4">
-              Mã phản hồi: ${response.status}<br/>
-              Chi tiết: ${escapeHtml(data.error || data.detail || "Không có thông tin chi tiết từ máy chủ.")}<br/>
-              Lớp học: ${escapeHtml(COURSE)}
-            </p>
-            <a href="?course=${COURSE}" class="mt-4 inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full border border-brandBrown/10 text-brandBrown hover:bg-brandGray transition text-sm font-bold w-full">
-              Thử lại
-            </a>
+            <p class="font-extrabold text-lg sm:text-xl text-brandBrown mb-2">Lỗi kết nối</p>
+            <p class="text-brandBrown/60 text-sm">Máy chủ đang gặp sự cố. Vui lòng tải lại trang sau ít phút.</p>
           `;
           return;
         }
@@ -2236,19 +2039,47 @@
       }
     }
 
-    // waitForGoogleLibrary checks if Google GIS API script has loaded
-
-    // Google GIS library removed - login handled by pure HTML form
-    // setupGoogleSignIn and waitForGoogleLibrary are no longer needed
+    async function waitForGoogleLibrary() {
+      if (typeof google !== "undefined" && google.accounts && google.accounts.id) return;
+      await new Promise((resolve, reject) => {
+        let count = 0;
+        const interval = setInterval(() => {
+          count++;
+          if (typeof google !== "undefined" && google.accounts && google.accounts.id) {
+            clearInterval(interval);
+            resolve();
+          }
+          if (count > 80) {
+            clearInterval(interval);
+            reject(new Error("Không thể tải Google Sign-In Client SDK"));
+          }
+        }, 100);
+      });
+    }
 
     async function getPublicConfig() {
       try {
-        const res = await fetch(`/api/lms/portal?endpoint=public-config&course=${encodeURIComponent(COURSE)}`);
+        const res = await fetch("/api/lms/portal?endpoint=public-config");
         if (!res.ok) return { googleClientId: "" };
         return await res.json();
       } catch (err) {
         console.error("Config fetch failed:", err);
         return { googleClientId: "" };
+      }
+    }
+
+    async function setupGoogleSignIn(config) {
+      if (!config.googleClientId) return false;
+      try {
+        await waitForGoogleLibrary();
+        google.accounts.id.initialize({
+          client_id: config.googleClientId,
+          callback: (response) => loadCourseData({ credential: response.credential })
+        });
+        return true;
+      } catch (err) {
+        console.error("Init Google accounts failed:", err);
+        return false;
       }
     }
 
@@ -2262,163 +2093,20 @@
     }
 
     async function initGoogle() {
-      // Check if we were expecting to return from Google OAuth
-      let wasLoggingIn = false;
-      try {
-        wasLoggingIn = sessionStorage.getItem('lms_logging_in') === 'true';
-        sessionStorage.removeItem('lms_logging_in');
-      } catch(e) {}
-
-      // 1. Check if returning from Google OAuth redirect (id_token in URL hash)
-      if (await handleOAuthRedirect(wasLoggingIn)) return;
-
-      // 2. Try to restore existing session
+      const configPromise = getPublicConfig();
       if (await tryRestoreSession()) return;
-
-      // 3. Fetch config from server (includes googleClientId and course info)
-      let config;
-      try {
-        config = await getPublicConfig();
-      } catch(e) {
-        config = { googleClientId: "" };
-      }
-      _googleClientId = config.googleClientId || GOOGLE_CLIENT_ID_HARDCODE;
-
-      // 4. Render course metadata
-      if (config.courseInfo) {
-        if (config.courseInfo.title) {
-          const el = document.getElementById("courseTitle");
-          if (el) el.innerHTML = config.courseInfo.title;
-        }
-        if (config.courseInfo.subtitle) {
-          const el = document.getElementById("courseSubtitle");
-          if (el) el.innerText = config.courseInfo.subtitle;
-        }
-        if (config.courseInfo.heroImage) {
-          setHeroImageSource(config.courseInfo.heroImage);
-        }
-      }
-
-      // 5. Show login UI (form is already functional in HTML)
+      
+      const config = await configPromise;
+      const googleReady = await setupGoogleSignIn(config);
+      
       showLoggedOutState();
-    }
-
-    // Handle authorization code returned in URL query params after Google OAuth redirect
-    // Also supports legacy id_token in hash for backward compatibility
-    async function handleOAuthRedirect(wasLoggingIn) {
-      const urlParams = new URLSearchParams(window.location.search);
-      const authCode = urlParams.get('code');
-      const hash = window.location.hash;
-
-      // Authorization Code Flow (primary - recommended by Google)
-      if (authCode) {
-        const statusBox = document.getElementById('statusBox');
-        if (statusBox) {
-          statusBox.innerHTML = `
-            <div class="text-4xl mb-4">⏳</div>
-            <p class="font-extrabold text-lg sm:text-xl text-brandBrown mb-2">Đang xác thực Gmail...</p>
-            <p class="text-brandBrown/60 text-sm">Vui lòng chờ trong giây lát</p>
-          `;
-        }
-
-        try {
-          // Exchange code for tokens + course data via server
-          const response = await fetch('/api/lms/portal?endpoint=exchange-code', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              code: authCode,
-              redirectUri: window.location.origin + '/lms.html',
-              course: COURSE
-            })
-          });
-
-          const data = await response.json();
-
-          if (!response.ok || !data.allowed) {
-            if (response.status === 401) {
-              throw new Error((data.error || 'Xác thực Google thất bại') + (data.detail ? ': ' + data.detail : ''));
-            }
-            if (response.status === 403) {
-              clearSession();
-              // Clean URL
-              const cleanUrl = window.location.origin + '/lms.html?course=' + encodeURIComponent(COURSE);
-              history.replaceState(null, '', cleanUrl);
-              showLoggedOutState(true, data.email || '');
-              return true;
-            }
-            throw new Error(data.error || 'Lỗi không xác định (HTTP ' + response.status + ')');
-          }
-
-          // Clean URL on success
-          const cleanUrl = window.location.origin + '/lms.html?course=' + encodeURIComponent(COURSE);
-          history.replaceState(null, '', cleanUrl);
-
-          // SUCCESS! Save session and show course
-          saveSession(data);
-          showLoggedInState(data.email);
-          if (data.courseInfo) {
-            if (data.courseInfo.title) {
-              const el = document.getElementById('courseTitle');
-              if (el) el.innerHTML = data.courseInfo.title;
-            }
-            if (data.courseInfo.subtitle) {
-              const el = document.getElementById('courseSubtitle');
-              if (el) el.innerText = data.courseInfo.subtitle;
-            }
-            if (data.courseInfo.heroImage) setHeroImageSource(data.courseInfo.heroImage);
-          }
-          if (data.lessons) {
-            currentLessons = data.lessons;
-            renderLessons(data.lessons);
-          }
-          if (data.allowedCourses && data.allowedCourses.length > 1) {
-            renderCourseSwitcher(data.allowedCourses, COURSE);
-          }
-          return true;
-
-        } catch(e) {
-          console.error('Code exchange error:', e);
-          const statusBox = document.getElementById('statusBox');
-          if (statusBox) {
-            statusBox.innerHTML = `
-              <div class="text-4xl mb-4">🚨</div>
-              <p class="font-extrabold text-lg sm:text-xl text-brandOrange mb-2">Lỗi xác thực Google</p>
-              <p class="text-brandBrown/80 font-mono text-xs max-w-md mx-auto leading-relaxed mb-4 bg-red-50 p-3 rounded-lg border border-red-200 break-all text-left">
-                ${escapeHtml(e.message || String(e))}
-              </p>
-              <a href="?course=${COURSE}" class="mt-4 inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full bg-brandGreen text-white font-bold text-sm w-full max-w-[280px]">
-                Thử đăng nhập lại
-              </a>
-            `;
-          }
-          return true;
-        }
+      if (!googleReady) {
+        document.getElementById("statusBox").innerHTML = `
+          <div class="text-4xl mb-4">⚙️</div>
+          <p class="font-extrabold text-lg sm:text-xl text-brandOrange mb-2">Chưa cấu hình GOOGLE_CLIENT_ID</p>
+          <p class="text-brandBrown/60 text-sm">Vui lòng thiết lập biến môi trường và tải lại trang.</p>
+        `;
       }
-
-      // Legacy: implicit flow (id_token in hash) - backward compatibility
-      if (hash && hash.includes('id_token=')) {
-        const statusBox = document.getElementById('statusBox');
-        if (statusBox) {
-          statusBox.innerHTML = `
-            <div class="text-4xl mb-4">⏳</div>
-            <p class="font-extrabold text-lg sm:text-xl text-brandBrown mb-2">Đang xác thực Gmail...</p>
-          `;
-        }
-        try {
-          const params = new URLSearchParams(hash.substring(1));
-          const idToken = params.get('id_token');
-          if (!idToken) throw new Error('Missing id_token in hash');
-          history.replaceState(null, '', window.location.pathname + '?course=' + encodeURIComponent(COURSE));
-          await loadCourseData({ credential: idToken });
-          return true;
-        } catch(e) {
-          console.error('Legacy OAuth error:', e);
-          return false;
-        }
-      }
-
-      return false;
     }
 
     function logoutGoogle() {
@@ -2426,8 +2114,8 @@
       location.reload();
     }
 
-    // Initial load - DOMContentLoaded fires much faster than window.onload
-    document.addEventListener("DOMContentLoaded", () => {
+    // Initial load
+    window.onload = () => {
       // Setup right click block on video elements
       document.addEventListener("contextmenu", (event) => {
         if (event.target.closest("#mobileVideoBox, #desktopVideoContainer")) {
@@ -2437,7 +2125,7 @@
 
       // Initialize
       initGoogle();
-    });
+    };
 
     // Auto resize listener to handle design shift
     window.addEventListener("resize", () => {

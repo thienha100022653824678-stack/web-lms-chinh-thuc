@@ -91,14 +91,6 @@
       font-family: "Be Vietnam Pro", sans-serif;
     }
     
-    /* Disable selection and copy in recipeContent */
-    .no-select {
-      -webkit-user-select: none !important;
-      -moz-user-select: none !important;
-      -ms-user-select: none !important;
-      user-select: none !important;
-    }
-    
     .serif-title {
       font-family: "Playfair Display", serif;
     }
@@ -305,14 +297,17 @@
       </div>
 
       <!-- Recipe Card -->
-      <div id="recipeCard" class="mt-6 bg-white border border-brandBrown/5 rounded-2xl p-5 shadow-sm">
+      <div class="mt-6 bg-white border border-brandBrown/5 rounded-2xl p-5 shadow-sm">
         <div class="flex items-center justify-between border-b border-brandGray pb-3 mb-4">
           <span class="font-black text-brandGreen text-base flex items-center gap-2">
             <span>📄</span> CÔNG THỨC CHI TIẾT
           </span>
+          <button id="printBtn" onclick="window.print()" class="text-xs font-bold text-brandGreen hover:underline flex items-center gap-1">
+            🖨️ In công thức
+          </button>
         </div>
         
-        <div id="recipeContent" class="recipe-render text-sm sm:text-base overflow-hidden transition-all duration-300 max-h-[380px] relative no-select">
+        <div id="recipeContent" class="recipe-render text-sm sm:text-base overflow-hidden transition-all duration-300 max-h-[380px] relative">
           <!-- Loaded by JS -->
         </div>
         
@@ -334,7 +329,7 @@
       </div>
 
       <!-- Description / Extra details -->
-      <div id="descriptionCard" class="mt-6 bg-white border border-brandBrown/5 rounded-2xl p-5 shadow-sm mb-12">
+      <div class="mt-6 bg-white border border-brandBrown/5 rounded-2xl p-5 shadow-sm mb-12">
         <h4 class="font-extrabold text-brandBrown text-sm mb-2">Giới thiệu bài học</h4>
         <p id="lessonDescription" class="text-sm text-brandBrown/85 leading-relaxed">
           Chưa có mô tả ngắn.
@@ -984,59 +979,12 @@
         document.getElementById("lessonDuration").innerText = `⏱ ${currentLesson.duration || "N/A"}`;
         document.getElementById("lessonLevel").innerText = `▥ ${currentLesson.level || "Cơ bản"}`;
         document.getElementById("lessonViews").innerText = `👁 ${currentLesson.views || 0}`;
+        document.getElementById("lessonDescription").innerText = currentLesson.description || "Chưa có mô tả ngắn.";
         document.getElementById("backBtn").href = `/lms.html?course=${encodeURIComponent(currentLesson.course)}`;
 
-        // Render description card dynamically
-        const descriptionCard = document.getElementById("descriptionCard");
-        const desc = (currentLesson.description || "").trim();
-        const isDescEmpty = !desc || desc === "" || desc === "Chưa có mô tả ngắn." || desc.toLowerCase() === "null" || desc.toLowerCase() === "undefined";
-        if (isDescEmpty) {
-          if (descriptionCard) descriptionCard.classList.add("hidden");
-        } else {
-          if (descriptionCard) descriptionCard.classList.remove("hidden");
-          const descEl = document.getElementById("lessonDescription");
-          if (descEl) descEl.innerText = desc;
-        }
-
-        // Render recipe card dynamically
-        const recipeCard = document.getElementById("recipeCard");
+        // Render recipe
         const recipeContent = document.getElementById("recipeContent");
-        const recipeMoreBtn = document.getElementById("recipeMoreBtn");
-        const recipeText = (currentLesson.recipeText || "").trim();
-        const isRecipeEmpty = !recipeText || recipeText === "" || recipeText.toLowerCase() === "null" || recipeText.toLowerCase() === "undefined";
-        
-        if (isRecipeEmpty) {
-          if (recipeCard) recipeCard.classList.add("hidden");
-        } else {
-          if (recipeCard) recipeCard.classList.remove("hidden");
-          if (recipeContent) {
-            recipeContent.innerHTML = `<div class="recipe-content-html">${recipeTextToHtml(recipeText)}</div>`;
-            
-            // Add copy-protection event listeners
-            recipeContent.addEventListener('copy', (e) => e.preventDefault());
-            recipeContent.addEventListener('cut', (e) => e.preventDefault());
-            recipeContent.addEventListener('contextmenu', (e) => e.preventDefault());
-            recipeContent.addEventListener('selectstart', (e) => e.preventDefault());
-            recipeContent.addEventListener('keydown', (e) => {
-              if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'x')) {
-                e.preventDefault();
-              }
-            });
-
-            // Adjust Xem thêm button dynamically based on scrollHeight
-            if (recipeMoreBtn) {
-              setTimeout(() => {
-                if (recipeContent.scrollHeight <= 380) {
-                  recipeMoreBtn.classList.add("hidden");
-                  recipeContent.classList.remove("max-h-[380px]");
-                } else {
-                  recipeMoreBtn.classList.remove("hidden");
-                  recipeContent.classList.add("max-h-[380px]");
-                }
-              }, 100);
-            }
-          }
-        }
+        recipeContent.innerHTML = renderRecipeContent(currentLesson);
 
         // Render sub materials
         renderMediaItems(currentLesson);
@@ -1045,7 +993,7 @@
         renderMaterials(currentLesson.materials || []);
 
         // Setup Video Wrapper/Iframe / Hiding Empty Videos
-        const videoContainer = document.getElementById("videoBox");
+        const videoContainer = document.getElementById("videoContainer");
         const videoWrapper = document.getElementById("videoWrapper");
         const videoThumb = document.getElementById("videoThumb");
         const playBtn = document.getElementById("playBtn");
@@ -1101,13 +1049,32 @@
           };
         }
 
-        // Auto recipe scroll
+        // Auto print/recipe scroll
         if (window.location.hash === "#recipe") {
           setTimeout(() => {
-            const recipeElem = document.getElementById("recipeContent");
-            if (recipeElem) recipeElem.scrollIntoView({ behavior: "smooth" });
+            document.getElementById("recipeContent").scrollIntoView({ behavior: "smooth" });
           }, 500);
         }
+
+          if (!isMobileDevice()) {
+            videoWrapper.innerHTML = getPCBlockedHtml();
+            clearWatermarkFrom(videoWrapper);
+            return;
+          }
+
+          const videoUrl = lessonVideoUrl(currentLesson);
+          if (!videoUrl) {
+            alert("Video chưa được cập nhật hoặc phiên xem video đã hết hạn.");
+            return;
+          }
+
+          videoWrapper.innerHTML = getIframePlayerHtml(videoUrl);
+          if (currentLesson.videoProvider === "bunny_embed") {
+            createWatermark(videoWrapper, studentEmail);
+          } else {
+            clearWatermarkFrom(videoWrapper);
+          }
+        };
 
         // Transition states
         document.getElementById("loadingState").classList.add("hidden");

@@ -170,10 +170,6 @@
                     <button type="button" onclick="document.getElementById('courseHeroUploadInput').click()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold px-3 py-2 rounded-xl transition shrink-0 cursor-pointer">Tải ảnh</button>
                   </div>
                 </div>
-                <div class="flex items-center gap-2 py-1.5">
-                  <input id="metaIsPublished" type="checkbox" class="w-4 h-4 rounded text-brandGreen border-slate-200 focus:ring-brandGreen cursor-pointer"/>
-                  <label for="metaIsPublished" class="text-[10px] font-bold text-slate-700 cursor-pointer select-none">Đã xuất bản khóa học (Published)</label>
-                </div>
                 <div class="hidden">
                   <label class="block text-[10px] font-bold text-slate-500 mb-1">Ảnh poster khóa học</label>
                   <div class="flex gap-2">
@@ -1165,7 +1161,6 @@
       document.getElementById("metaHeroImage").value = STATE.globalConfig[`${course}_heroImage`] || "";
       document.getElementById("metaPosterImage").value = STATE.globalConfig[`${course}_posterImage`] || "";
       document.getElementById("metaQrImage").value = STATE.globalConfig[`${course}_qrImage`] || "";
-      document.getElementById("metaIsPublished").checked = STATE.globalConfig[`${course}_isPublished`] === "true" || STATE.globalConfig[`${course}_isPublished`] === true;
       
       const statusDiv = document.getElementById("driveUtilStatus");
       if (statusDiv) {
@@ -1193,8 +1188,7 @@
           subtitle: document.getElementById("metaSubtitle").value.trim(),
           heroImage: document.getElementById("metaHeroImage").value.trim(),
           posterImage: document.getElementById("metaPosterImage").value.trim(),
-          qrImage: document.getElementById("metaQrImage").value.trim(),
-          isPublished: document.getElementById("metaIsPublished").checked
+          qrImage: document.getElementById("metaQrImage").value.trim()
         }
       };
 
@@ -1215,7 +1209,6 @@
           STATE.globalConfig[`${course}_heroImage`] = payload.config.heroImage;
           STATE.globalConfig[`${course}_posterImage`] = payload.config.posterImage;
           STATE.globalConfig[`${course}_qrImage`] = payload.config.qrImage;
-          STATE.globalConfig[`${course}_isPublished`] = payload.config.isPublished;
         } else {
           toast(d.error || "Lỗi lưu cấu hình", "error");
         }
