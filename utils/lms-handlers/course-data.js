@@ -290,9 +290,9 @@ export default async function handler(req, res) {
     // 1. Fetch all active course enrollments for this student
     const { data: enrollments, error: enrollError } = await supabase
       .from("student_enrollments")
-      .select("course_slug")
+      .select("course_slug, status")
       .eq("email", email)
-      .eq("status", "active");
+      .in("status", ["active", "approved", "approved_ready", "completed"]);
 
     if (enrollError) throw enrollError;
 

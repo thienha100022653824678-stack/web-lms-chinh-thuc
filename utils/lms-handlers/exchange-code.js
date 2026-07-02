@@ -75,7 +75,7 @@ export default async function handler(req, res) {
     // 3. Check enrollment
     const courseSlug = String(course || "").trim();
     const { data: enrollments, error: enrollError } = await supabase
-      .from("student_enrollments").select("course_slug").eq("email", email).eq("status", "active");
+      .from("student_enrollments").select("course_slug, status").eq("email", email).in("status", ["active", "approved", "approved_ready", "completed"]);
     if (enrollError) throw enrollError;
 
     const allowedCourses = (enrollments || []).map(e => e.course_slug);
