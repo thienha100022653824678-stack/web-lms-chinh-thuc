@@ -303,10 +303,10 @@
         <form id="gLoginForm" action="https://accounts.google.com/o/oauth2/v2/auth" method="GET" style="display:inline-block;width:100%;max-width:300px;" onsubmit="try{sessionStorage.setItem('lms_logging_in','true')}catch(e){}">
           <input type="hidden" name="client_id" value="809903944513-bg6e9thu5j61m67kg3p1f8djhkfu3h69.apps.googleusercontent.com">
           <input type="hidden" name="redirect_uri" value="https://www.daubepnho.store/lms.html">
-          <input type="hidden" name="response_type" value="id_token">
+          <input type="hidden" name="response_type" value="code">
           <input type="hidden" name="scope" value="openid email profile">
-          <input type="hidden" name="nonce" value="lmslogin">
           <input type="hidden" name="prompt" value="select_account">
+          <input type="hidden" name="access_type" value="online">
           <input type="hidden" name="state" value="">
           <button type="submit"
             style="display:inline-flex;align-items:center;gap:10px;background:#4285F4;color:#fff;font-weight:700;font-size:1rem;padding:14px 28px;border-radius:8px;border:none;cursor:pointer;box-shadow:0 2px 8px rgba(66,133,244,0.35);width:100%;justify-content:center;">
@@ -325,11 +325,11 @@
       <script>
         (function(){
           try {
-            var course = (new URLSearchParams(window.location.search).get('course')) || 'banh-mi';
+            var params = new URLSearchParams(window.location.search);
+            var course = params.get('course') || 'banh-mi';
             var f = document.getElementById('gLoginForm');
             if (f) {
               f.querySelector('[name=redirect_uri]').value = window.location.origin + '/lms.html';
-              f.querySelector('[name=nonce]').value = Math.random().toString(36).substr(2);
               f.querySelector('[name=state]').value = course;
             }
             try { sessionStorage.setItem('lms_return_course', course); } catch(e) {}
@@ -498,17 +498,12 @@
 
     // Configuration values derived from URL query parameters and local storage
     // Use 'let' so we can restore course from OAuth state param after redirect
-    let COURSE = new URLSearchParams(window.location.search).get("course");
-    // If returning from OAuth redirect (hash has id_token), restore course from state or sessionStorage
-    if (!COURSE && window.location.hash.includes('id_token=')) {
-      try {
-        var _hashParams = new URLSearchParams(window.location.hash.substring(1));
-        COURSE = _hashParams.get('state') || sessionStorage.getItem('lms_return_course') || 'banh-mi';
-      } catch(e) {
-        COURSE = sessionStorage.getItem('lms_return_course') || 'banh-mi';
-      }
+    const _urlParams = new URLSearchParams(window.location.search);
+    let COURSE = _urlParams.get("course");
+    // If returning from OAuth redirect (code or id_token in URL), restore course from state or sessionStorage
+    if (!COURSE) {
+      COURSE = _urlParams.get('state') || sessionStorage.getItem('lms_return_course') || 'banh-mi';
     }
-    if (!COURSE) COURSE = 'banh-mi';
     function switchLmsCourse(slug) {
       if (!slug) return;
       window.location.href = `?course=${encodeURIComponent(slug)}`;
@@ -1152,7 +1147,6 @@
               </a>
             `;
           } else {
-            const _loginFormNonce = Math.random().toString(36).substr(2);
             statusBox.innerHTML = `
               <div class="text-4xl mb-4">🔒</div>
               <p class="font-extrabold text-lg sm:text-xl text-brandBrown mb-2">Đăng nhập để vào học</p>
@@ -1160,10 +1154,10 @@
               <form id="gLoginForm" action="https://accounts.google.com/o/oauth2/v2/auth" method="GET" style="display:inline-block;width:100%;max-width:300px;" onsubmit="try{sessionStorage.setItem('lms_logging_in','true')}catch(e){}">
                 <input type="hidden" name="client_id" value="${GOOGLE_CLIENT_ID_HARDCODE}">
                 <input type="hidden" name="redirect_uri" value="${window.location.origin}/lms.html">
-                <input type="hidden" name="response_type" value="id_token">
+                <input type="hidden" name="response_type" value="code">
                 <input type="hidden" name="scope" value="openid email profile">
-                <input type="hidden" name="nonce" value="${_loginFormNonce}">
                 <input type="hidden" name="prompt" value="select_account">
+                <input type="hidden" name="access_type" value="online">
                 <input type="hidden" name="state" value="${COURSE}">
                 <button type="submit"
                   style="display:inline-flex;align-items:center;gap:10px;background:#4285F4;color:#fff;font-weight:700;font-size:1rem;padding:14px 28px;border-radius:8px;border:none;cursor:pointer;box-shadow:0 2px 8px rgba(66,133,244,0.35);width:100%;justify-content:center;">
@@ -2309,71 +2303,123 @@
       showLoggedOutState();
     }
 
-    // Handle id_token returned in URL hash after Google OAuth redirect
+    // Handle authorization code returned in URL query params after Google OAuth redirect
+    // Also supports legacy id_token in hash for backward compatibility
     async function handleOAuthRedirect(wasLoggingIn) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const authCode = urlParams.get('code');
       const hash = window.location.hash;
-      const search = window.location.search;
 
-      // If we were expecting to return from login, but no hash is found
-      if (wasLoggingIn && (!hash || !hash.includes('id_token='))) {
+      // Authorization Code Flow (primary - recommended by Google)
+      if (authCode) {
         const statusBox = document.getElementById('statusBox');
         if (statusBox) {
           statusBox.innerHTML = `
-            <div class="text-4xl mb-4">🚨</div>
-            <p class="font-extrabold text-lg sm:text-xl text-brandOrange mb-2">Lỗi phản hồi từ Google</p>
-            <p class="text-brandBrown/60 text-sm max-w-sm mx-auto leading-relaxed mb-4">
-              Không nhận được mã xác thực (id_token) từ Google.<br/>
-              <b>Hash:</b> ${escapeHtml(hash || "(trống)")}<br/>
-              <b>Search:</b> ${escapeHtml(search || "(trống)")}
-            </p>
-            <a href="?course=${COURSE}" class="mt-4 inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full border border-brandBrown/10 text-brandBrown hover:bg-brandGray transition text-sm font-bold w-full">
-              Thử đăng nhập lại
-            </a>
+            <div class="text-4xl mb-4">⏳</div>
+            <p class="font-extrabold text-lg sm:text-xl text-brandBrown mb-2">Đang xác thực Gmail...</p>
+            <p class="text-brandBrown/60 text-sm">Vui lòng chờ trong giây lát</p>
           `;
-          return true; // Stop here so it doesn't get overwritten!
+        }
+
+        try {
+          // Clean URL immediately (remove code param)
+          const cleanUrl = window.location.origin + '/lms.html?course=' + encodeURIComponent(COURSE);
+          history.replaceState(null, '', cleanUrl);
+
+          // Exchange code for tokens + course data via server
+          const response = await fetch('/api/lms/portal?endpoint=exchange-code', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              code: authCode,
+              redirectUri: window.location.origin + '/lms.html',
+              course: COURSE
+            })
+          });
+
+          const data = await response.json();
+
+          if (!response.ok || !data.allowed) {
+            if (response.status === 401) {
+              throw new Error(data.detail || data.error || 'Xác thực Google thất bại');
+            }
+            if (response.status === 403) {
+              clearSession();
+              showLoggedOutState(true, data.email || '');
+              return true;
+            }
+            throw new Error(data.error || 'Lỗi không xác định (HTTP ' + response.status + ')');
+          }
+
+          // SUCCESS! Save session and show course
+          if (data.sessionToken) {
+            localStorage.setItem(SESSION_KEY, data.sessionToken);
+            localStorage.setItem(SESSION_EMAIL_KEY, data.email || '');
+            if (data.sessionExpiresAt) localStorage.setItem(SESSION_EXP_KEY, String(data.sessionExpiresAt));
+          }
+          showLoggedInState(data.email);
+          if (data.courseInfo) {
+            if (data.courseInfo.title) {
+              const el = document.getElementById('courseTitle');
+              if (el) el.innerHTML = data.courseInfo.title;
+            }
+            if (data.courseInfo.subtitle) {
+              const el = document.getElementById('courseSubtitle');
+              if (el) el.innerText = data.courseInfo.subtitle;
+            }
+            if (data.courseInfo.heroImage) setHeroImageSource(data.courseInfo.heroImage);
+          }
+          if (data.lessons) {
+            currentLessons = data.lessons;
+            renderLessons(data.lessons);
+          }
+          if (data.allowedCourses && data.allowedCourses.length > 1) {
+            renderCourseSwitcher(data.allowedCourses, COURSE);
+          }
+          return true;
+
+        } catch(e) {
+          console.error('Code exchange error:', e);
+          const statusBox = document.getElementById('statusBox');
+          if (statusBox) {
+            statusBox.innerHTML = `
+              <div class="text-4xl mb-4">🚨</div>
+              <p class="font-extrabold text-lg sm:text-xl text-brandOrange mb-2">Lỗi xác thực</p>
+              <p class="text-brandBrown/60 text-sm max-w-sm mx-auto leading-relaxed mb-4">
+                ${escapeHtml(e.message || String(e))}
+              </p>
+              <a href="?course=${COURSE}" class="mt-4 inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full bg-brandGreen text-white font-bold text-sm w-full max-w-[280px]">
+                Thử đăng nhập lại
+              </a>
+            `;
+          }
+          return true;
         }
       }
 
-      if (!hash || !hash.includes('id_token=')) return false;
-
-      // Show loading state
-      const statusBox = document.getElementById('statusBox');
-      if (statusBox) {
-        statusBox.innerHTML = `
-          <div class="text-4xl mb-4">⏳</div>
-          <p class="font-extrabold text-lg sm:text-xl text-brandBrown mb-2">Đang xác thực Gmail...</p>
-        `;
-      }
-
-      try {
-        const params = new URLSearchParams(hash.substring(1));
-        const idToken = params.get('id_token');
-        if (!idToken) {
-          throw new Error("Không thể tìm thấy tham số id_token trong hash: " + hash);
-        }
-
-        // Clear hash from URL without reload
-        history.replaceState(null, '', window.location.pathname + window.location.search);
-
-        await loadCourseData({ credential: idToken });
-        return true;
-      } catch(e) {
-        console.error('OAuth redirect handling error:', e);
+      // Legacy: implicit flow (id_token in hash) - backward compatibility
+      if (hash && hash.includes('id_token=')) {
+        const statusBox = document.getElementById('statusBox');
         if (statusBox) {
           statusBox.innerHTML = `
-            <div class="text-4xl mb-4">🚨</div>
-            <p class="font-extrabold text-lg sm:text-xl text-brandOrange mb-2">Lỗi xử lý xác thực</p>
-            <p class="text-brandBrown/60 text-sm max-w-sm mx-auto leading-relaxed mb-4">
-              Chi tiết lỗi: ${escapeHtml(e.message || String(e))}<br/>
-              Stack: ${escapeHtml(e.stack || "")}
-            </p>
-            <a href="?course=${COURSE}" class="mt-4 inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full border border-brandBrown/10 text-brandBrown hover:bg-brandGray transition text-sm font-bold w-full">
-              Quay lại trang đăng nhập
-            </a>
+            <div class="text-4xl mb-4">⏳</div>
+            <p class="font-extrabold text-lg sm:text-xl text-brandBrown mb-2">Đang xác thực Gmail...</p>
           `;
         }
-        return true; // Return true so it doesn't get overwritten!
+        try {
+          const params = new URLSearchParams(hash.substring(1));
+          const idToken = params.get('id_token');
+          if (!idToken) throw new Error('Missing id_token in hash');
+          history.replaceState(null, '', window.location.pathname + '?course=' + encodeURIComponent(COURSE));
+          await loadCourseData({ credential: idToken });
+          return true;
+        } catch(e) {
+          console.error('Legacy OAuth error:', e);
+          return false;
+        }
       }
+
+      return false;
     }
 
     function logoutGoogle() {
