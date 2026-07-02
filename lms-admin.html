@@ -257,6 +257,14 @@
                 </div>
               </div>
 
+              <div class="bg-emerald-50/70 border border-emerald-200/60 rounded-xl p-3 flex items-center justify-between">
+                <div>
+                  <span class="text-xs font-black text-brandGreen">📂 Đặt làm CHƯƠNG / MỤC BÀI HỌC</span>
+                  <p class="text-[11px] text-slate-500 font-medium">Tích chọn để biến dòng này thành Tiêu đề Chương lớn phân nhóm bài học.</p>
+                </div>
+                <input id="fIsSection" type="checkbox" class="w-5 h-5 accent-brandGreen cursor-pointer" onchange="toggleSectionMode(this.checked)"/>
+              </div>
+
               <div>
                 <label class="block text-xs font-bold text-slate-500 mb-1">Tiêu đề bài học</label>
                 <input id="fTitle" type="text" placeholder="Ví dụ: Tổng quan lý thuyết nhào bột" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"/>
@@ -1356,6 +1364,7 @@
       document.getElementById("fDuration").value = l.duration || "";
       document.getElementById("fLevel").value = l.level || "Cơ bản";
       document.getElementById("fStatus").value = l.status || "active";
+      document.getElementById("fIsSection").checked = !!l.isSection;
       document.getElementById("fThumbnailUrl").value = l.thumbnailUrl || "";
       document.getElementById("fVideoUrl").value = l.videoUrl || "";
       
@@ -1431,12 +1440,13 @@
       const recipeUrl = recipeTextInput ? recipeTextInput : recipeUrlInput;
 
       const mediaUrls = buildMediaUrls();
+      const isSection = document.getElementById("fIsSection").checked;
 
       if (!course) { toast("Chọn hoặc tạo khóa học trước.", "error"); return; }
       if (!lesson) { toast("Nhập số bài học.", "error"); return; }
-      if (!title) { toast("Nhập tiêu đề bài học.", "error"); return; }
+      if (!title) { toast(isSection ? "Nhập tên chương/mục." : "Nhập tiêu đề bài học.", "error"); return; }
 
-      const lessonData = { course, lesson, title, description, duration, level, status, thumbnailUrl, videoUrl, recipeUrl, mediaUrls };
+      const lessonData = { course, lesson, title, description, duration, level, status, thumbnailUrl, videoUrl, recipeUrl, mediaUrls, isSection };
 
       const payload = {
         action: STATE.isEditMode ? "update" : "create",
