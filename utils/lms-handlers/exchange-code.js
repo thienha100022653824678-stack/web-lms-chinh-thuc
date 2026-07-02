@@ -43,7 +43,7 @@ export default async function handler(req, res) {
         code,
         client_id: clientId,
         client_secret: clientSecret,
-        redirect_uri: redirectUri || "",
+        redirect_uri: redirectUri && redirectUri.startsWith("http") ? redirectUri : "https://www.daubepnho.store/lms.html",
         grant_type: "authorization_code"
       })
     });

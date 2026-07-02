@@ -2322,10 +2322,6 @@
         }
 
         try {
-          // Clean URL immediately (remove code param)
-          const cleanUrl = window.location.origin + '/lms.html?course=' + encodeURIComponent(COURSE);
-          history.replaceState(null, '', cleanUrl);
-
           // Exchange code for tokens + course data via server
           const response = await fetch('/api/lms/portal?endpoint=exchange-code', {
             method: 'POST',
@@ -2341,15 +2337,22 @@
 
           if (!response.ok || !data.allowed) {
             if (response.status === 401) {
-              throw new Error(data.detail || data.error || 'Xác thực Google thất bại');
+              throw new Error((data.error || 'Xác thực Google thất bại') + (data.detail ? ': ' + data.detail : ''));
             }
             if (response.status === 403) {
               clearSession();
+              // Clean URL
+              const cleanUrl = window.location.origin + '/lms.html?course=' + encodeURIComponent(COURSE);
+              history.replaceState(null, '', cleanUrl);
               showLoggedOutState(true, data.email || '');
               return true;
             }
             throw new Error(data.error || 'Lỗi không xác định (HTTP ' + response.status + ')');
           }
+
+          // Clean URL on success
+          const cleanUrl = window.location.origin + '/lms.html?course=' + encodeURIComponent(COURSE);
+          history.replaceState(null, '', cleanUrl);
 
           // SUCCESS! Save session and show course
           if (data.sessionToken) {
@@ -2384,8 +2387,8 @@
           if (statusBox) {
             statusBox.innerHTML = `
               <div class="text-4xl mb-4">🚨</div>
-              <p class="font-extrabold text-lg sm:text-xl text-brandOrange mb-2">Lỗi xác thực</p>
-              <p class="text-brandBrown/60 text-sm max-w-sm mx-auto leading-relaxed mb-4">
+              <p class="font-extrabold text-lg sm:text-xl text-brandOrange mb-2">Lỗi xác thực Google</p>
+              <p class="text-brandBrown/80 font-mono text-xs max-w-md mx-auto leading-relaxed mb-4 bg-red-50 p-3 rounded-lg border border-red-200 break-all text-left">
                 ${escapeHtml(e.message || String(e))}
               </p>
               <a href="?course=${COURSE}" class="mt-4 inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-full bg-brandGreen text-white font-bold text-sm w-full max-w-[280px]">
