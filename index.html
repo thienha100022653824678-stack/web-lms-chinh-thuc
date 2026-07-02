@@ -793,7 +793,10 @@
 
     function saveSession(data) {
       try {
-        if (data && data.sessionToken) localStorage.setItem(SESSION_KEY, data.sessionToken);
+        if (data && data.sessionToken) {
+          localStorage.setItem(SESSION_KEY, data.sessionToken);
+          localStorage.setItem("course_session_token", data.sessionToken);
+        }
         if (data && data.email) localStorage.setItem(SESSION_EMAIL_KEY, data.email);
         if (data && data.sessionExpiresAt) localStorage.setItem(SESSION_EXP_KEY, String(data.sessionExpiresAt));
       } catch (err) {
@@ -806,7 +809,7 @@
       let token = null;
       let exp = 0;
       try {
-        token = localStorage.getItem(SESSION_KEY);
+        token = localStorage.getItem(SESSION_KEY) || localStorage.getItem("course_session_token");
         exp = Number(localStorage.getItem(SESSION_EXP_KEY) || 0);
       } catch (err) {
         console.warn("Reading session from localStorage failed:", err);
