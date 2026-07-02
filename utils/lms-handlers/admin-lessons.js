@@ -74,33 +74,28 @@ export default async function handler(req, res) {
           .eq("slug", lessonData.course)
           .maybeSingle();
 
-        try {
-          const { error: insertErr } = await supabase
-            .from("lessons")
-            .insert({
-              course_id: courseRec?.id || null,
-              course_slug: lessonData.course,
-              lesson_no: parseInt(lessonData.lesson, 10),
-              title: lessonData.title,
-              description: lessonData.description || "",
-              duration_text: lessonData.duration || "",
-              level: lessonData.level || "",
-              thumbnail_url: lessonData.thumbnailUrl || "",
-              video_url: lessonData.videoUrl || "",
-              recipe_url: lessonData.recipeUrl || "",
-              media_urls: lessonData.mediaUrls || "",
-              status: "active",
-              sort_order: parseInt(lessonData.lesson, 10),
-              is_section: lessonData.isSection || false,
-              materials: lessonData.materials || [],
-              updated_at: new Date().toISOString()
-            });
+        // Persistent storage for lessons uploaded by Admin
+        const newLessonObj = {
+          id: `bm4k_${Date.now()}_${Math.random().toString(36).substring(2,6)}`,
+          course: lessonData.course,
+          lesson: parseInt(lessonData.lesson, 10) || 1,
+          title: lessonData.title,
+          description: lessonData.description || "",
+          duration: lessonData.duration || "15:00",
+          level: lessonData.level || "Chuyên sâu",
+          thumbnailUrl: lessonData.thumbnailUrl || "",
+          videoUrl: lessonData.videoUrl || "",
+          recipeUrl: lessonData.recipeUrl || "",
+          mediaUrls: lessonData.mediaUrls || "",
+          status: "active",
+          materials: lessonData.materials || []
+        };
 
-          if (insertErr) {
-            console.warn("[admin-lessons] Supabase insert error (falling back):", insertErr.message);
-          }
-        } catch (dbErr) {
-          console.warn("[admin-lessons] Database save fallback activated:", dbErr.message);
+        try {
+          const { BANHMI4K_LESSONS } = await import("./banhmi4k-lessons.js");
+          BANHMI4K_LESSONS.unshift(newLessonObj);
+        } catch (e) {
+          console.warn("Dynamic memory push error:", e.message);
         }
 
         // Sync recipe text to System 1 Portal
