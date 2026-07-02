@@ -2407,6 +2407,12 @@
 
       if (authCode) {
         showDebugLog("BƯỚC 1 & 2", "Đã phát hiện ?code= trong URL!");
+        // Force DOM unhide of lessons container immediately
+        const sb = document.getElementById("statusBox");
+        if (sb) sb.classList.add("hidden");
+        const ll = document.getElementById("lessonList");
+        if (ll) ll.classList.remove("hidden");
+
         return await processCodeExchange(authCode);
       }
       return false;
