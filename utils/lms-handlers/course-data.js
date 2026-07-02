@@ -349,67 +349,76 @@ export default async function handler(req, res) {
       });
     }
 
-    // 2. Load Config from site_config table
-    const { data: configRows } = await supabase.from("site_config").select("key, value");
-    const rawConfig = {};
-    if (configRows) {
-      configRows.forEach(row => {
-        const valObj = row.value;
-        const val = (valObj && typeof valObj === "object" && valObj.val !== undefined) ? valObj.val : valObj;
-        rawConfig[row.key] = val;
-      });
-    }
-
-    // 2.5 Load from courses table
-    const { data: courseRow } = await supabase
-      .from("courses")
-      .select("title, subtitle, image_url, raw_data")
-      .eq("slug", activeCourseSlug)
-      .maybeSingle();
-
-    const courseRawData = (courseRow && courseRow.raw_data) || {};
-
-    // Map course-prefixed config values to clean names for the active course with db fallbacks
-    const courseInfo = {
-      title: (courseRow && courseRow.title) || rawConfig[`${activeCourseSlug}_title`] || rawConfig.title || "Culinary Academy",
-      subtitle: (courseRow && courseRow.subtitle) || rawConfig[`${activeCourseSlug}_subtitle`] || rawConfig.subtitle || "",
-      heroImage: (courseRow && courseRow.image_url) || courseRawData.heroImageUrl || courseRawData.bannerImageUrl || rawConfig[`${activeCourseSlug}_heroImage`] || rawConfig[`${activeCourseSlug}_banner_url`] || rawConfig[`${activeCourseSlug}_image_url`] || rawConfig[`${activeCourseSlug}_thumbnail_url`] || rawConfig.heroImage || ""
+    // 2. Load Config & Lessons safely
+    let courseInfo = {
+      title: "Khóa Học Bánh Mì 4K",
+      subtitle: "Bí quyết kinh doanh bánh mì giòn tan chuẩn vị",
+      heroImage: ""
     };
+    let lessons = [];
 
-    // 3. Load Lessons from Supabase
-    const { data: lessonsRows, error: lessonsError } = await supabase
-      .from("lessons")
-      .select("*")
-      .eq("course_slug", activeCourseSlug)
-      .neq("status", "hidden")
-      .order("lesson_no", { ascending: true });
+    try {
+      const { data: configRows } = await supabase.from("site_config").select("key, value");
+      const rawConfig = {};
+      if (configRows) {
+        configRows.forEach(row => {
+          const valObj = row.value;
+          const val = (valObj && typeof valObj === "object" && valObj.val !== undefined) ? valObj.val : valObj;
+          rawConfig[row.key] = val;
+        });
+      }
 
-    if (lessonsError) throw lessonsError;
+      const { data: courseRow } = await supabase
+        .from("courses")
+        .select("title, subtitle, image_url, raw_data")
+        .eq("slug", activeCourseSlug)
+        .maybeSingle();
 
-    // Map columns from Supabase schema to match the legacy frontend expectation
-    let lessons = (lessonsRows || []).map(l => {
-      const securedVideo = signBunnyEmbedUrl(l.video_url || "");
-      const securedMedia = signMediaUrls(l.media_urls || "");
+      const courseRawData = (courseRow && courseRow.raw_data) || {};
 
-      return {
-        id: l.id,
-        course: l.course_slug,
-        lesson: l.lesson_no,
-        title: l.title,
-        description: l.description || "",
-        duration: l.duration_text || "",
-        level: l.level || "",
-        thumbnailUrl: l.thumbnail_url || "",
-        videoUrl: l.video_url || "",
-        recipeUrl: l.recipe_url || "",
-        mediaUrls: securedMedia,
-        views: l.views || 0,
-        status: l.status || "active",
-        isSection: l.is_section || false,
-        materials: l.materials || [],
-        ...securedVideo
-      };
-    });
+      if (courseRow || Object.keys(rawConfig).length > 0) {
+        courseInfo = {
+          title: (courseRow && courseRow.title) || rawConfig[`${activeCourseSlug}_title`] || rawConfig.title || "Khóa Học Bánh Mì 4K",
+          subtitle: (courseRow && courseRow.subtitle) || rawConfig[`${activeCourseSlug}_subtitle`] || rawConfig.subtitle || "Bí quyết kinh doanh bánh mì giòn tan chuẩn vị",
+          heroImage: (courseRow && courseRow.image_url) || courseRawData.heroImageUrl || courseRawData.bannerImageUrl || rawConfig[`${activeCourseSlug}_heroImage`] || rawConfig[`${activeCourseSlug}_banner_url`] || rawConfig[`${activeCourseSlug}_image_url`] || rawConfig[`${activeCourseSlug}_thumbnail_url`] || rawConfig.heroImage || ""
+        };
+      }
+
+      const { data: lessonsRows } = await supabase
+        .from("lessons")
+        .select("*")
+        .eq("course_slug", activeCourseSlug)
+        .neq("status", "hidden")
+        .order("lesson_no", { ascending: true });
+
+      if (lessonsRows && lessonsRows.length > 0) {
+        lessons = lessonsRows.map(l => {
+          const securedVideo = signBunnyEmbedUrl(l.video_url || "");
+          const securedMedia = signMediaUrls(l.media_urls || "");
+
+          return {
+            id: l.id,
+            course: l.course_slug,
+            lesson: l.lesson_no,
+            title: l.title,
+            description: l.description || "",
+            duration: l.duration_text || "",
+            level: l.level || "",
+            thumbnailUrl: l.thumbnail_url || "",
+            videoUrl: l.video_url || "",
+            recipeUrl: l.recipe_url || "",
+            mediaUrls: securedMedia,
+            views: l.views || 0,
+            status: l.status || "active",
+            isSection: l.is_section || false,
+            materials: l.materials || [],
+            ...securedVideo
+          };
+        });
+      }
+    } catch (loadErr) {
+      console.warn("[course-data] Non-critical error loading lessons table:", loadErr.message);
+    }
 
     // Fetch Google Docs recipe contents
     lessons = await Promise.all(lessons.map(attachRecipeText));
