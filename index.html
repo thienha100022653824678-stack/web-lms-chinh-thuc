@@ -1335,39 +1335,7 @@
             </div>`;
         }
 
-        return ""; // unknown type
-      }).filter(Boolean).join("");
-
-      if (!html) {
-        section.classList.add("hidden");
-        section.innerHTML = "";
-        return;
-      }
-
-      section.innerHTML = `
-        <div class="font-black text-brandGreen text-base flex items-center gap-2 mb-3">
-          <span>🎬</span> TÀI LIỆU BỔ SUNG
-        </div>
-        ${html}
-      `;
-      section.classList.remove("hidden");
-
-      // Áp dụng watermark overlay động cho từng container video Bunny phụ
-      const bunnyContainers = section.querySelectorAll("[data-bunny-media-container]");
-      bunnyContainers.forEach(container => {
-        createWatermark(container, getSavedEmail());
-      });
-
-      // Kích hoạt hiển thị cảnh báo sau 5 giây cho video Bunny nếu load chậm/trắng
-      const warnings = section.querySelectorAll("[data-bunny-warning]");
-      warnings.forEach(w => {
-        setTimeout(() => {
-          if (w) w.classList.remove("hidden");
-        }, 5000);
-      });
-    }
-
-    // Lesson Checklist Renderer
+        // Lesson Checklist Renderer (Collapsible Accordion Chapters & Dynamic Lesson Numbering)
     function renderLessons(lessons) {
       const list = document.getElementById("lessonList");
       if (!list) return;
@@ -1379,10 +1347,16 @@
         return;
       }
 
+      // Filter real non-section lessons count for summary
+      const realLessons = lessons.filter(l => !l.isSection);
+      const lessonCountEl = document.getElementById("lessonCount");
+      if (lessonCountEl) {
+        lessonCountEl.innerText = `${realLessons.length} bài học được biên soạn chuẩn khoa học`;
+      }
+
       // Check device state
       const mobileMode = isMobileDevice();
 
-      // On mobile, paginated lists
       let renderSet = lessons;
       let pageCount = Math.max(1, Math.ceil(total / MOBILE_PAGE_SIZE));
       if (mobileMode) {
@@ -1390,31 +1364,44 @@
         renderSet = lessons.slice(currentPage * MOBILE_PAGE_SIZE, currentPage * MOBILE_PAGE_SIZE + MOBILE_PAGE_SIZE);
       }
 
-      let currentLessonCounter = 0;
+      const hasSection = lessons.some(l => l.isSection);
+      let currentSectionIndex = 0;
+      let lessonInChapterCounter = 0;
+      let currentContainer = list;
 
       renderSet.forEach((l, idx) => {
-        const globalIdx = mobileMode ? currentPage * MOBILE_PAGE_SIZE + idx : idx;
-
-        // Render Section/Chapter Header
+        // Render Section/Chapter Header with Accordion toggle
         if (l.isSection) {
-          const sectionHeader = document.createElement("div");
-          sectionHeader.className = "col-span-full mt-6 mb-3 pt-4 border-t-2 border-brandGreen/10 flex items-center justify-between";
-          sectionHeader.innerHTML = `
-            <div class="flex items-center gap-2.5">
-              <span class="text-lg">📂</span>
-              <h2 class="text-base sm:text-lg font-black text-brandGreen tracking-tight">${escapeHtml(l.title || "CHƯƠNG BÀI HỌC")}</h2>
+          currentSectionIndex++;
+          lessonInChapterCounter = 0; // Reset lesson counter to 1 for each chapter
+
+          const chapterBox = document.createElement("div");
+          chapterBox.className = "col-span-full mt-6 mb-3 bg-white border border-brandGreen/15 rounded-2xl overflow-hidden shadow-sm";
+          
+          const sectionId = `chapter_sec_${currentSectionIndex}`;
+          
+          chapterBox.innerHTML = `
+            <div class="px-5 py-3.5 bg-brandGreen/5 hover:bg-brandGreen/10 cursor-pointer transition flex items-center justify-between select-none" onclick="toggleChapterSection('${sectionId}')">
+              <div class="flex items-center gap-3">
+                <span id="icon_${sectionId}" class="text-xs font-black text-brandGreen transition-transform transform rotate-0">▼</span>
+                <span class="text-xs font-black px-2.5 py-1 rounded-md bg-brandGreen text-white uppercase tracking-wider">CHƯƠNG ${currentSectionIndex}</span>
+                <h2 class="text-sm sm:text-base font-extrabold text-brandBrown">${escapeHtml(l.title || "Tên Chương")}</h2>
+              </div>
+              ${l.description ? `<span class="text-xs text-brandBrown/50 font-semibold hidden md:inline">${escapeHtml(l.description)}</span>` : ""}
             </div>
-            ${l.description ? `<span class="text-xs text-brandBrown/60 font-semibold hidden sm:inline">${escapeHtml(l.description)}</span>` : ""}
+            <div id="${sectionId}" class="p-4 space-y-3 bg-slate-50/50"></div>
           `;
-          list.appendChild(sectionHeader);
+          
+          list.appendChild(chapterBox);
+          currentContainer = chapterBox.querySelector(`#${sectionId}`);
           return;
         }
 
-        currentLessonCounter++;
-        const lessonDisplayNo = l.lesson || currentLessonCounter;
+        lessonInChapterCounter++;
+        const displayLessonNo = hasSection ? lessonInChapterCounter : (l.lesson || (idx + 1));
 
         const item = document.createElement("div");
-        item.className = "bg-white border border-brandBrown/5 rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition duration-200 grid gap-4 sm:grid-cols-[180px_1fr] md:grid-cols-[240px_1fr_200px] items-center mb-4";
+        item.className = "bg-white border border-brandBrown/5 rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition duration-200 grid gap-4 sm:grid-cols-[180px_1fr] md:grid-cols-[240px_1fr_200px] items-center";
 
         const thumb = normalizeGoogleDriveImageUrl(l.thumbnailUrl || HERO_PLACEHOLDER_IMAGE);
 
@@ -1428,7 +1415,7 @@
           <!-- Description -->
           <div class="flex flex-col min-w-0">
             <div class="flex items-center gap-2 mb-2 flex-wrap">
-              <span class="px-2 py-0.5 rounded bg-brandGreen/10 text-brandGreen font-bold text-[10px] sm:text-xs">BÀI ${lessonDisplayNo}</span>
+              <span class="px-2 py-0.5 rounded bg-brandGreen/10 text-brandGreen font-bold text-[10px] sm:text-xs">BÀI ${displayLessonNo}</span>
               <span class="text-[11px] sm:text-xs text-brandBrown/50 font-bold">⏱ ${l.duration || "N/A"}</span>
               <span class="text-[11px] sm:text-xs text-brandBrown/50 font-bold">▥ ${l.level || "Cơ bản"}</span>
             </div>
@@ -1440,7 +1427,7 @@
             </p>
           </div>
 
-          <!-- Buttons area (Visible beautifully on Desktop, or as quick access) -->
+          <!-- Buttons area -->
           <div class="flex sm:flex-col gap-2.5 sm:pl-4 sm:border-l border-brandBrown/5 justify-end">
             <button class="flex-1 sm:flex-none px-4 py-2.5 bg-brandGreen hover:bg-brandGreenLight text-white font-bold text-xs sm:text-sm rounded-xl transition duration-150 shadow-sm" onclick="window.location.href='/lesson.html?id=${l.id}'">
               🎬 XEM BÀI HỌC
@@ -1451,13 +1438,42 @@
           </div>
         `;
 
-        list.appendChild(item);
+        currentContainer.appendChild(item);
       });
 
       // Mobile Pagination controls
       if (mobileMode && total > MOBILE_PAGE_SIZE) {
         const paginator = document.createElement("div");
         paginator.className = "flex flex-col items-center gap-3 mt-8 pt-4 border-t border-brandBrown/5";
+
+        const dots = Array.from({ length: pageCount }).map((_, i) => `
+          <button class="w-2.5 h-2.5 rounded-full transition duration-150 ${i === currentPage ? 'bg-brandGreen scale-125' : 'bg-brandBrown/20'}" onclick="goLessonPage(${i})"></button>
+        `).join("");
+
+        paginator.innerHTML = `
+          <div class="flex items-center gap-6">
+            <button class="w-10 h-10 rounded-full bg-white border border-brandBrown/10 flex items-center justify-center font-bold text-brandBrown hover:bg-brandCream shadow-sm" onclick="changeLessonPage(-1)">‹</button>
+            <div class="flex items-center gap-2.5">${dots}</div>
+            <button class="w-10 h-10 rounded-full bg-white border border-brandBrown/10 flex items-center justify-center font-bold text-brandBrown hover:bg-brandCream shadow-sm" onclick="changeLessonPage(1)">›</button>
+          </div>
+          <span class="text-xs text-brandBrown/65 font-bold">Trang ${currentPage + 1} / ${pageCount}</span>
+        `;
+        list.appendChild(paginator);
+      }
+    }
+
+    function toggleChapterSection(secId) {
+      const sec = document.getElementById(secId);
+      const icon = document.getElementById(`icon_${secId}`);
+      if (!sec) return;
+      if (sec.classList.contains("hidden")) {
+        sec.classList.remove("hidden");
+        if (icon) icon.style.transform = "rotate(0deg)";
+      } else {
+        sec.classList.add("hidden");
+        if (icon) icon.style.transform = "rotate(-90deg)";
+      }
+    }ter gap-3 mt-8 pt-4 border-t border-brandBrown/5";
 
         const dots = Array.from({ length: pageCount }).map((_, i) => `
           <button class="w-2.5 h-2.5 rounded-full transition duration-150 ${i === currentPage ? 'bg-brandGreen scale-125' : 'bg-brandBrown/20'}" onclick="goLessonPage(${i})"></button>
