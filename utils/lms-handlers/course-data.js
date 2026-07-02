@@ -365,6 +365,7 @@ export default async function handler(req, res) {
         videoUrl: l.video_url || "",
         recipeUrl: l.recipe_url || "",
         mediaUrls: securedMedia,
+        isSection: Boolean(l.is_section),
         views: l.views || 0,
         status: l.status || "active",
         ...securedVideo

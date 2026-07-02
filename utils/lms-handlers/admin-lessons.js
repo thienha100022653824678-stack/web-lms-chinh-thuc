@@ -45,6 +45,7 @@ export default async function handler(req, res) {
         videoUrl: l.video_url || "",
         recipeUrl: l.recipe_url || "",
         mediaUrls: l.media_urls || "",
+        isSection: Boolean(l.is_section),
         status: l.status || "active"
       }));
 
@@ -86,6 +87,7 @@ export default async function handler(req, res) {
             video_url: lessonData.videoUrl || "",
             recipe_url: lessonData.recipeUrl || "",
             media_urls: lessonData.mediaUrls || "",
+            is_section: Boolean(lessonData.isSection),
             status: "active",
             sort_order: parseInt(lessonData.lesson, 10),
             updated_at: new Date().toISOString()
@@ -152,6 +154,7 @@ export default async function handler(req, res) {
             video_url: lessonData.videoUrl || "",
             recipe_url: lessonData.recipeUrl || "",
             media_urls: lessonData.mediaUrls || "",
+            is_section: Boolean(lessonData.isSection),
             status: lessonData.status || "active",
             sort_order: parseInt(lessonData.lesson, 10),
             updated_at: new Date().toISOString()
