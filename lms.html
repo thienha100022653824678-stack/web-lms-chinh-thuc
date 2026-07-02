@@ -326,7 +326,7 @@
         (function(){
           try {
             var params = new URLSearchParams(window.location.search);
-            var course = params.get('course') || 'banh-mi';
+            var course = params.get('course') || params.get('state') || sessionStorage.getItem('lms_return_course') || 'banhmi4k';
             var f = document.getElementById('gLoginForm');
             if (f) {
               f.querySelector('[name=redirect_uri]').value = window.location.origin + '/lms.html';
@@ -499,11 +499,9 @@
     // Configuration values derived from URL query parameters and local storage
     // Use 'let' so we can restore course from OAuth state param after redirect
     const _urlParams = new URLSearchParams(window.location.search);
-    let COURSE = _urlParams.get("course");
-    // If returning from OAuth redirect (code or id_token in URL), restore course from state or sessionStorage
-    if (!COURSE) {
-      COURSE = _urlParams.get('state') || sessionStorage.getItem('lms_return_course') || 'banh-mi';
-    }
+    let COURSE = _urlParams.get("course") || _urlParams.get("state") || sessionStorage.getItem("lms_return_course") || "banhmi4k";
+    // Ensure COURSE is synced back to sessionStorage
+    try { sessionStorage.setItem("lms_return_course", COURSE); } catch(e) {}
     function switchLmsCourse(slug) {
       if (!slug) return;
       window.location.href = `?course=${encodeURIComponent(slug)}`;
