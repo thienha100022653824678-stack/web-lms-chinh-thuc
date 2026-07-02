@@ -2355,11 +2355,7 @@
           history.replaceState(null, '', cleanUrl);
 
           // SUCCESS! Save session and show course
-          if (data.sessionToken) {
-            localStorage.setItem(SESSION_KEY, data.sessionToken);
-            localStorage.setItem(SESSION_EMAIL_KEY, data.email || '');
-            if (data.sessionExpiresAt) localStorage.setItem(SESSION_EXP_KEY, String(data.sessionExpiresAt));
-          }
+          saveSession(data);
           showLoggedInState(data.email);
           if (data.courseInfo) {
             if (data.courseInfo.title) {
