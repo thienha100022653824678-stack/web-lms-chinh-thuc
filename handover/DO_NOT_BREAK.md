@@ -28,12 +28,17 @@ This document lists critical components, configurations, and logic paths that mu
 
 ## 6. Two-Supabase Boundary
 - **Runtime code note**: This repo currently shows one runtime Supabase client through `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`.
+- **Confirmed current runtime**: `web-lms-chinh-thuc` currently uses Supabase B - LMS & Checkout.
+- **Confirmed Supabase B org**: `thienha336501903-a11y's Org`
+- **Confirmed Supabase B project ref**: `aqozjkfwzmyfunqvcyjv`
 - **Operating architecture note**: The broader system has two Supabase databases:
   - Supabase A: Student Portal / old portal content, `posts`, `post_views`, portal `student_enrollments`.
   - Supabase B: LMS & Checkout, `courses`, `orders`, `lessons`, `students`, LMS `student_enrollments`, `site_config`, `lesson_progress`.
+- **Default impact area**: Student LMS, Admin CMS, `course-data`, `lesson`, enrollment, `courses`, `lessons`, `students`, `student_enrollments`, `site_config`, and `lesson_progress` should be treated as Supabase B changes unless proven otherwise.
 - **Before any database-sensitive edit**, explicitly identify whether the change touches Supabase A, Supabase B, or the sync boundary between them.
 - **Do not casually edit without an explicit request**:
   - `/api/sync`
+  - Supabase A
   - `orders`
   - `source_order_id`
   - `student_enrollments`

@@ -6,7 +6,7 @@ The project is a premium online Learning Management System (LMS) platform for **
 ## 2. Overall Architecture
 - **Frontend**: Single Page / multi-page Vanilla HTML5 and JavaScript web applications styled using Tailwind CSS (CDN-based) and custom premium CSS.
 - **Backend / API**: Vercel Serverless Functions acting as proxy and business logic layers. API endpoints under `/api/lms/` route requests to specific handler scripts located in `utils/lms-handlers/`.
-- **Database**: Supabase PostgreSQL stores course metadata, detailed lessons, student enrollments, and configuration. Current repo runtime code shows one Supabase client via `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`, but the operating architecture has two Supabase/database systems: Supabase A for the old Student Portal/post-based content and Supabase B for LMS & Checkout.
+- **Database**: Supabase PostgreSQL stores course metadata, detailed lessons, student enrollments, and configuration. Current repo runtime code shows one Supabase client via `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`; the confirmed current runtime target is Supabase B - LMS & Checkout (`aqozjkfwzmyfunqvcyjv`, `thienha336501903-a11y's Org`). The broader operating architecture still has two Supabase/database systems: Supabase A for the old Student Portal/post-based content and Supabase B for LMS & Checkout.
 - **Authentication**: Google Identity Services (GSI) Client-side library + server-side JWT verification against student email whitelist stored in Supabase.
 - **Storage**: Video lectures and supplementary media files are securely stored on Google Drive (managed by a service account) or Bunny Stream.
 
@@ -55,4 +55,7 @@ web-lms-chinh-thuc/
 - Correct wording: "Repo runtime currently shows one Supabase client, but the operating system has two Supabase/database systems according to the project owner."
 - Supabase A is for the Student Portal / old post-based portal (`posts`, `post_views`, portal enrollments).
 - Supabase B is for LMS & Checkout (`courses`, `orders`, `lessons`, `students`, LMS enrollments).
+- Current `web-lms-chinh-thuc` runtime uses Supabase B through `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`.
+- Supabase B org: `thienha336501903-a11y's Org`.
+- Supabase B project ref: `aqozjkfwzmyfunqvcyjv`.
 - Before changing database code, sync code, or schema, confirm which Supabase is affected.

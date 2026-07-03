@@ -25,7 +25,7 @@ All documentation is located in the `handover/` folder at the project root:
 - **Google OAuth / GSI**: Do not modify client-side Google SDK inclusions or change the signed cookie `course_session_token` validation. This keeps students logged in.
 - **Lesson Numbering (displayLesson)**: Sibling lessons under each collapsible Chapter Section are labeled `Bài 1`, `Bài 2`, etc. This numbering index is calculated dynamically on the server-side API endpoints (`course-data.js` and `lesson.js`) so that it remains uniform across listing page, detail view, sidebar list, and admin dashboard.
 - **Database Ordering (lesson_no)**: Sequential, unique integers track database records and ordering inside Supabase. Never save resets (starting from 1) directly into database `lesson_no` column to avoid unique constraint key collisions.
-- **Two Supabase Operating Architecture**: Repo runtime currently shows one Supabase client via `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`, but the broader system has two Supabase databases. Supabase A is the old Student Portal/post database (`posts`, `post_views`, portal `student_enrollments`). Supabase B is LMS & Checkout (`courses`, `orders`, `lessons`, `students`, LMS `student_enrollments`). Before database or sync changes, identify whether the change affects Supabase A, Supabase B, or the sync boundary.
+- **Two Supabase Operating Architecture**: Repo runtime currently shows one Supabase client via `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`. The confirmed current runtime target is Supabase B - LMS & Checkout (`aqozjkfwzmyfunqvcyjv`, `thienha336501903-a11y's Org`). The broader system also has Supabase A, the old Student Portal/post database (`posts`, `post_views`, portal `student_enrollments`). Before database or sync changes, identify whether the change affects Supabase A, Supabase B, or the sync boundary.
 - **Do Not Touch Without Explicit Request**: `/api/sync`, `orders`, `source_order_id`, `student_enrollments`, `course_slug` mapping, `sync_lms_status`, `sync_portal_status`, `sync_error`, `lessons.is_section`, and `lessons.materials`.
 
 ### 3. Immediate Next Tasks
@@ -40,7 +40,7 @@ Current verified baseline:
 - Core local env is enough to run `vercel dev`; if Vercel functions do not see `.env.local`, load env into the process before starting `vercel dev`.
 - Missing env still to complete: `GOOGLE_CLIENT_EMAIL`, `GOOGLE_PRIVATE_KEY`, `BUNNY_STREAM_TOKEN_KEY`.
 - Never print or commit secret values.
-- Confirm from Vercel/dashboard which Supabase is current production runtime before database-sensitive edits. Do not print secret values while confirming.
+- Current production/runtime Supabase has been confirmed as Supabase B. Do not print secret values while verifying or updating env.
 
 Please implement the tasks listed in `handover/TODO.md`:
 

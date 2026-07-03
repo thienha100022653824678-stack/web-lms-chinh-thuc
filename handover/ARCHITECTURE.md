@@ -35,7 +35,10 @@ graph TD
 - **Runtime client in this repo**: Current source code only shows one runtime Supabase client, created in `utils/supabase.js` from:
   - `SUPABASE_URL`
   - `SUPABASE_SERVICE_ROLE_KEY`
-- **Important operating note**: Do not conclude that the operating system has only one Supabase database. The project owner has confirmed there are two Supabase/database systems in the broader architecture. This repo may point to one of them depending on runtime env.
+- **Confirmed current runtime**: `web-lms-chinh-thuc` currently reads/writes Supabase B - LMS & Checkout.
+- **Confirmed Supabase B project ref**: `aqozjkfwzmyfunqvcyjv`
+- **Confirmed Supabase B URL**: `https://aqozjkfwzmyfunqvcyjv.supabase.co`
+- **Important operating note**: Do not conclude that the operating system has only one Supabase database. The project owner has confirmed there are two Supabase/database systems in the broader architecture.
 - **Key Tables for the current LMS runtime client**:
   - `lessons`: Stores sections and actual lessons. Important columns:
     - `id` (UUID): Primary key.
@@ -71,6 +74,8 @@ The repo currently exposes one Supabase client at runtime, but the real operatin
 
 ### Supabase B - LMS & Checkout / Sales + LMS
 - **Org**: `thienha336501903-a11y's Org`
+- **Project ref**: `aqozjkfwzmyfunqvcyjv`
+- **Current repo runtime**: This is the Supabase used by `web-lms-chinh-thuc` through `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`.
 - **Purpose**:
   - Checkout / sales / course registration.
   - Manages `courses` and `orders`.
@@ -78,7 +83,7 @@ The repo currently exposes one Supabase client at runtime, but the real operatin
   - Uses `lessons.is_section` for chapter/section records.
   - Uses `lessons.materials` for attached learning documents.
   - Tracks sync state through `sync_lms_status`, `sync_portal_status`, and `sync_error`.
-  - May be the source or target for the current LMS runtime depending on env.
+  - Current runtime target for the Student LMS and Admin CMS in this repo.
 - **Known tables / structures**:
   - `courses`: `slug`, `title`, `price`, `image_url`, `description`, `teacher_name`, `active`, `is_published`, `sync_lms_status`, `sync_portal_status`, `sync_error`
   - `orders`: `course_slug`, `course_title`, `customer_name`, `customer_email`, `customer_phone`, `proof_image_url`, `status`, `sync_lms_status`, `sync_portal_status`, `sync_error`
@@ -110,7 +115,20 @@ graph TD
 
 Before changing code, determine whether the change affects Supabase A, Supabase B, the sync boundary between A and B, or only this repo's current runtime Supabase client.
 
-The current production runtime Supabase project must be confirmed from Vercel env or dashboard before any database-sensitive change. Do not print secret values while confirming it.
+Confirmed current production/runtime Supabase for this repo is Supabase B (`aqozjkfwzmyfunqvcyjv`). Do not print secret values while verifying or updating env.
+
+By default, changes in these areas affect Supabase B:
+- Student LMS
+- Admin CMS
+- `course-data`
+- `lesson`
+- enrollment
+- `courses`
+- `lessons`
+- `students`
+- `student_enrollments`
+- `site_config`
+- `lesson_progress`
 
 ---
 
