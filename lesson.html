@@ -98,7 +98,7 @@
       color: #2D1914;
       font-family: "Be Vietnam Pro", sans-serif;
     }
-    
+
     .serif-title {
       font-family: "Playfair Display", serif;
     }
@@ -261,7 +261,7 @@
 
   <!-- Main Grid Layout (Hidden until loaded) -->
   <div id="mainLayout" class="hidden flex-grow max-w-7xl w-full mx-auto sm:px-6 py-6 grid lg:grid-cols-[300px_1fr] gap-6">
-    
+
     <!-- Sidebar Lesson List (Desktop Only) -->
     <aside class="hidden lg:flex flex-col bg-white border border-brandBrown/5 rounded-2xl p-4 shadow-sm h-[calc(100vh-140px)] sticky top-24 overflow-y-auto">
       <h3 class="font-extrabold text-brandGreen text-sm border-b border-brandGray pb-3 mb-3 flex items-center gap-2">
@@ -274,9 +274,17 @@
 
     <!-- Main Content Area -->
     <main class="flex flex-col px-4 sm:px-0">
-      
+
       <!-- Lesson Meta Info -->
       <div class="mb-4">
+        <!-- Chapter Header for courses with Sections -->
+        <div id="chapterMetaContainer" class="hidden mb-3 p-3.5 bg-brandGreen/5 border border-brandGreen/15 rounded-xl overflow-hidden">
+          <div class="flex flex-wrap sm:flex-nowrap items-center gap-2 min-w-0">
+            <span class="text-[10px] font-black px-2 py-0.5 rounded bg-brandGreen text-white uppercase tracking-wider shrink-0" id="chapterNumberLabel">CHƯƠNG 1</span>
+            <span class="text-xs font-bold text-brandGreen min-w-0 max-w-full break-words sm:truncate" id="chapterTitleLabel">Tên Chương</span>
+          </div>
+        </div>
+
         <div class="flex items-center gap-2 mb-1.5 flex-wrap">
           <span id="lessonNumberBadge" class="px-2 py-0.5 rounded bg-brandGreen/10 text-brandGreen font-bold text-xs">BÀI ...</span>
           <span id="lessonDuration" class="text-xs text-brandBrown/50 font-bold">⏱ ...</span>
@@ -311,11 +319,11 @@
             <span>📄</span> CÔNG THỨC CHI TIẾT
           </span>
         </div>
-        
+
         <div id="recipeContent" class="recipe-render no-copy text-sm sm:text-base overflow-hidden transition-all duration-300 max-h-[380px] relative">
           <!-- Loaded by JS -->
         </div>
-        
+
         <button id="recipeMoreBtn" class="mt-4 w-full py-2.5 bg-brandCream hover:bg-brandGray text-brandGreen font-bold text-sm rounded-xl transition duration-150 flex items-center justify-center gap-1.5" onclick="toggleRecipeMore()">
           Xem thêm <span>▼</span>
         </button>
@@ -327,7 +335,7 @@
         <p id="lessonDescription" class="text-sm text-brandBrown/85 leading-relaxed no-copy">
         </p>
       </div>
-      
+
       <!-- Footer Nav controls -->
       <div class="bg-white border-t border-brandBrown/5 py-4 px-4 sticky bottom-0 z-30 flex items-center justify-between gap-4 -mx-4 sm:mx-0 sm:rounded-2xl shadow-lg mb-6">
         <button id="prevBtn" class="flex-1 py-3 border border-brandGreen/35 hover:bg-brandCream text-brandGreen font-bold text-sm rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed">
@@ -418,6 +426,77 @@
         .replace(/'/g, "&#039;");
     }
 
+    function shortenUrlText(urlStr) {
+      let urlClean = String(urlStr || "").trim();
+      if (!urlClean) return "";
+
+      // If the URL is already short, display it as-is
+      let shortCheck = urlClean.replace(/^https?:\/\//i, "").replace(/^www\./i, "");
+      if (shortCheck.length < 25) {
+        return shortCheck;
+      }
+
+      let parseUrl = urlClean;
+      if (!/^https?:\/\//i.test(urlClean)) {
+        parseUrl = "https://" + urlClean;
+      }
+
+      try {
+        const url = new URL(parseUrl);
+        const host = url.hostname.toLowerCase().replace(/^www\./, "");
+
+        if (host.includes("drive.google.com") || host.includes("docs.google.com")) {
+          return `${host}/...`;
+        }
+
+        let path = url.pathname;
+        if (path.endsWith("/")) {
+          path = path.slice(0, -1);
+        }
+
+        const parts = path.split("/").filter(Boolean);
+
+        if (host.includes("shopee.vn")) {
+          if (parts.length > 0) {
+            return `shopee.vn/${parts[parts.length - 1]}`;
+          }
+          return "shopee.vn";
+        }
+
+        if (host.includes("lazada.vn")) {
+          return `lazada.vn/...`;
+        }
+
+        if (host.includes("tiki.vn")) {
+          return `tiki.vn/...`;
+        }
+
+        if (host.includes("facebook.com") || host.includes("fb.com")) {
+          return `facebook.com/...`;
+        }
+
+        if (parts.length > 0) {
+          const first = parts[0];
+          if (parts.length > 1 || first.length > 15) {
+            return `${host}/${first.substring(0, 12)}...`;
+          }
+          return `${host}/${first}`;
+        }
+
+        return host;
+      } catch (err) {
+        let clean = urlClean.replace(/^https?:\/\//i, "").replace(/^www\./i, "");
+        const qIndex = clean.indexOf("?");
+        if (qIndex !== -1) {
+          clean = clean.substring(0, qIndex);
+        }
+        if (clean.length > 30) {
+          return clean.substring(0, 27) + "...";
+        }
+        return clean;
+      }
+    }
+
     function linkifyTextSafe(text) {
       const regex = /(https?:\/\/[^\s<>]+|www\.[^\s<>]+|(?:facebook\.com|fb\.com|shopee\.vn|zalo\.me|tiktok\.com|lazada\.vn|tiki\.vn)\/[^\s<>]*)/gi;
       return text.replace(regex, (match) => {
@@ -434,9 +513,9 @@
         } else if (!/^https?:\/\//i.test(cleanUrl)) {
           href = "https://" + cleanUrl;
         }
-        
-        // Display exact URL text entered by the editor
-        return `<a href="${href}" target="_blank" rel="noopener noreferrer">${escapeHtml(cleanUrl)}</a>${suffix}`;
+
+        // Display shortened URL text for long links
+        return `<a href="${href}" target="_blank" rel="noopener noreferrer">${escapeHtml(shortenUrlText(cleanUrl))}</a>${suffix}`;
       });
     }
 
@@ -469,7 +548,7 @@
           return;
         }
         closeList();
-        
+
         const endsWithColon = /:\s*$/.test(line);
         const startsWithHeadingWord = /^(Bài|Bước|Phần|Lưu ý|Công thức|Nguyên liệu|Sơ chế|Gia vị|Cách làm|Hướng dẫn)\s*\d*\s*:/i.test(line);
         const isAllUpperCase = line.length <= 60 && !/[a-z]/.test(line) && /[A-Z]/.test(line);
@@ -647,9 +726,9 @@
 
       const watermark = document.createElement('div');
       watermark.className = 'watermark-overlay';
-      
+
       const courseName = document.getElementById("courseNameText").innerText || "Khóa Học";
-      
+
       function updateWatermarkText() {
         const now = new Date();
         const timeStr = now.toLocaleDateString('vi-VN') + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
@@ -916,7 +995,7 @@
 
         currentLesson = data.lesson;
         studentEmail = data.email || "Học viên";
-        
+
         // Show student badges
         document.getElementById("studentEmailBadge").innerText = studentEmail;
         document.getElementById("studentAvatar").innerText = studentEmail.charAt(0).toUpperCase();
@@ -925,7 +1004,7 @@
         document.title = `${currentLesson.title} - Culinary Academy`;
         document.getElementById("lessonTitle").innerText = currentLesson.title;
         document.getElementById("lessonNumberBadge").innerText = `BÀI ${currentLesson.displayLesson || currentLesson.lesson}`;
-        
+
         // Hide N/A duration/level badges if empty
         const durationEl = document.getElementById("lessonDuration");
         if (currentLesson.duration && currentLesson.duration !== "N/A") {
@@ -1005,7 +1084,7 @@
           if (hasRecipe) {
             recipeSection.classList.remove("hidden");
             recipeContent.innerHTML = `<div class="recipe-content-html">${recipeTextToHtml(currentLesson.recipeText)}</div>`;
-            
+
             // Auto print/recipe scroll
             if (window.location.hash === "#recipe") {
               setTimeout(() => {
@@ -1058,11 +1137,41 @@
 
         courseLessonsList = data.lessons || [];
 
+        const hasSection = courseLessonsList.some(l => l.isSection);
+
+        // Update Chapter/Section details if sections exist
+        const chapterMetaContainer = document.getElementById("chapterMetaContainer");
+        if (hasSection) {
+          let currentSectionIdx = 0;
+          let activeChapter = null;
+
+          for (const item of courseLessonsList) {
+            if (item.isSection) {
+              currentSectionIdx++;
+              activeChapter = {
+                index: currentSectionIdx,
+                title: item.title
+              };
+            }
+            if (item.id === LESSON_ID) {
+              break;
+            }
+          }
+
+          if (activeChapter && chapterMetaContainer) {
+            document.getElementById("chapterNumberLabel").innerText = `CHƯƠNG ${activeChapter.index}`;
+            document.getElementById("chapterTitleLabel").innerText = activeChapter.title;
+            chapterMetaContainer.classList.remove("hidden");
+          } else if (chapterMetaContainer) {
+            chapterMetaContainer.classList.add("hidden");
+          }
+        } else if (chapterMetaContainer) {
+          chapterMetaContainer.classList.add("hidden");
+        }
+
         // Build sidebar with Chapter Sections support
         const sidebar = document.getElementById("sidebarLessonList");
         sidebar.innerHTML = "";
-        
-        const hasSection = courseLessonsList.some(l => l.isSection);
         let currentSectionIndex = 0;
         let lessonInChapterCounter = 0;
 

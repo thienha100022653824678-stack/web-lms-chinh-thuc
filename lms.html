@@ -100,7 +100,7 @@
       color: #2D1914;
       font-family: "Be Vietnam Pro", sans-serif;
     }
-    
+
     .serif-title {
       font-family: "Playfair Display", serif;
     }
@@ -471,7 +471,7 @@
     let currentLessons = [];
     let currentView = "home";
     let currentLessonIndex = 0;
-    
+
     // Pagination parameters for Mobile Lesson Checklist
     let currentPage = 0;
     const MOBILE_PAGE_SIZE = 5;
@@ -788,9 +788,9 @@
 
       const watermark = document.createElement('div');
       watermark.className = 'watermark-overlay';
-      
+
       const courseName = document.getElementById("mobileLessonHeaderTitle").innerText || "Khóa Học";
-      
+
       function updateWatermarkText() {
         const now = new Date();
         const timeStr = now.toLocaleDateString('vi-VN') + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
@@ -874,7 +874,7 @@
 
     function getIframePlayerHtml(url) {
       const isDrive = url.includes("drive.google.com");
-      
+
       if (isDrive) {
         const previewUrl = normalizeGoogleDrivePreviewUrl(url) || url;
         const fileId = getGoogleDriveFileId(url);
@@ -1024,6 +1024,77 @@
         .replace(/'/g, "&#039;");
     }
 
+    function shortenUrlText(urlStr) {
+      let urlClean = String(urlStr || "").trim();
+      if (!urlClean) return "";
+
+      // If the URL is already short, display it as-is
+      let shortCheck = urlClean.replace(/^https?:\/\//i, "").replace(/^www\./i, "");
+      if (shortCheck.length < 25) {
+        return shortCheck;
+      }
+
+      let parseUrl = urlClean;
+      if (!/^https?:\/\//i.test(urlClean)) {
+        parseUrl = "https://" + urlClean;
+      }
+
+      try {
+        const url = new URL(parseUrl);
+        const host = url.hostname.toLowerCase().replace(/^www\./, "");
+
+        if (host.includes("drive.google.com") || host.includes("docs.google.com")) {
+          return `${host}/...`;
+        }
+
+        let path = url.pathname;
+        if (path.endsWith("/")) {
+          path = path.slice(0, -1);
+        }
+
+        const parts = path.split("/").filter(Boolean);
+
+        if (host.includes("shopee.vn")) {
+          if (parts.length > 0) {
+            return `shopee.vn/${parts[parts.length - 1]}`;
+          }
+          return "shopee.vn";
+        }
+
+        if (host.includes("lazada.vn")) {
+          return `lazada.vn/...`;
+        }
+
+        if (host.includes("tiki.vn")) {
+          return `tiki.vn/...`;
+        }
+
+        if (host.includes("facebook.com") || host.includes("fb.com")) {
+          return `facebook.com/...`;
+        }
+
+        if (parts.length > 0) {
+          const first = parts[0];
+          if (parts.length > 1 || first.length > 15) {
+            return `${host}/${first.substring(0, 12)}...`;
+          }
+          return `${host}/${first}`;
+        }
+
+        return host;
+      } catch (err) {
+        let clean = urlClean.replace(/^https?:\/\//i, "").replace(/^www\./i, "");
+        const qIndex = clean.indexOf("?");
+        if (qIndex !== -1) {
+          clean = clean.substring(0, qIndex);
+        }
+        if (clean.length > 30) {
+          return clean.substring(0, 27) + "...";
+        }
+        return clean;
+      }
+    }
+
     function linkifyTextSafe(text) {
       const regex = /(https?:\/\/[^\s<>]+|www\.[^\s<>]+|(?:facebook\.com|fb\.com|shopee\.vn|zalo\.me|tiktok\.com|lazada\.vn|tiki\.vn)\/[^\s<>]*)/gi;
       return text.replace(regex, (match) => {
@@ -1040,9 +1111,9 @@
         } else if (!/^https?:\/\//i.test(cleanUrl)) {
           href = "https://" + cleanUrl;
         }
-        
-        // Display exact URL text entered by the editor
-        return `<a href="${href}" target="_blank" rel="noopener noreferrer">${escapeHtml(cleanUrl)}</a>${suffix}`;
+
+        // Display shortened URL text for long links
+        return `<a href="${href}" target="_blank" rel="noopener noreferrer">${escapeHtml(shortenUrlText(cleanUrl))}</a>${suffix}`;
       });
     }
 
@@ -1075,7 +1146,7 @@
           return;
         }
         closeList();
-        
+
         const endsWithColon = /:\s*$/.test(line);
         const startsWithHeadingWord = /^(Bài|Bước|Phần|Lưu ý|Công thức|Nguyên liệu|Sơ chế|Gia vị|Cách làm|Hướng dẫn)\s*\d*\s*:/i.test(line);
         const isAllUpperCase = line.length <= 60 && !/[a-z]/.test(line) && /[A-Z]/.test(line);
@@ -1149,7 +1220,7 @@
 
         if (item.type === "video") {
           const rawUrl = item.url.trim();
-          
+
           // Trích xuất src nếu là thẻ iframe và làm sạch &amp;
           let url = rawUrl;
           const iframeMatch = rawUrl.match(/<iframe[^>]+src=["']([^"']+)["']/i);
@@ -1411,9 +1482,9 @@
 
           const chapterBox = document.createElement("div");
           chapterBox.className = "col-span-full mt-6 mb-3 bg-white border border-brandGreen/15 rounded-2xl overflow-hidden shadow-sm";
-          
+
           const sectionId = `chapter_sec_${currentSectionIndex}`;
-          
+
           chapterBox.innerHTML = `
             <div class="px-5 py-3.5 bg-brandGreen/5 hover:bg-brandGreen/10 cursor-pointer transition flex items-center justify-between select-none" onclick="toggleChapterSection('${sectionId}')">
               <div class="flex items-center gap-3">
@@ -1425,7 +1496,7 @@
             </div>
             <div id="${sectionId}" class="p-4 space-y-3 bg-slate-50/50"></div>
           `;
-          
+
           list.appendChild(chapterBox);
           currentContainer = chapterBox.querySelector(`#${sectionId}`);
           return;
@@ -1589,7 +1660,7 @@
       const container = document.getElementById("desktopVideoContainer");
       container.innerHTML = getPCBlockedHtml();
       clearWatermarkFrom(container);
-      
+
       document.getElementById("videoModal").classList.remove("hidden");
       document.getElementById("videoModal").classList.add("flex");
     }
@@ -1623,7 +1694,7 @@
         }, 150);
       } else {
         // Desktop simply scrolls or we can show modal for recipes too. For simplicity, openLessonDetail handles mobile-first views.
-        // Let's open details page on Mobile, or on Desktop we scroll down to a details panel if desired. 
+        // Let's open details page on Mobile, or on Desktop we scroll down to a details panel if desired.
         // As request: "Trang chi tiết bài học trên mobile. Desktop: xem công thức được."
         // We will show a nice alert/modal for recipes on Desktop to prevent opening a new tab.
         const lesson = currentLessons[index];
@@ -1787,7 +1858,7 @@
     function toggleRecipeMore() {
       const recipe = document.getElementById("recipeContent");
       const btn = document.getElementById("recipeMoreBtn");
-      
+
       if (recipe.classList.contains("max-h-[380px]")) {
         recipe.classList.remove("max-h-[380px]");
         recipe.classList.add("max-h-[5000px]"); // Expand
@@ -1838,7 +1909,7 @@
         });
 
         const data = await response.json();
-        
+
         if (!response.ok || !data.allowed) {
           if (response.status === 401 || response.status === 403) {
             clearSession();
@@ -1970,10 +2041,10 @@
     async function initGoogle() {
       const configPromise = getPublicConfig();
       if (await tryRestoreSession()) return;
-      
+
       const config = await configPromise;
       const googleReady = await setupGoogleSignIn(config);
-      
+
       showLoggedOutState();
       if (!googleReady) {
         document.getElementById("statusBox").innerHTML = `
