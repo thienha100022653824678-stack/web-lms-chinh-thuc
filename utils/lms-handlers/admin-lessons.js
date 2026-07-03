@@ -73,10 +73,23 @@ export default async function handler(req, res) {
           .eq("slug", lessonData.course)
           .maybeSingle();
 
+        // Calculate next unique lesson_no for backend to guarantee no duplicate key error
+        const { data: existingLessons } = await supabase
+          .from("lessons")
+          .select("lesson_no")
+          .eq("course_slug", lessonData.course);
+
+        let maxLessonNo = 0;
+        (existingLessons || []).forEach(l => {
+          const no = parseInt(l.lesson_no, 10);
+          if (!isNaN(no) && no > maxLessonNo) maxLessonNo = no;
+        });
+        const targetLessonNo = maxLessonNo + 1;
+
         const insertPayload = {
           course_id: courseRec?.id || null,
           course_slug: lessonData.course,
-          lesson_no: parseInt(lessonData.lesson, 10),
+          lesson_no: targetLessonNo,
           title: lessonData.title,
           description: lessonData.description || "",
           duration_text: lessonData.duration || "",
@@ -87,7 +100,7 @@ export default async function handler(req, res) {
           media_urls: lessonData.mediaUrls || "",
           is_section: Boolean(lessonData.isSection),
           status: "active",
-          sort_order: parseInt(lessonData.lesson, 10),
+          sort_order: targetLessonNo,
           updated_at: new Date().toISOString()
         };
 

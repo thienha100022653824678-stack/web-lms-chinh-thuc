@@ -1330,15 +1330,36 @@
     }
 
     function calculateNextLessonNumber(isSectionChecked = false) {
-      // Find maximum lesson_no in current course to guarantee uniqueness in DB
-      let maxNo = 0;
-      STATE.lessons.forEach(l => {
-        const no = parseInt(l.lesson, 10);
-        if (!isNaN(no) && no > maxNo) {
-          maxNo = no;
+      if (isSectionChecked) {
+        return 1;
+      }
+
+      const hasSection = STATE.lessons.some(l => l.isSection);
+      if (!hasSection) {
+        const realLessons = STATE.lessons.filter(l => !l.isSection);
+        return realLessons.length + 1;
+      }
+
+      // If sections exist: find the last section and count non-section lessons after it
+      let lastSectionIdx = -1;
+      for (let i = STATE.lessons.length - 1; i >= 0; i--) {
+        if (STATE.lessons[i].isSection) {
+          lastSectionIdx = i;
+          break;
         }
-      });
-      return maxNo + 1;
+      }
+
+      if (lastSectionIdx === -1) {
+        return STATE.lessons.filter(l => !l.isSection).length + 1;
+      }
+
+      let countInCurrentSection = 0;
+      for (let i = lastSectionIdx + 1; i < STATE.lessons.length; i++) {
+        if (!STATE.lessons[i].isSection) {
+          countInCurrentSection++;
+        }
+      }
+      return countInCurrentSection + 1;
     }
 
     function toggleSectionMode(isSection) {
