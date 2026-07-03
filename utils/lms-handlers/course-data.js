@@ -235,10 +235,11 @@ async function fetchRecipeText(recipeUrl) {
 }
 
 async function attachRecipeText(lesson) {
-  if (!lesson.recipe_url) {
+  const recipeUrl = lesson.recipe_url || lesson.recipeUrl || "";
+  if (!recipeUrl) {
     return { ...lesson, recipeText: "" };
   }
-  const text = await fetchRecipeText(lesson.recipe_url);
+  const text = await fetchRecipeText(recipeUrl);
   return {
     ...lesson,
     recipeText: text
