@@ -32,7 +32,11 @@ graph TD
 
 ### 1.3. Database (Supabase)
 - **Engine**: PostgreSQL database.
-- **Key Tables**:
+- **Runtime client in this repo**: Current source code only shows one runtime Supabase client, created in `utils/supabase.js` from:
+  - `SUPABASE_URL`
+  - `SUPABASE_SERVICE_ROLE_KEY`
+- **Important operating note**: Do not conclude that the operating system has only one Supabase database. The project owner has confirmed there are two Supabase/database systems in the broader architecture. This repo may point to one of them depending on runtime env.
+- **Key Tables for the current LMS runtime client**:
   - `lessons`: Stores sections and actual lessons. Important columns:
     - `id` (UUID): Primary key.
     - `course_slug` (text): Course grouping key.
@@ -40,6 +44,73 @@ graph TD
     - `is_section` (boolean): `true` for chapters, `false` for real lessons.
   - `student_enrollments`: Stores email whitelists mapped to course slugs.
   - `site_config`: Key-value pairs for general settings and course configuration.
+
+---
+
+## 1.4. Two-Supabase Operating Architecture
+
+The repo currently exposes one Supabase client at runtime, but the real operating architecture has two Supabase/database systems.
+
+### Supabase A - Student Portal / Old Portal / Auxiliary Portal
+- **Org**: `thienha100022653824678-stack's Org`
+- **Purpose**:
+  - Old student portal / post-based content.
+  - Stores recipes or lessons as posts.
+  - Tracks post views.
+  - Grants portal access by `email` + `course_slug`.
+  - Uses `course_slug` to connect portal content with course systems.
+- **Known tables / structures**:
+  - `posts`: `id`, `title`, `recipe`, `images`, `views`, `created_at`, `telegram_chat_id`, `original_channel_name`, `course_slug`, `status`
+  - `post_views`: `post_id`, `session_id`, `ip_address`, `user_agent`, `country`, `city`, `viewed_at`
+  - `student_enrollments`: `email`, `course_slug`, `status`, `course_name`, `thumbnail`
+- **Known database function**: `record_view(...)` records post views.
+- **Known migrations**:
+  - A migration explicitly refers to `Supabase A (Student Portal)`.
+  - A migration adds `posts.status`.
+  - A migration adds `courses.is_published` on both Supabase A and Supabase B.
+
+### Supabase B - LMS & Checkout / Sales + LMS
+- **Org**: `thienha336501903-a11y's Org`
+- **Purpose**:
+  - Checkout / sales / course registration.
+  - Manages `courses` and `orders`.
+  - Manages LMS `lessons`, `students`, and `student_enrollments`.
+  - Uses `lessons.is_section` for chapter/section records.
+  - Uses `lessons.materials` for attached learning documents.
+  - Tracks sync state through `sync_lms_status`, `sync_portal_status`, and `sync_error`.
+  - May be the source or target for the current LMS runtime depending on env.
+- **Known tables / structures**:
+  - `courses`: `slug`, `title`, `price`, `image_url`, `description`, `teacher_name`, `active`, `is_published`, `sync_lms_status`, `sync_portal_status`, `sync_error`
+  - `orders`: `course_slug`, `course_title`, `customer_name`, `customer_email`, `customer_phone`, `proof_image_url`, `status`, `sync_lms_status`, `sync_portal_status`, `sync_error`
+  - `lessons`: `course_id`, `course_slug`, `lesson_no`, `title`, `description`, `video_provider`, `video_url`, `bunny_library_id`, `bunny_video_id`, `recipe_url`, `document_url`, `photo_url`, `thumbnail_url`, `duration_text`, `level`, `media_urls`, `views`, `is_free`, `active`, `status`, `sort_order`, `is_section`, `materials`
+  - `students`
+  - `student_enrollments`
+  - `site_config`
+  - `lesson_progress`
+  - `posts` legacy / sub-course integration
+
+### Supabase Data Flow Map
+
+```mermaid
+graph TD
+    Checkout["Checkout / Sales System"]
+    LMS["Current LMS Runtime<br/>Vercel API + utils/supabase.js"]
+    Portal["Old Student Portal"]
+    SupabaseA["Supabase A<br/>Student Portal / posts / post_views / portal enrollments"]
+    SupabaseB["Supabase B<br/>LMS & Checkout / courses / orders / lessons / students / enrollments"]
+    Sync["Sync endpoints / migration scripts"]
+
+    Portal --> SupabaseA
+    Checkout --> SupabaseB
+    LMS -->|"SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY"| SupabaseB
+    Sync --> SupabaseA
+    Sync --> SupabaseB
+    SupabaseB -->|"course_slug / enrollment sync / publish sync"| SupabaseA
+```
+
+Before changing code, determine whether the change affects Supabase A, Supabase B, the sync boundary between A and B, or only this repo's current runtime Supabase client.
+
+The current production runtime Supabase project must be confirmed from Vercel env or dashboard before any database-sensitive change. Do not print secret values while confirming it.
 
 ---
 

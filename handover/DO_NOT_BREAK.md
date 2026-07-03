@@ -25,3 +25,29 @@ This document lists critical components, configurations, and logic paths that mu
 ## ⚙️ 5. Database Schema & Supabase Client
 - **Flat Lesson Structure**: The system treats chapters as records in `lessons` where `is_section` is true. Do not separate sections into a new SQL table unless you rewrite all ordering, listing, and CRUD endpoints.
 - **Supabase Pool Configuration**: `utils/supabase.js` pools connections. Do not instantiate client pools in loop closures inside serverless routes.
+
+## 6. Two-Supabase Boundary
+- **Runtime code note**: This repo currently shows one runtime Supabase client through `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`.
+- **Operating architecture note**: The broader system has two Supabase databases:
+  - Supabase A: Student Portal / old portal content, `posts`, `post_views`, portal `student_enrollments`.
+  - Supabase B: LMS & Checkout, `courses`, `orders`, `lessons`, `students`, LMS `student_enrollments`, `site_config`, `lesson_progress`.
+- **Before any database-sensitive edit**, explicitly identify whether the change touches Supabase A, Supabase B, or the sync boundary between them.
+- **Do not casually edit without an explicit request**:
+  - `/api/sync`
+  - `orders`
+  - `source_order_id`
+  - `student_enrollments`
+  - `course_slug` mapping
+  - `sync_lms_status`
+  - `sync_portal_status`
+  - `sync_error`
+  - `lessons.is_section`
+  - `lessons.materials`
+- **Risks**:
+  - Confusing the old Portal database with the LMS/Checkout database.
+  - Confusing `student_enrollments` in Supabase A with `student_enrollments` in Supabase B.
+  - Confusing `course_slug` across `posts`, `courses`, `lessons`, and `orders`.
+  - Breaking sync can remove or fail to grant student access.
+  - Breaking `is_section` can corrupt Chapter/Lesson display and navigation.
+  - Breaking `materials` can hide or lose attached documents.
+- **Secret handling**: Never paste Supabase keys, service role keys, anon keys, or pulled env values into handover docs, terminal summaries, commits, or chat.
