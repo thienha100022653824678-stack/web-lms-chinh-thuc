@@ -1,6 +1,89 @@
 import { supabase } from "../supabase.js";
 import { getAdminFromRequest, normalizeEmail, syncEnrollment } from "../lms.js";
 
+async function getCourseMeta(courseSlug) {
+  try {
+    const { data: course } = await supabase
+      .from("courses")
+      .select("title, image_url")
+      .eq("slug", String(courseSlug || "").trim())
+      .maybeSingle();
+
+    return {
+      courseName: course?.title || String(courseSlug || "").trim(),
+      thumbnail: course?.image_url || ""
+    };
+  } catch (err) {
+    console.error("[admin-enrollments] Failed to fetch course meta for portal sync:", err.message);
+    return {
+      courseName: String(courseSlug || "").trim(),
+      thumbnail: ""
+    };
+  }
+}
+
+async function syncPortalEnrollment({ email, courseSlug, action }) {
+  const system1Url = String(
+    process.env.SYSTEM1_URL ||
+    process.env.PORTAL_URL ||
+    process.env.STUDENT_PORTAL_URL ||
+    ""
+  ).trim().replace(/\/$/, "");
+  const syncSecret = String(process.env.INTERNAL_SYNC_SECRET || "").trim();
+
+  if (!system1Url || !syncSecret) {
+    return {
+      success: false,
+      skipped: true,
+      reason: "Thiếu SYSTEM1_URL/PORTAL_URL hoặc INTERNAL_SYNC_SECRET nên chưa sync sang Portal"
+    };
+  }
+
+  const cleanEmail = normalizeEmail(email);
+  const cleanSlug = String(courseSlug || "").trim();
+  const { courseName, thumbnail } = await getCourseMeta(cleanSlug);
+  const portalAction = action === "revoke" ? "revokeEnrollment" : "syncEnrollment";
+
+  try {
+    const response = await fetch(`${system1Url}/api/sync`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Sync-Secret": syncSecret
+      },
+      body: JSON.stringify({
+        action: portalAction,
+        email: cleanEmail,
+        courseSlug: cleanSlug,
+        courseName,
+        thumbnail
+      })
+    });
+
+    const rawText = await response.text();
+    let payload = null;
+    try {
+      payload = rawText ? JSON.parse(rawText) : null;
+    } catch {
+      payload = { raw: rawText };
+    }
+
+    if (!response.ok || payload?.success === false) {
+      console.error("[admin-enrollments] Portal sync failed:", response.status, payload);
+      return {
+        success: false,
+        status: response.status,
+        error: payload?.error || payload?.message || rawText || "Portal sync failed"
+      };
+    }
+
+    return { success: true, action: portalAction, response: payload };
+  } catch (err) {
+    console.error("[admin-enrollments] Portal sync request error:", err.message);
+    return { success: false, error: err.message };
+  }
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
@@ -66,7 +149,13 @@ export default async function handler(req, res) {
         return res.status(500).json({ success: false, error: syncResult.error || "Lỗi đồng bộ phân quyền" });
       }
 
-      return res.status(200).json({ success: true, enrollment: syncResult.enrollment });
+      const portalSync = await syncPortalEnrollment({ email, courseSlug, action: "create" });
+
+      return res.status(200).json({
+        success: true,
+        enrollment: syncResult.enrollment,
+        portalSync
+      });
     }
 
     // ── PUT: Update Enrollment Status / Expiry ────────────────────────────────
@@ -96,17 +185,26 @@ export default async function handler(req, res) {
 
       if (error) throw error;
 
-      // Sync Google Drive permissions if status changed
+      let portalSync = null;
+
+      // Sync Google Drive permissions and Portal if status changed
       if (oldEnroll && status && oldEnroll.status !== status) {
+        const shouldGrant = status === "active";
         await syncEnrollment(supabase, {
           email: oldEnroll.email,
           courseSlug: oldEnroll.course_slug,
-          action: status === "active" ? "create" : "revoke",
+          action: shouldGrant ? "create" : "revoke",
           expiredAt
+        });
+
+        portalSync = await syncPortalEnrollment({
+          email: oldEnroll.email,
+          courseSlug: oldEnroll.course_slug,
+          action: shouldGrant ? "create" : "revoke"
         });
       }
 
-      return res.status(200).json({ success: true, enrollment: data });
+      return res.status(200).json({ success: true, enrollment: data, portalSync });
     }
 
     // ── DELETE: Revoke Access (Delete Enrollment) ────────────────────────────
@@ -130,15 +228,23 @@ export default async function handler(req, res) {
 
       if (error) throw error;
 
+      let portalSync = null;
+
       if (enroll) {
         await syncEnrollment(supabase, {
           email: enroll.email,
           courseSlug: enroll.course_slug,
           action: "revoke"
         });
+
+        portalSync = await syncPortalEnrollment({
+          email: enroll.email,
+          courseSlug: enroll.course_slug,
+          action: "revoke"
+        });
       }
 
-      return res.status(200).json({ success: true, message: "Đã thu hồi quyền học thành công" });
+      return res.status(200).json({ success: true, message: "Đã thu hồi quyền học thành công", portalSync });
     }
 
     return res.status(405).json({ success: false, error: "Method not allowed" });
