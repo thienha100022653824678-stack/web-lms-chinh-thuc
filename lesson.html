@@ -297,7 +297,7 @@
       </div>
 
       <!-- Recipe Card -->
-      <div class="mt-6 bg-white border border-brandBrown/5 rounded-2xl p-5 shadow-sm">
+      <div id="recipeSectionBox" class="mt-6 bg-white border border-brandBrown/5 rounded-2xl p-5 shadow-sm">
         <div class="flex items-center justify-between border-b border-brandGray pb-3 mb-4">
           <span class="font-black text-brandGreen text-base flex items-center gap-2">
             <span>📄</span> CÔNG THỨC CHI TIẾT
@@ -317,10 +317,9 @@
       </div>
 
       <!-- Description / Extra details -->
-      <div class="mt-6 bg-white border border-brandBrown/5 rounded-2xl p-5 shadow-sm mb-12">
+      <div id="lessonDescriptionBox" class="mt-6 bg-white border border-brandBrown/5 rounded-2xl p-5 shadow-sm mb-12">
         <h4 class="font-extrabold text-brandBrown text-sm mb-2">Giới thiệu bài học</h4>
         <p id="lessonDescription" class="text-sm text-brandBrown/85 leading-relaxed">
-          Chưa có mô tả ngắn.
         </p>
       </div>
       
@@ -923,63 +922,104 @@
         document.getElementById("studentEmailBadge").innerText = studentEmail;
         document.getElementById("studentAvatar").innerText = studentEmail.charAt(0).toUpperCase();
 
-        // Update titles
+        // Update titles & meta
         document.title = `${currentLesson.title} - Culinary Academy`;
         document.getElementById("lessonTitle").innerText = currentLesson.title;
         document.getElementById("lessonNumberBadge").innerText = `BÀI ${currentLesson.displayLesson || currentLesson.lesson}`;
-        document.getElementById("lessonDuration").innerText = `⏱ ${currentLesson.duration || "N/A"}`;
-        document.getElementById("lessonLevel").innerText = `▥ ${currentLesson.level || "Cơ bản"}`;
-        document.getElementById("lessonViews").innerText = `👁 ${currentLesson.views || 0}`;
-        document.getElementById("lessonDescription").innerText = currentLesson.description || "Chưa có mô tả ngắn.";
-        document.getElementById("backBtn").href = `/lms.html?course=${encodeURIComponent(currentLesson.course)}`;
-
-        // Render recipe
-        const recipeContent = document.getElementById("recipeContent");
-        recipeContent.innerHTML = renderRecipeContent(currentLesson);
-
-        // Render sub materials
-        renderMediaItems(currentLesson);
-
-        // Setup Video Wrapper/Iframe
-        const videoWrapper = document.getElementById("videoWrapper");
-        const videoThumb = document.getElementById("videoThumb");
-        const playBtn = document.getElementById("playBtn");
         
-        videoThumb.src = normalizeGoogleDriveImageUrl(currentLesson.thumbnailUrl || HERO_PLACEHOLDER_IMAGE);
-
-        // Auto print/recipe scroll
-        if (window.location.hash === "#recipe") {
-          setTimeout(() => {
-            document.getElementById("recipeContent").scrollIntoView({ behavior: "smooth" });
-          }, 500);
+        // Hide N/A duration/level badges if empty
+        const durationEl = document.getElementById("lessonDuration");
+        if (currentLesson.duration && currentLesson.duration !== "N/A") {
+          durationEl.innerText = `⏱ ${currentLesson.duration}`;
+          durationEl.classList.remove("hidden");
+        } else {
+          durationEl.classList.add("hidden");
         }
 
-        // Setup Video Click Handler
-        playBtn.onclick = () => {
-          if (isCocCocBrowser()) {
-            videoWrapper.innerHTML = getCocCocBlockedHtml();
-            clearWatermarkFrom(videoWrapper);
-            return;
-          }
-          if (!isMobileDevice()) {
-            videoWrapper.innerHTML = getPCBlockedHtml();
-            clearWatermarkFrom(videoWrapper);
-            return;
-          }
+        const levelEl = document.getElementById("lessonLevel");
+        if (currentLesson.level) {
+          levelEl.innerText = `▥ ${currentLesson.level}`;
+          levelEl.classList.remove("hidden");
+        } else {
+          levelEl.classList.add("hidden");
+        }
 
-          const videoUrl = lessonVideoUrl(currentLesson);
-          if (!videoUrl) {
-            alert("Video chưa được cập nhật hoặc phiên xem video đã hết hạn.");
-            return;
-          }
+        document.getElementById("lessonViews").innerText = `👁 ${currentLesson.views || 0}`;
 
-          videoWrapper.innerHTML = getIframePlayerHtml(videoUrl);
-          if (currentLesson.videoProvider === "bunny_embed") {
-            createWatermark(videoWrapper, studentEmail);
+        // Hide description section if empty or placeholder
+        const descBox = document.getElementById("lessonDescriptionBox");
+        const descText = (currentLesson.description || "").trim();
+        if (descBox) {
+          if (descText && descText !== "Chưa có mô tả ngắn.") {
+            document.getElementById("lessonDescription").innerText = descText;
+            descBox.classList.remove("hidden");
           } else {
-            clearWatermarkFrom(videoWrapper);
+            descBox.classList.add("hidden");
           }
-        };
+        }
+
+        document.getElementById("backBtn").href = `/lms.html?course=${encodeURIComponent(currentLesson.course)}`;
+
+        // Video Player Box: Auto-hide if no video is available
+        const videoBox = document.getElementById("videoBox");
+        const hasVideo = Boolean(lessonVideoUrl(currentLesson));
+        if (videoBox) {
+          if (hasVideo) {
+            videoBox.classList.remove("hidden");
+            const videoWrapper = document.getElementById("videoWrapper");
+            const videoThumb = document.getElementById("videoThumb");
+            const playBtn = document.getElementById("playBtn");
+            videoThumb.src = normalizeGoogleDriveImageUrl(currentLesson.thumbnailUrl || HERO_PLACEHOLDER_IMAGE);
+
+            playBtn.onclick = () => {
+              if (isCocCocBrowser()) {
+                videoWrapper.innerHTML = getCocCocBlockedHtml();
+                clearWatermarkFrom(videoWrapper);
+                return;
+              }
+              if (!isMobileDevice()) {
+                videoWrapper.innerHTML = getPCBlockedHtml();
+                clearWatermarkFrom(videoWrapper);
+                return;
+              }
+
+              const videoUrl = lessonVideoUrl(currentLesson);
+              if (!videoUrl) return;
+
+              videoWrapper.innerHTML = getIframePlayerHtml(videoUrl);
+              if (currentLesson.videoProvider === "bunny_embed") {
+                createWatermark(videoWrapper, studentEmail);
+              } else {
+                clearWatermarkFrom(videoWrapper);
+              }
+            };
+          } else {
+            videoBox.classList.add("hidden");
+          }
+        }
+
+        // Recipe Section: Auto-hide completely if no recipe content exists
+        const recipeSection = document.getElementById("recipeSectionBox");
+        const recipeContent = document.getElementById("recipeContent");
+        const hasRecipe = Boolean(currentLesson.recipeText && currentLesson.recipeText.trim());
+        if (recipeSection) {
+          if (hasRecipe) {
+            recipeSection.classList.remove("hidden");
+            recipeContent.innerHTML = `<div class="recipe-content-html">${recipeTextToHtml(currentLesson.recipeText)}</div>`;
+            
+            // Auto print/recipe scroll
+            if (window.location.hash === "#recipe") {
+              setTimeout(() => {
+                recipeSection.scrollIntoView({ behavior: "smooth" });
+              }, 500);
+            }
+          } else {
+            recipeSection.classList.add("hidden");
+          }
+        }
+
+        // Render sub materials and documents
+        renderMediaItems(currentLesson);
 
         // Transition states
         document.getElementById("loadingState").classList.add("hidden");
@@ -1065,22 +1105,28 @@
           sidebar.appendChild(a);
         });
 
+        // Filter out sections for navigation controls (prev/next)
+        const realLessonsList = courseLessonsList.filter(l => !l.isSection);
+        const realCurrentIdx = realLessonsList.findIndex(l => l.id === LESSON_ID);
+
         // Setup bottom nav buttons
         const prevBtn = document.getElementById("prevBtn");
         const nextBtn = document.getElementById("nextBtn");
 
-        if (currentIdx > 0) {
+        if (realCurrentIdx > 0) {
           prevBtn.disabled = false;
-          prevBtn.onclick = () => window.location.href = `/lesson.html?id=${courseLessonsList[currentIdx - 1].id}`;
+          prevBtn.onclick = () => window.location.href = `/lesson.html?id=${realLessonsList[realCurrentIdx - 1].id}`;
         } else {
           prevBtn.disabled = true;
+          prevBtn.onclick = null;
         }
 
-        if (currentIdx !== -1 && currentIdx < courseLessonsList.length - 1) {
+        if (realCurrentIdx !== -1 && realCurrentIdx < realLessonsList.length - 1) {
           nextBtn.disabled = false;
-          nextBtn.onclick = () => window.location.href = `/lesson.html?id=${courseLessonsList[currentIdx + 1].id}`;
+          nextBtn.onclick = () => window.location.href = `/lesson.html?id=${realLessonsList[realCurrentIdx + 1].id}`;
         } else {
           nextBtn.disabled = true;
+          nextBtn.onclick = null;
         }
 
       } catch (err) {
