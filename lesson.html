@@ -298,13 +298,10 @@
 
       <!-- Recipe Card -->
       <div id="recipeSectionBox" class="mt-6 bg-white border border-brandBrown/5 rounded-2xl p-5 shadow-sm">
-        <div class="flex items-center justify-between border-b border-brandGray pb-3 mb-4">
+        <div class="border-b border-brandGray pb-3 mb-4">
           <span class="font-black text-brandGreen text-base flex items-center gap-2">
             <span>📄</span> CÔNG THỨC CHI TIẾT
           </span>
-          <button id="printBtn" onclick="window.print()" class="text-xs font-bold text-brandGreen hover:underline flex items-center gap-1">
-            🖨️ In công thức
-          </button>
         </div>
         
         <div id="recipeContent" class="recipe-render text-sm sm:text-base overflow-hidden transition-all duration-300 max-h-[380px] relative">
@@ -430,14 +427,8 @@
           href = "https://" + cleanUrl;
         }
         
-        let label = cleanUrl;
-        let isShopping = /shopee|lazada|tiki|amazon|tiktok\.com\/view\/product/i.test(cleanUrl);
-        if (isShopping) {
-          label = `🛒 Mua nguyên liệu tại đây ↗`;
-          return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="recipe-shop-link">${label}</a>${suffix}`;
-        }
-        
-        return `<a href="${href}" target="_blank" rel="noopener noreferrer">${label} ↗</a>${suffix}`;
+        // Display exact URL text entered by the editor
+        return `<a href="${href}" target="_blank" rel="noopener noreferrer">${escapeHtml(cleanUrl)}</a>${suffix}`;
       });
     }
 
