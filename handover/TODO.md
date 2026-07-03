@@ -6,14 +6,10 @@ This is the task list for the incoming AI developer.
 
 ## 🟥 1. High Priority (Urgent Security & Polish)
 
-### [ ] Anti-copy Content Protection
+### [x] Anti-copy Content Protection
 - **Target Files**: `lms.html`, `lesson.html`
 - **Objective**: Prevent students from selecting, copying, or printing text recipes and lesson descriptions.
-- **Tasks**:
-  - Add CSS `.select-none { user-select: none; -webkit-user-select: none; }` to recipe cards and text containers.
-  - Disable right-click context menu on recipe/details area.
-  - Disable copy shortcuts (e.g. `Ctrl+C`, `Ctrl+U`, `Ctrl+Shift+I`, `F12`) via keydown event listeners.
-  - Disable touch-hold highlighting on iOS/Android devices via `-webkit-touch-callout: none`.
+- **Status**: Completed. Added CSS `.no-copy` selection lock and global JS blocker for copy/cut/right-click/shortcuts.
 
 ---
 

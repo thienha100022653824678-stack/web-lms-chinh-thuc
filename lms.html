@@ -86,6 +86,14 @@
   </script>
 
   <style>
+    .no-copy {
+      -webkit-user-select: none !important;
+      -moz-user-select: none !important;
+      -ms-user-select: none !important;
+      user-select: none !important;
+      -webkit-touch-callout: none !important;
+    }
+
     /* Custom CSS tweaks to build a premium, warm, culinary-themed look */
     body {
       background-color: #FCF8F2;
@@ -346,13 +354,13 @@
       <div id="mediaItemsSection" class="hidden mt-6"></div>
 
       <!-- Recipe Content Box -->
-      <div class="mt-6 bg-white border border-brandBrown/5 rounded-2xl p-5 shadow-sm">
+      <div class="mt-6 bg-white border border-brandBrown/5 rounded-2xl p-5 shadow-sm no-copy">
         <div class="flex items-center justify-between border-b border-brandGray pb-3 mb-4">
           <span class="font-black text-brandGreen text-base flex items-center gap-2">
             <span>📄</span> CÔNG THỨC CHI TIẾT
           </span>
         </div>
-        <div id="recipeContent" class="recipe-render text-sm sm:text-base overflow-hidden transition-all duration-300 max-h-[380px] relative">
+        <div id="recipeContent" class="recipe-render no-copy text-sm sm:text-base overflow-hidden transition-all duration-300 max-h-[380px] relative">
           <!-- Loaded by JS -->
         </div>
         <button id="recipeMoreBtn" class="mt-4 w-full py-2.5 bg-brandCream hover:bg-brandGray text-brandGreen font-bold text-sm rounded-xl transition duration-150 flex items-center justify-center gap-1.5" onclick="toggleRecipeMore()">
@@ -1033,14 +1041,8 @@
           href = "https://" + cleanUrl;
         }
         
-        let label = cleanUrl;
-        let isShopping = /shopee|lazada|tiki|amazon|tiktok\.com\/view\/product/i.test(cleanUrl);
-        if (isShopping) {
-          label = `🛒 Mua nguyên liệu tại đây ↗`;
-          return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="recipe-shop-link">${label}</a>${suffix}`;
-        }
-        
-        return `<a href="${href}" target="_blank" rel="noopener noreferrer">${label} ↗</a>${suffix}`;
+        // Display exact URL text entered by the editor
+        return `<a href="${href}" target="_blank" rel="noopener noreferrer">${escapeHtml(cleanUrl)}</a>${suffix}`;
       });
     }
 
@@ -1630,7 +1632,7 @@
         document.getElementById("modalTitle").innerText = `Công thức: ${lesson.title || "Bài Học"}`;
         const container = document.getElementById("desktopVideoContainer");
         container.innerHTML = `
-          <div class="w-full h-full bg-white overflow-y-auto p-6 text-left recipe-render select-text select-none">
+          <div class="w-full h-full bg-white overflow-y-auto p-6 text-left recipe-render no-copy">
             ${renderRecipeContent(lesson)}
           </div>
         `;
@@ -1989,9 +1991,30 @@
 
     // Initial load
     window.onload = () => {
-      // Setup right click block on video elements
+      // Chặn chuột phải (contextmenu) trên toàn bộ trang
       document.addEventListener("contextmenu", (event) => {
-        if (event.target.closest("#mobileVideoBox, #desktopVideoContainer")) {
+        if (event.target.tagName !== "INPUT" && event.target.tagName !== "TEXTAREA") {
+          event.preventDefault();
+        }
+      });
+
+      // Chặn sao chép (copy/cut)
+      document.addEventListener("copy", (event) => {
+        event.preventDefault();
+      });
+      document.addEventListener("cut", (event) => {
+        event.preventDefault();
+      });
+
+      // Chặn phím tắt (Ctrl+C, Ctrl+X, Ctrl+A, Ctrl+U, F12)
+      document.addEventListener("keydown", (event) => {
+        const isCopy = (event.ctrlKey || event.metaKey) && (event.key === "c" || event.key === "C");
+        const isCut = (event.ctrlKey || event.metaKey) && (event.key === "x" || event.key === "X");
+        const isSelectAll = (event.ctrlKey || event.metaKey) && (event.key === "a" || event.key === "A");
+        const isViewSource = (event.ctrlKey || event.metaKey) && (event.key === "u" || event.key === "U");
+        const isDevTools = event.key === "F12" || ((event.ctrlKey || event.metaKey) && event.shiftKey && (event.key === "i" || event.key === "I" || event.key === "c" || event.key === "C"));
+
+        if (isCopy || isCut || isSelectAll || isViewSource || isDevTools) {
           event.preventDefault();
         }
       });

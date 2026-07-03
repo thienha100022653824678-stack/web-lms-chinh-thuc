@@ -29,15 +29,10 @@ All documentation is located in the `handover/` folder at the project root:
 ### 3. Immediate Next Tasks
 Please implement the tasks listed in `handover/TODO.md`:
 
-1. **Anti-copy Content Protection (High Priority)**:
-   - Add `.select-none` class styles to prevent text highlight or mouse copy selections inside recipe/descriptions in `lms.html` and `lesson.html`.
-   - Prevent mouse right-click, copy key shortcuts (Ctrl+C, Ctrl+Shift+I, F12), and touch hold selections on mobile device interfaces.
-   - Do not let this affect normal page scrolling, buttons clicking, or links navigation.
-
-2. **Re-implement Lesson Documents & Attachments (Medium Priority)**:
+1. **Re-implement Lesson Documents & Attachments (High Priority)**:
    - Allow admins to attach multiple files (PDF, Word, Excel, Slide, GDocs, or links) to a lesson in `lms-admin.html`.
    - Update API handlers `admin-lessons.js` and `lesson.js` to save and load these document arrays.
    - Render document list cards in `lesson.html`, ensuring they are completely hidden if no documents are attached.
 
-Please inspect the directory, verify current git status, and proceed with the high priority TODOs now!
+Please inspect the directory, verify current git status, and proceed with the tasks now!
 ```

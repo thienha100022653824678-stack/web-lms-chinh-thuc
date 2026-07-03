@@ -15,7 +15,7 @@ This document summarizes the current status of all features in the LMS system as
 | **Empty Content Auto-Hide** | ✅ | `lesson.html` | Automatically hides video players, recipe cards, description blocks, or media container grids if they are empty or null. |
 | **Linkify URLs in Content** | ✅ | `lesson.html`, `lms.html` | Converts plain text URLs in recipes/descriptions into clickable links. Shows raw URL or entered text instead of replacing it with "Mua nguyên liệu tại đây" button. |
 | **Print Button Removal** | ✅ | `lesson.html` | Removed the "In công thức" button and aligned the "CÔNG THỨC CHI TIẾT" title block cleanly. |
-| **Lock copy text on student LMS** | 🔴 | `lms.html`, `lesson.html` | **NOT IMPLEMENTED / REVERTED**. Needs to disable selection, right-click context menu, shortcut keys (Ctrl+C, Ctrl+U, etc.), and touch hold selection on mobile. |
+| **Lock copy text on student LMS** | ✅ | `lms.html`, `lesson.html` | Disabled selection, right-click context menu, touch hold selection on mobile, and key shortcuts (Ctrl+C, Ctrl+X, Ctrl+A, Ctrl+U, F12) globally across pages. |
 | **Lesson Documents/Attachments** | 🔴 | `lms-admin.html`, `lesson.html`, `utils/lms-handlers/admin-lessons.js`, `utils/lms-handlers/lesson.js` | **NOT IMPLEMENTED / REVERTED**. Needs to allow admins to upload or link documents (PDF, Word, Excel, Docs) and display them to students under a dedicated container. |
 
 ---
@@ -29,5 +29,4 @@ This document summarizes the current status of all features in the LMS system as
 - **Status**: Stable and uniform. The backend calculation ensures that no matter where the data is retrieved (`course-data`, `lesson`, or `admin-lessons`), the dynamic display index is identical. This avoids mismatches between the listing catalog and detail views.
 
 ### 🔴 Reverted Features (Need Implementation)
-- **Lock copy text**: This was removed during a rollback. The next developer must implement this by adding CSS class `select-none` to content containers and hooking into `contextmenu`, `keydown` (for copy keys), and touch hold events on mobile devices.
 - **Documents & Attachments**: This was removed during a rollback. Needs DB columns updates or JSON structure mapping, admin upload logic, and student-facing download buttons.
