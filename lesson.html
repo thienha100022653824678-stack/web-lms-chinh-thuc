@@ -926,7 +926,7 @@
         // Update titles
         document.title = `${currentLesson.title} - Culinary Academy`;
         document.getElementById("lessonTitle").innerText = currentLesson.title;
-        document.getElementById("lessonNumberBadge").innerText = `BÀI ${currentLesson.lesson}`;
+        document.getElementById("lessonNumberBadge").innerText = `BÀI ${currentLesson.displayLesson || currentLesson.lesson}`;
         document.getElementById("lessonDuration").innerText = `⏱ ${currentLesson.duration || "N/A"}`;
         document.getElementById("lessonLevel").innerText = `▥ ${currentLesson.level || "Cơ bản"}`;
         document.getElementById("lessonViews").innerText = `👁 ${currentLesson.views || 0}`;
@@ -1040,7 +1040,7 @@
           }
 
           lessonInChapterCounter++;
-          const displayLessonNo = hasSection ? lessonInChapterCounter : (l.lesson || (idx + 1));
+          const displayLessonNo = l.displayLesson || (hasSection ? lessonInChapterCounter : (l.lesson || (idx + 1)));
 
           const isActive = l.id === LESSON_ID;
           const a = document.createElement("a");

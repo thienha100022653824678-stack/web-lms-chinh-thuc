@@ -1303,7 +1303,7 @@
         }
 
         lessonInChapterCounter++;
-        const displayLessonNo = hasSection ? lessonInChapterCounter : (l.lesson || (idx + 1));
+        const displayLessonNo = l.displayLesson || (hasSection ? lessonInChapterCounter : (l.lesson || (idx + 1)));
         const indentClass = hasSection ? "ml-4 pl-2 border-l-2 border-slate-200" : "";
 
         return `

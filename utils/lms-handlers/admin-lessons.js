@@ -33,21 +33,38 @@ export default async function handler(req, res) {
 
       if (error) throw error;
 
-      const formattedLessons = (lessons || []).map(l => ({
-        id: l.id,
-        course: l.course_slug,
-        lesson: l.lesson_no,
-        title: l.title,
-        description: l.description || "",
-        duration: l.duration_text || "",
-        level: l.level || "",
-        thumbnailUrl: l.thumbnail_url || "",
-        videoUrl: l.video_url || "",
-        recipeUrl: l.recipe_url || "",
-        mediaUrls: l.media_urls || "",
-        isSection: Boolean(l.is_section),
-        status: l.status || "active"
-      }));
+      const hasSection = (lessons || []).some(l => Boolean(l.is_section));
+      let sectionCounter = 0;
+      let globalCounter = 0;
+
+      const formattedLessons = (lessons || []).map(l => {
+        const isSec = Boolean(l.is_section);
+        let displayLesson = l.lesson_no;
+        if (isSec) {
+          sectionCounter = 0;
+        } else {
+          sectionCounter++;
+          globalCounter++;
+          displayLesson = hasSection ? sectionCounter : globalCounter;
+        }
+
+        return {
+          id: l.id,
+          course: l.course_slug,
+          lesson: l.lesson_no,
+          displayLesson: displayLesson,
+          title: l.title,
+          description: l.description || "",
+          duration: l.duration_text || "",
+          level: l.level || "",
+          thumbnailUrl: l.thumbnail_url || "",
+          videoUrl: l.video_url || "",
+          recipeUrl: l.recipe_url || "",
+          mediaUrls: l.media_urls || "",
+          isSection: isSec,
+          status: l.status || "active"
+        };
+      });
 
       return res.status(200).json({ success: true, lessons: formattedLessons });
     }

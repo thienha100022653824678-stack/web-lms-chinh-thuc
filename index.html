@@ -1430,7 +1430,7 @@
         }
 
         lessonInChapterCounter++;
-        const displayLessonNo = hasSection ? lessonInChapterCounter : (l.lesson || (idx + 1));
+        const displayLessonNo = l.displayLesson || (hasSection ? lessonInChapterCounter : (l.lesson || (idx + 1)));
 
         const item = document.createElement("div");
         item.className = "bg-white border border-brandBrown/5 rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition duration-200 grid gap-4 sm:grid-cols-[180px_1fr] md:grid-cols-[240px_1fr_200px] items-center";

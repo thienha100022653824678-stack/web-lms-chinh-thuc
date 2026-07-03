@@ -298,11 +298,38 @@ export default async function handler(req, res) {
       });
     }
 
-    // 4. Secure Video URL & Media URLs
+    // 4. Calculate exact displayLesson by querying all non-hidden lessons of this course ordered by lesson_no
+    const { data: siblingLessons } = await supabase
+      .from("lessons")
+      .select("id, is_section")
+      .eq("course_slug", lesson.course_slug)
+      .neq("status", "hidden")
+      .order("lesson_no", { ascending: true });
+
+    const hasSection = (siblingLessons || []).some(l => Boolean(l.is_section));
+    let displayLesson = lesson.lesson_no;
+    let sectionCounter = 0;
+    let globalCounter = 0;
+
+    for (const sib of (siblingLessons || [])) {
+      const isSec = Boolean(sib.is_section);
+      if (isSec) {
+        sectionCounter = 0;
+      } else {
+        sectionCounter++;
+        globalCounter++;
+        if (sib.id === lesson.id) {
+          displayLesson = hasSection ? sectionCounter : globalCounter;
+          break;
+        }
+      }
+    }
+
+    // 5. Secure Video URL & Media URLs
     const securedVideo = signBunnyEmbedUrl(lesson.video_url || "");
     const securedMedia = signMediaUrls(lesson.media_urls || "");
 
-    // 5. Fetch recipe text
+    // 6. Fetch recipe text
     const recipeText = await fetchRecipeText(lesson.recipe_url);
 
     // Formatted lesson output
@@ -310,6 +337,7 @@ export default async function handler(req, res) {
       id: lesson.id,
       course: lesson.course_slug,
       lesson: lesson.lesson_no,
+      displayLesson: displayLesson,
       title: lesson.title,
       description: lesson.description || "",
       duration: lesson.duration_text || "",
@@ -318,6 +346,7 @@ export default async function handler(req, res) {
       videoUrl: lesson.video_url || "",
       recipeUrl: lesson.recipe_url || "",
       mediaUrls: securedMedia,
+      isSection: Boolean(lesson.is_section),
       views: lesson.views || 0,
       status: lesson.status || "active",
       recipeText,

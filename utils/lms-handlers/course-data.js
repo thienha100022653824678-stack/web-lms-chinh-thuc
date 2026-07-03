@@ -348,15 +348,31 @@ export default async function handler(req, res) {
 
     if (lessonsError) throw lessonsError;
 
-    // Map columns from Supabase schema to match the legacy frontend expectation
-    let lessons = (lessonsRows || []).map(l => {
+    // Check if course has any sections
+    const hasSection = (lessonsRows || []).some(l => Boolean(l.is_section));
+    let sectionLessonCounter = 0;
+    let nonSectionGlobalCounter = 0;
+
+    // Map columns from Supabase schema and compute unified displayLesson
+    let lessons = (lessonsRows || []).map((l, idx) => {
       const securedVideo = signBunnyEmbedUrl(l.video_url || "");
       const securedMedia = signMediaUrls(l.media_urls || "");
+      const isSec = Boolean(l.is_section);
+
+      let displayLesson = l.lesson_no;
+      if (isSec) {
+        sectionLessonCounter = 0; // Reset counter for new chapter
+      } else {
+        sectionLessonCounter++;
+        nonSectionGlobalCounter++;
+        displayLesson = hasSection ? sectionLessonCounter : nonSectionGlobalCounter;
+      }
 
       return {
         id: l.id,
         course: l.course_slug,
         lesson: l.lesson_no,
+        displayLesson: displayLesson,
         title: l.title,
         description: l.description || "",
         duration: l.duration_text || "",
@@ -365,7 +381,7 @@ export default async function handler(req, res) {
         videoUrl: l.video_url || "",
         recipeUrl: l.recipe_url || "",
         mediaUrls: securedMedia,
-        isSection: Boolean(l.is_section),
+        isSection: isSec,
         views: l.views || 0,
         status: l.status || "active",
         ...securedVideo
