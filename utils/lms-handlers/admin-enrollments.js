@@ -84,6 +84,67 @@ async function syncPortalEnrollment({ email, courseSlug, action }) {
   }
 }
 
+async function backfillPortalEnrollments({ email, courseSlug, dryRun = false }) {
+  let query = supabase
+    .from("student_enrollments")
+    .select("id, email, course_slug, status, created_at")
+    .eq("status", "active")
+    .order("created_at", { ascending: false });
+
+  if (email) query = query.eq("email", normalizeEmail(email));
+  if (courseSlug) query = query.eq("course_slug", String(courseSlug || "").trim());
+
+  const { data: enrollments, error } = await query;
+  if (error) throw error;
+
+  const rows = (enrollments || []).filter(row => row.email && row.course_slug);
+
+  if (dryRun) {
+    return {
+      success: true,
+      dryRun: true,
+      total: rows.length,
+      details: rows.map(row => ({
+        email: normalizeEmail(row.email),
+        courseSlug: String(row.course_slug || "").trim(),
+        status: row.status
+      }))
+    };
+  }
+
+  let successCount = 0;
+  let failedCount = 0;
+  const details = [];
+
+  for (const row of rows) {
+    const result = await syncPortalEnrollment({
+      email: row.email,
+      courseSlug: row.course_slug,
+      action: "create"
+    });
+
+    const detail = {
+      email: normalizeEmail(row.email),
+      courseSlug: String(row.course_slug || "").trim(),
+      success: Boolean(result.success),
+      skipped: Boolean(result.skipped),
+      error: result.error || result.reason || null
+    };
+
+    details.push(detail);
+    if (result.success) successCount++;
+    else failedCount++;
+  }
+
+  return {
+    success: failedCount === 0,
+    total: rows.length,
+    successCount,
+    failedCount,
+    details
+  };
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
@@ -131,9 +192,24 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, enrollments });
     }
 
-    // ── POST: Grant Access (Enroll Student) ──────────────────────────────────
+    // ── POST: Grant Access / Backfill Portal ──────────────────────────────────
     if (req.method === "POST") {
-      const { email, courseSlug, expiredAt } = req.body || {};
+      const { action, email, courseSlug, expiredAt, dryRun } = req.body || {};
+
+      if (action === "backfillPortal") {
+        const result = await backfillPortalEnrollments({ email, courseSlug, dryRun });
+        try {
+          await supabase.from("audit_logs").insert({
+            action: "portal_enrollment_backfill",
+            detail: `Portal enrollment backfill by ${adminSession.email}: ${result.successCount || 0} success, ${result.failedCount || 0} failed, ${result.total || 0} total`,
+            created_at: new Date().toISOString()
+          });
+        } catch {
+          // audit_logs may not exist in older deployments
+        }
+        return res.status(200).json(result);
+      }
+
       if (!email || !courseSlug) {
         return res.status(400).json({ success: false, error: "Thiếu email hoặc course slug" });
       }
@@ -165,7 +241,6 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Thiếu ID quyền học viên" });
       }
 
-      // Fetch existing details before updating to check if status changed
       const { data: oldEnroll } = await supabase
         .from("student_enrollments")
         .select("email, course_slug, status")
@@ -187,7 +262,6 @@ export default async function handler(req, res) {
 
       let portalSync = null;
 
-      // Sync Google Drive permissions and Portal if status changed
       if (oldEnroll && status && oldEnroll.status !== status) {
         const shouldGrant = status === "active";
         await syncEnrollment(supabase, {
@@ -214,7 +288,6 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Thiếu ID quyền học viên để xóa" });
       }
 
-      // Fetch enrollment details before deleting to revoke Drive folder permission
       const { data: enroll } = await supabase
         .from("student_enrollments")
         .select("email, course_slug")
