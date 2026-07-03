@@ -615,10 +615,11 @@ export async function resolveCourseFolderTree(drive, { course_slug, course_title
     return { courseFolderId, targetFolderId };
   }
 
-  if (type === "lesson_media_image" || type === "lesson_media" || type === "lesson_media_video") {
+  if (type === "lesson_media_image" || type === "lesson_media" || type === "lesson_media_video" || type === "lesson_material") {
     const mediaId = await getOrCreateFolder(drive, "Media", lessonFolderId);
     let targetFolderName = "Images";
     if (type === "lesson_media_video") targetFolderName = "Videos";
+    if (type === "lesson_material") targetFolderName = "Documents";
     const targetFolderId = await getOrCreateFolder(drive, targetFolderName, mediaId);
     return { courseFolderId, targetFolderId };
   }

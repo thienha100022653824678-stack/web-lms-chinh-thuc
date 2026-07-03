@@ -350,6 +350,20 @@
                   </div>
                 </div>
 
+                <!-- LESSON MATERIALS -->
+                <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                  <div class="flex items-center justify-between gap-3">
+                    <label class="block text-xs font-black text-slate-500">📎 TÀI LIỆU BÀI HỌC</label>
+                    <span class="text-[10px] text-slate-400 font-semibold">PDF, Word, Excel, PowerPoint, TXT, ảnh</span>
+                  </div>
+                  <div id="materialUploadZone" class="border-2 border-dashed border-slate-200 rounded-xl p-4 bg-white hover:bg-slate-50 hover:border-brandGreen transition cursor-pointer flex flex-col items-center justify-center text-center gap-1.5" onclick="triggerMaterialUpload()">
+                    <span class="text-xs text-slate-600 font-bold">Kéo thả tài liệu vào đây hoặc bấm để chọn file</span>
+                    <span class="text-[10px] text-slate-400">Có thể tải nhiều file. Tối đa 50 MB mỗi file.</span>
+                  </div>
+                  <input type="file" id="materialFileInput" multiple class="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,image/*" onchange="handleMaterialFiles(this.files)"/>
+                  <div id="materialsList" class="space-y-2"></div>
+                </div>
+
                 <!-- MEDIA PHỤ -->
                 <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
                   <div class="flex items-center justify-between">
@@ -712,6 +726,7 @@
       originalLesson: "",
       recipeFileBase64: "",
       recipeFileName: "",
+      lessonMaterials: [],
       students: [],
       enrollments: []
     };
@@ -1371,6 +1386,8 @@
       if (detailFields) {
         if (isSection) {
           detailFields.classList.add("hidden");
+          STATE.lessonMaterials = [];
+          renderMaterialsList();
         } else {
           detailFields.classList.remove("hidden");
         }
@@ -1396,6 +1413,7 @@
       STATE.originalLesson = "";
       STATE.recipeFileBase64 = "";
       STATE.recipeFileName = "";
+      STATE.lessonMaterials = [];
 
       document.getElementById("formTitle").innerText = "Thêm Bài Học Mới";
       const badge = document.getElementById("formModeBadge");
@@ -1422,6 +1440,7 @@
       document.getElementById("recipeOpenLink").classList.add("hidden");
       document.getElementById("mainVideoStatus").innerHTML = "";
       document.getElementById("mediaBlocksContainer").innerHTML = "";
+      renderMaterialsList();
       resetMainVideoProgress();
       
       const shareLessonUrlContainer = document.getElementById("shareLessonUrlContainer");
@@ -1438,6 +1457,7 @@
       STATE.recipeFileBase64 = "";
       STATE.originalMime = ""; // Unused reset placeholder if needed
       STATE.recipeFileName = "";
+      STATE.lessonMaterials = normalizeMaterialList(l.materials);
 
       document.getElementById("formTitle").innerText = `Sửa: ${l.title || "Bài " + l.lesson}`;
       const badge = document.getElementById("formModeBadge");
@@ -1468,6 +1488,7 @@
       
       document.getElementById("recipeFileInput").value = "";
       document.getElementById("mainVideoStatus").innerHTML = "";
+      renderMaterialsList();
       resetMainVideoProgress();
 
       const shareLessonUrlContainer = document.getElementById("shareLessonUrlContainer");
@@ -1530,12 +1551,13 @@
 
       const mediaUrls = buildMediaUrls();
       const isSection = document.getElementById("fIsSection").checked;
+      const materials = isSection ? [] : normalizeMaterialList(STATE.lessonMaterials);
 
       if (!course) { toast("Chọn hoặc tạo khóa học trước.", "error"); return; }
       if (!lesson) { toast("Nhập số bài học.", "error"); return; }
       if (!title) { toast(isSection ? "Nhập tên chương/mục." : "Nhập tiêu đề bài học.", "error"); return; }
 
-      const lessonData = { course, lesson, title, description, duration, level, status, thumbnailUrl, videoUrl, recipeUrl, mediaUrls, isSection };
+      const lessonData = { course, lesson, title, description, duration, level, status, thumbnailUrl, videoUrl, recipeUrl, mediaUrls, materials, isSection };
 
       const payload = {
         action: STATE.isEditMode ? "update" : "create",
@@ -1662,7 +1684,174 @@
     }
 
     // ── Video URLs checking ────────────────────────────────────────────────
-    function parseBunnyUrl(input) {
+
+    const MATERIAL_ALLOWED_EXTENSIONS = new Set(["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "jpg", "jpeg", "png", "webp", "gif"]);
+    const MATERIAL_MAX_BYTES = 50 * 1024 * 1024;
+
+    function normalizeMaterialList(list) {
+      return (Array.isArray(list) ? list : []).map(item => {
+        if (!item || typeof item !== "object") return null;
+        const name = String(item.name || "").trim();
+        const url = String(item.url || item.downloadUrl || "").trim();
+        if (!name || !url) return null;
+        return {
+          id: String(item.id || "").trim(),
+          name,
+          url,
+          downloadUrl: String(item.downloadUrl || "").trim(),
+          mimeType: String(item.mimeType || "").trim(),
+          size: Number(item.size || 0) || 0,
+          source: String(item.source || "google_drive").trim()
+        };
+      }).filter(Boolean);
+    }
+
+    function formatFileSize(bytes) {
+      const size = Number(bytes || 0);
+      if (!size) return "";
+      if (size < 1024) return `${size} B`;
+      if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+      return `${(size / 1024 / 1024).toFixed(1)} MB`;
+    }
+
+    function materialIcon(material) {
+      const name = String(material?.name || "").toLowerCase();
+      if (name.endsWith(".pdf")) return "PDF";
+      if (/\.(doc|docx)$/.test(name)) return "DOC";
+      if (/\.(xls|xlsx)$/.test(name)) return "XLS";
+      if (/\.(ppt|pptx)$/.test(name)) return "PPT";
+      if (/\.(jpg|jpeg|png|webp|gif)$/.test(name)) return "IMG";
+      return "FILE";
+    }
+
+    function renderMaterialsList() {
+      const listEl = document.getElementById("materialsList");
+      if (!listEl) return;
+      const materials = normalizeMaterialList(STATE.lessonMaterials);
+      STATE.lessonMaterials = materials;
+
+      if (!materials.length) {
+        listEl.innerHTML = `<div class="text-[11px] text-slate-400 font-medium">Chưa có tài liệu nào.</div>`;
+        return;
+      }
+
+      listEl.innerHTML = materials.map((material, index) => {
+        const href = material.downloadUrl || material.url;
+        const sizeText = formatFileSize(material.size);
+        return `
+          <div class="bg-white border border-slate-200 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div class="min-w-0 flex items-center gap-2">
+              <span class="shrink-0 text-[10px] font-black text-brandGreen bg-emerald-50 rounded-lg px-2 py-1">${materialIcon(material)}</span>
+              <div class="min-w-0">
+                <div class="text-xs font-bold text-slate-700 truncate" title="${escapeHtml(material.name)}">${escapeHtml(material.name)}</div>
+                <div class="text-[10px] text-slate-400 font-semibold">${sizeText || "Google Drive"}</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="text-[11px] font-bold text-blue-600 hover:underline">Xem</a>
+              <button type="button" onclick="removeMaterial(${index})" class="text-[11px] font-bold text-red-500 hover:underline">Xóa</button>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function removeMaterial(index) {
+      STATE.lessonMaterials.splice(index, 1);
+      renderMaterialsList();
+    }
+
+    function triggerMaterialUpload() {
+      document.getElementById("materialFileInput")?.click();
+    }
+
+    async function handleMaterialFiles(fileList) {
+      const files = Array.from(fileList || []);
+      const input = document.getElementById("materialFileInput");
+      if (!files.length) return;
+      for (const file of files) {
+        await uploadLessonMaterial(file);
+      }
+      if (input) input.value = "";
+    }
+
+    async function uploadLessonMaterial(file) {
+      const course = document.getElementById("fCourse").value.trim();
+      const lesson = document.getElementById("fLesson").value.trim();
+      const title = document.getElementById("fTitle").value.trim();
+      const ext = (file.name.split(".").pop() || "").toLowerCase();
+
+      if (!course || !lesson || !title) {
+        toast("Vui lòng nhập khóa học, số bài và tiêu đề trước khi upload tài liệu.", "error");
+        return;
+      }
+      if (!MATERIAL_ALLOWED_EXTENSIONS.has(ext)) {
+        toast(`Định dạng tài liệu không hỗ trợ: ${file.name}`, "error");
+        return;
+      }
+      if (file.size > MATERIAL_MAX_BYTES) {
+        toast(`File quá lớn: ${file.name}. Tối đa 50 MB.`, "error");
+        return;
+      }
+
+      showLoader(`Đang tải tài liệu: ${file.name}`);
+      try {
+        const fileData = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || "").split(",")[1] || "");
+          reader.onerror = () => reject(new Error("Không thể đọc file"));
+          reader.readAsDataURL(file);
+        });
+
+        const res = await fetch("/api/lms/admin?endpoint=upload-material", {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify({
+            course,
+            lesson,
+            title,
+            courseTitle: STATE.globalConfig[`${course}_title`] || "",
+            fileName: file.name,
+            mimeType: file.type || "application/octet-stream",
+            fileData
+          })
+        });
+        const d = await res.json();
+        if (!res.ok || !d.success || !d.material) {
+          toast(d.error || "Tải tài liệu thất bại", "error");
+          return;
+        }
+        STATE.lessonMaterials.push(d.material);
+        renderMaterialsList();
+        toast(`Đã tải tài liệu: ${file.name}`);
+      } catch (err) {
+        console.error("Upload material failed:", err);
+        toast("Lỗi khi tải tài liệu lên", "error");
+      } finally {
+        hideLoader();
+      }
+    }
+
+    function setupMaterialDragAndDrop() {
+      const zone = document.getElementById("materialUploadZone");
+      if (!zone) return;
+
+      ["dragenter", "dragover", "dragleave", "drop"].forEach(eventName => {
+        zone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }, false);
+      });
+      ["dragenter", "dragover"].forEach(eventName => {
+        zone.addEventListener(eventName, () => zone.classList.add("border-brandGreen", "bg-slate-100"), false);
+      });
+      ["dragleave", "drop"].forEach(eventName => {
+        zone.addEventListener(eventName, () => zone.classList.remove("border-brandGreen", "bg-slate-100"), false);
+      });
+      zone.addEventListener("drop", (e) => {
+        handleMaterialFiles(e.dataTransfer?.files);
+      }, false);
+    }    function parseBunnyUrl(input) {
       let src = extractIframeSrc(input).replace(/&amp;/g, "&").trim();
       if (!src) return { ok: false };
       try {
@@ -3211,6 +3400,7 @@
       initGoogleSignIn();
       setupVideoDragAndDrop("mainVideoUploadZone", "mainVideoFileInput", "main_video");
       setupVideoDragAndDrop("modalVideoUploadZone", "modalVideoFileInput", "modal_video");
+      setupMaterialDragAndDrop();
       
       const modalUploadZone = document.getElementById("modalVideoUploadZone");
       if (modalUploadZone) {

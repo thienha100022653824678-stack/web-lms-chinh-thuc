@@ -2,6 +2,27 @@ import { supabase } from "../supabase.js";
 import { getAdminFromRequest } from "../lms.js";
 import { fetchRecipeText } from "./public-lesson.js";
 
+function normalizeMaterials(value) {
+  const raw = Array.isArray(value) ? value : [];
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const name = String(item.name || item.fileName || "").trim();
+      const url = String(item.url || item.webViewLink || item.downloadUrl || "").trim();
+      if (!name || !url) return null;
+      return {
+        id: String(item.id || item.fileId || url),
+        name,
+        url,
+        downloadUrl: String(item.downloadUrl || url),
+        mimeType: String(item.mimeType || ""),
+        size: Number(item.size || 0),
+        source: String(item.source || "google_drive")
+      };
+    })
+    .filter(Boolean);
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -61,6 +82,7 @@ export default async function handler(req, res) {
           videoUrl: l.video_url || "",
           recipeUrl: l.recipe_url || "",
           mediaUrls: l.media_urls || "",
+          materials: normalizeMaterials(l.materials),
           isSection: isSec,
           status: l.status || "active"
         };
@@ -115,6 +137,7 @@ export default async function handler(req, res) {
           video_url: lessonData.videoUrl || "",
           recipe_url: lessonData.recipeUrl || "",
           media_urls: lessonData.mediaUrls || "",
+          materials: Boolean(lessonData.isSection) ? [] : normalizeMaterials(lessonData.materials),
           is_section: Boolean(lessonData.isSection),
           status: "active",
           sort_order: targetLessonNo,
@@ -194,6 +217,7 @@ export default async function handler(req, res) {
           video_url: lessonData.videoUrl || "",
           recipe_url: lessonData.recipeUrl || "",
           media_urls: lessonData.mediaUrls || "",
+          materials: Boolean(lessonData.isSection) ? [] : normalizeMaterials(lessonData.materials),
           is_section: Boolean(lessonData.isSection),
           status: lessonData.status || "active",
           sort_order: parseInt(lessonData.lesson, 10),

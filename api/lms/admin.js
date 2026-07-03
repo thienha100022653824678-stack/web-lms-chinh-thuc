@@ -8,6 +8,7 @@ import adminUploadImageHandler from "../../utils/lms-handlers/admin-upload-image
 import adminUploadRecipeHandler from "../../utils/lms-handlers/admin-upload-recipe.js";
 import adminBulkEnrollHandler from "../../utils/lms-handlers/admin-bulk-enroll.js";
 import adminUploadGDriveVideoHandler from "../../utils/lms-handlers/admin-upload-gdrive-video.js";
+import adminUploadMaterialHandler from "../../utils/lms-handlers/admin-upload-material.js";
 import adminSyncDrivePermissionsHandler from "../../utils/lms-handlers/admin-sync-drive-permissions.js";
 import adminRepairDriveHandler from "../../utils/lms-handlers/admin-repair-drive.js";
 
@@ -51,6 +52,9 @@ export default async function handler(req, res) {
   }
   if (endpoint === "upload-gdrive-video") {
     return adminUploadGDriveVideoHandler(req, res);
+  }
+  if (endpoint === "upload-material") {
+    return adminUploadMaterialHandler(req, res);
   }
   if (endpoint === "sync-drive-permissions") {
     return adminSyncDrivePermissionsHandler(req, res);

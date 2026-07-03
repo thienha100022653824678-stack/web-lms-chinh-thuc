@@ -312,6 +312,18 @@
         <!-- Populated by JS -->
       </div>
 
+      <!-- Lesson documents -->
+      <div id="lessonMaterialsSection" class="hidden mt-6 bg-white border border-brandBrown/5 rounded-2xl p-5 shadow-sm">
+        <div class="border-b border-brandGray pb-3 mb-4">
+          <span class="font-black text-brandGreen text-base flex items-center gap-2">
+            <span>📎</span> Tài liệu bài học
+          </span>
+        </div>
+        <div id="lessonMaterialsList" class="grid gap-2">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
       <!-- Recipe Card -->
       <div id="recipeSectionBox" class="mt-6 bg-white border border-brandBrown/5 rounded-2xl p-5 shadow-sm no-copy">
         <div class="border-b border-brandGray pb-3 mb-4">
@@ -970,6 +982,75 @@
     }
 
     // ── Load Lesson Details ────────────────────────────────────────────────
+
+    function normalizeMaterials(value) {
+      return (Array.isArray(value) ? value : []).map(item => {
+        if (!item || typeof item !== "object") return null;
+        const name = String(item.name || "").trim();
+        const url = String(item.url || item.downloadUrl || "").trim();
+        if (!name || !url) return null;
+        return {
+          name,
+          url,
+          downloadUrl: String(item.downloadUrl || "").trim(),
+          mimeType: String(item.mimeType || "").trim(),
+          size: Number(item.size || 0) || 0
+        };
+      }).filter(Boolean);
+    }
+
+    function formatMaterialSize(bytes) {
+      const size = Number(bytes || 0);
+      if (!size) return "";
+      if (size < 1024) return `${size} B`;
+      if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+      return `${(size / 1024 / 1024).toFixed(1)} MB`;
+    }
+
+    function getMaterialBadge(name) {
+      const value = String(name || "").toLowerCase();
+      if (value.endsWith(".pdf")) return "PDF";
+      if (/\.(doc|docx)$/.test(value)) return "DOC";
+      if (/\.(xls|xlsx)$/.test(value)) return "XLS";
+      if (/\.(ppt|pptx)$/.test(value)) return "PPT";
+      if (/\.(jpg|jpeg|png|webp|gif)$/.test(value)) return "IMG";
+      if (value.endsWith(".txt")) return "TXT";
+      return "FILE";
+    }
+
+    function renderLessonMaterials(lesson) {
+      const section = document.getElementById("lessonMaterialsSection");
+      const list = document.getElementById("lessonMaterialsList");
+      if (!section || !list) return;
+
+      const materials = normalizeMaterials(lesson?.materials);
+      if (!materials.length || lesson?.isSection) {
+        section.classList.add("hidden");
+        list.innerHTML = "";
+        return;
+      }
+
+      list.innerHTML = materials.map(material => {
+        const href = material.downloadUrl || material.url;
+        const sizeText = formatMaterialSize(material.size);
+        return `
+          <div class="border border-brandBrown/10 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="min-w-0 flex items-center gap-2">
+              <span class="shrink-0 text-[10px] font-black text-brandGreen bg-brandGreen/10 rounded-lg px-2 py-1">${getMaterialBadge(material.name)}</span>
+              <div class="min-w-0">
+                <div class="font-bold text-sm text-brandBrown truncate" title="${escapeHtml(material.name)}">${escapeHtml(material.name)}</div>
+                ${sizeText ? `<div class="text-xs text-brandBrown/50 font-semibold">${sizeText}</div>` : ""}
+              </div>
+            </div>
+            <a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="w-full sm:w-auto text-center px-4 py-2.5 bg-brandGreen hover:bg-brandGreen/90 text-white font-bold text-xs rounded-xl transition">
+              Xem/Tải tài liệu
+            </a>
+          </div>
+        `;
+      }).join("");
+      section.classList.remove("hidden");
+    }
+
     async function loadLessonDetails() {
       if (!LESSON_ID) {
         window.location.href = "/lms.html";
@@ -1098,6 +1179,7 @@
 
         // Render sub materials and documents
         renderMediaItems(currentLesson);
+        renderLessonMaterials(currentLesson);
 
         // Transition states
         document.getElementById("loadingState").classList.add("hidden");

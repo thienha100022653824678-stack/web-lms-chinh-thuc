@@ -10,6 +10,27 @@ import { google } from "googleapis";
 
 const SESSION_COOKIE = "course_session_token";
 
+function normalizeMaterials(value) {
+  const raw = Array.isArray(value) ? value : [];
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const name = String(item.name || item.fileName || "").trim();
+      const url = String(item.url || item.webViewLink || item.downloadUrl || "").trim();
+      if (!name || !url) return null;
+      return {
+        id: String(item.id || item.fileId || url),
+        name,
+        url,
+        downloadUrl: String(item.downloadUrl || url),
+        mimeType: String(item.mimeType || ""),
+        size: Number(item.size || 0),
+        source: String(item.source || "google_drive")
+      };
+    })
+    .filter(Boolean);
+}
+
 function getGoogleAuth() {
   const privateKey = (process.env.GOOGLE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
   return new google.auth.GoogleAuth({
@@ -346,6 +367,7 @@ export default async function handler(req, res) {
       videoUrl: lesson.video_url || "",
       recipeUrl: lesson.recipe_url || "",
       mediaUrls: securedMedia,
+      materials: Boolean(lesson.is_section) ? [] : normalizeMaterials(lesson.materials),
       isSection: Boolean(lesson.is_section),
       views: lesson.views || 0,
       status: lesson.status || "active",
