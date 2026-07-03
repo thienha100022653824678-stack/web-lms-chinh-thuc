@@ -28,11 +28,20 @@ This document tracks all files modified during the styling, numbering, and navig
 
 ## 2. Frontend Templates
 
+### 2026-07-03 Codex Commit
+- **Commit**: `c5f87d2a1f20302e8f37baaafa820fca810cd33c`
+- **Message**: `feat: shorten displayed links and show lesson chapter header`
+- **Pushed to**: `origin/main`
+- **Production deploy**: Ready.
+- **Files changed in this commit only**: `index.html`, `lms.html`, `lesson.html`.
+- **No app code outside those files was changed in that commit.**
+
 ### 📄 [`lms.html`](file:///C:/Users/gaomi/Downloads/Telegram%20Desktop/web-ban-hang-chinh-thuc/web-lms-chinh-thuc/lms.html) (and synchronized [`index.html`](file:///C:/Users/gaomi/Downloads/Telegram%20Desktop/web-ban-hang-chinh-thuc/web-lms-chinh-thuc/index.html))
 - **Role**: Student homepage course catalog.
 - **Changes**:
   - Prioritizes the backend-calculated `displayLesson` value in dynamic badge rendering.
   - Modified text link conversion helper (`linkifyTextSafe`) to display the original URL text.
+  - 2026-07-03: Linkify display text now shortens long URLs while preserving the original href. `index.html` was synced because it is the production `/` mirror for the student catalog.
 
 ### 📄 [`lesson.html`](file:///C:/Users/gaomi/Downloads/Telegram%20Desktop/web-ban-hang-chinh-thuc/web-lms-chinh-thuc/lesson.html)
 - **Role**: Student detailed lesson page (contains player, recipe, and sidebar).
@@ -41,6 +50,8 @@ This document tracks all files modified during the styling, numbering, and navig
   - Refactored `prevBtn` and `nextBtn` callbacks to filter out section headers and skip dead links.
   - Added wrapper IDs (`recipeSectionBox`, `lessonDescriptionBox`) to easily hide cards when empty.
   - Updated `linkifyTextSafe` to show raw URL content instead of replacing with "Mua nguyên liệu tại đây" buttons.
+  - 2026-07-03: Linkify display text now shortens long URLs while preserving the original href.
+  - 2026-07-03: Added current chapter header display for lessons that belong to a section. Mobile classes avoid overflow/wrapping issues with long chapter names.
   - Removed "In công thức" button.
 - **Next Dev Note**: Add anti-copy listeners to this page.
 

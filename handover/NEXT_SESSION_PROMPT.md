@@ -27,9 +27,29 @@ All documentation is located in the `handover/` folder at the project root:
 - **Database Ordering (lesson_no)**: Sequential, unique integers track database records and ordering inside Supabase. Never save resets (starting from 1) directly into database `lesson_no` column to avoid unique constraint key collisions.
 
 ### 3. Immediate Next Tasks
+Current verified baseline:
+- Latest pushed commit: `c5f87d2a1f20302e8f37baaafa820fca810cd33c`
+- Commit message: `feat: shorten displayed links and show lesson chapter header`
+- Git state after push: clean, local `main` even with `origin/main`.
+- Production deploy: Ready.
+- Verified production aliases: `web-lms-chinh-thuc.vercel.app`, `daubepnho.store`, `www.daubepnho.store`.
+- Verified production routes: `/`, `/lms.html`, `/lesson.html`, and `/api/lms/portal?endpoint=public-config` all return 200.
+- `.env.local` is ignored by Git and is not tracked.
+- Core local env is enough to run `vercel dev`; if Vercel functions do not see `.env.local`, load env into the process before starting `vercel dev`.
+- Missing env still to complete: `GOOGLE_CLIENT_EMAIL`, `GOOGLE_PRIVATE_KEY`, `BUNNY_STREAM_TOKEN_KEY`.
+- Never print or commit secret values.
+
 Please implement the tasks listed in `handover/TODO.md`:
 
-1. **Re-implement Lesson Documents & Attachments (High Priority)**:
+1. **Complete Google Service Account and Bunny env setup**:
+   - Create a Google Service Account JSON key.
+   - Extract `client_email` and `private_key`.
+   - Add `GOOGLE_CLIENT_EMAIL` and `GOOGLE_PRIVATE_KEY` to `.env.local` and Vercel env if needed.
+   - Share the Google Drive course folder with the service account email.
+   - Re-test Google Docs/Drive recipe and media loading.
+   - Add `BUNNY_STREAM_TOKEN_KEY` and re-test Bunny secured playback if Bunny secured video is used.
+
+2. **Re-implement Lesson Documents & Attachments (High Priority)**:
    - Allow admins to attach multiple files (PDF, Word, Excel, Slide, GDocs, or links) to a lesson in `lms-admin.html`.
    - Update API handlers `admin-lessons.js` and `lesson.js` to save and load these document arrays.
    - Render document list cards in `lesson.html`, ensuring they are completely hidden if no documents are attached.

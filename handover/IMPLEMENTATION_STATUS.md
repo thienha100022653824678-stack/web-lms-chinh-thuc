@@ -1,6 +1,6 @@
 # Project Handover: IMPLEMENTATION_STATUS.md
 
-This document summarizes the current status of all features in the LMS system as of the latest commit `8c45e4847aed0f55cadaafffffaba1f32c9ca056`.
+This document summarizes the current status of all features in the LMS system as of the latest verified production commit `c5f87d2a1f20302e8f37baaafa820fca810cd33c`.
 
 ---
 
@@ -21,6 +21,38 @@ This document summarizes the current status of all features in the LMS system as
 ---
 
 ## 2. Details of Key Statuses
+
+### Codex Takeover Update - 2026-07-03
+- **Pushed commit**: `c5f87d2a1f20302e8f37baaafa820fca810cd33c`
+- **Commit message**: `feat: shorten displayed links and show lesson chapter header`
+- **Git state after push**: clean working tree; local `main` is even with `origin/main`.
+- **Production deploy**: Ready.
+- **Production aliases verified**:
+  - `https://web-lms-chinh-thuc.vercel.app`
+  - `https://daubepnho.store`
+  - `https://www.daubepnho.store`
+- **Production routes verified**:
+  - `/` returns 200
+  - `/lms.html` returns 200
+  - `/lesson.html` returns 200
+  - `/api/lms/portal?endpoint=public-config` returns 200
+- **Scope of pushed change**:
+  - `index.html`, `lms.html`: synced linkify behavior so displayed URLs are shortened while the original `href` remains intact.
+  - `lesson.html`: same linkify behavior plus a lesson chapter header that shows the current chapter when the lesson belongs to a section; mobile layout was adjusted to avoid overflow on long chapter names.
+
+### Local Environment Status - 2026-07-03
+- `.env.local` is ignored by Git and is not tracked.
+- Core local env is present enough to run `vercel dev`.
+- `/api/lms/portal` no longer crashes because of missing `SUPABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY`.
+- If `vercel dev` does not automatically load `.env.local` into serverless function runtime, load env values into the current process first, then start `vercel dev`.
+- Do not write secret values into handover docs or logs.
+
+### Missing Local/Deployment Env Notes - 2026-07-03
+- `GOOGLE_CLIENT_EMAIL` is still missing.
+- `GOOGLE_PRIVATE_KEY` is still missing.
+- `BUNNY_STREAM_TOKEN_KEY` is still missing.
+- `GOOGLE_CLIENT_EMAIL` and `GOOGLE_PRIVATE_KEY` are needed for Google Service Account based Google Drive/Docs recipe/media fetching.
+- `BUNNY_STREAM_TOKEN_KEY` is needed only if Bunny secured video URL signing is used.
 
 ### ✅ Google OAuth & Session Verification
 - **Status**: Stable. The session is restored automatically via cookies. Google One Tap or Google Sign-in button is displayed if the cookie is expired or missing. 100% functional.

@@ -4,6 +4,18 @@ This checklist should be run before executing any major production deployments.
 
 ---
 
+## 0. Last Verified Production Check - 2026-07-03
+
+- [x] Deployment for commit `c5f87d2a1f20302e8f37baaafa820fca810cd33c` is Ready.
+- [x] Production alias `https://web-lms-chinh-thuc.vercel.app` responds.
+- [x] Production alias `https://daubepnho.store` is assigned to the Ready deployment.
+- [x] Production alias `https://www.daubepnho.store` is assigned to the Ready deployment.
+- [x] `/` returns 200 in production.
+- [x] `/lms.html` returns 200 in production.
+- [x] `/lesson.html` returns 200 in production.
+- [x] `/api/lms/portal?endpoint=public-config` returns 200 in production.
+- [x] Production check did not show errors caused by `index.html`, `lms.html`, or `lesson.html`.
+
 ## 🔐 1. Authentication & Security
 
 - [ ] **Google Sign-in**: Ensure the Google Sign-in button renders and functions correctly on both desktop and mobile layouts.

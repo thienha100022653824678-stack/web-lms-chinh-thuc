@@ -28,6 +28,19 @@ This document tracks known resolved bugs, current bugs, and potential issues for
 
 ## 2. Currently Known & Suspected Issues
 
+### Env Setup Gap: Google Service Account and Bunny Token
+- **Status**: Known setup gap, not an app-code regression.
+- **Current state**: `.env.local` is ignored by Git and local core env is present enough for `vercel dev`; `/api/lms/portal` no longer crashes from missing Supabase env.
+- **Missing env names**:
+  - `GOOGLE_CLIENT_EMAIL`
+  - `GOOGLE_PRIVATE_KEY`
+  - `BUNNY_STREAM_TOKEN_KEY`
+- **Impact**:
+  - Google Drive/Docs recipe/media fetching needs the Google Service Account email/private key.
+  - Bunny secured video signing needs the Bunny stream token key if secured Bunny videos are used.
+- **Next check**: After adding the missing env values, share the course Drive folder with the service account email and re-test Google Docs/Drive recipe/media plus Bunny secured playback.
+- **Security note**: Do not write secret values into this handover.
+
 ### 🔍 Suspected Issue 1: External Media CORS / Iframe restrictions
 - **Symptom**: If the user embeds external links in the lesson content, some browsers might restrict embedding or raise CORS issues.
 - **Suggestion**: Keep utilizing the secure custom player (`gdrive-player.html`) for Google Drive files, and enforce `target="_blank"` on links to ensure external resources open in new tabs rather than failing in frames.
