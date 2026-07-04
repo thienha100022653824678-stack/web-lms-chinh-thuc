@@ -23,6 +23,77 @@ function normalizeMaterials(value) {
     .filter(Boolean);
 }
 
+const PORTAL_RECIPE_PLACEHOLDER = "noi dung bai viet se som duoc cap nhat boi giang vien";
+
+function normalizePlainText(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+function hasRealRecipeText(value) {
+  const normalized = normalizePlainText(value);
+  return Boolean(normalized && !normalized.includes(PORTAL_RECIPE_PLACEHOLDER));
+}
+
+async function findFirstCourseRecipe(courseSlug) {
+  const { data: lessons, error } = await supabase
+    .from("lessons")
+    .select("lesson_no, title, recipe_url, is_section, status")
+    .eq("course_slug", courseSlug)
+    .neq("status", "hidden")
+    .order("lesson_no", { ascending: true });
+
+  if (error) throw error;
+
+  for (const lesson of lessons || []) {
+    if (Boolean(lesson.is_section)) continue;
+    if (!lesson.recipe_url) continue;
+    const recipeText = await fetchRecipeText(lesson.recipe_url);
+    if (hasRealRecipeText(recipeText)) {
+      return {
+        title: lesson.title || courseSlug,
+        recipe: recipeText
+      };
+    }
+  }
+  return null;
+}
+
+async function syncFirstCourseRecipeToPortal(courseSlug) {
+  const sys1Url = process.env.SYSTEM1_URL;
+  const secret = process.env.INTERNAL_SYNC_SECRET;
+  if (!sys1Url || !secret || !courseSlug) return { skipped: "missing_sync_config" };
+
+  const firstRecipe = await findFirstCourseRecipe(courseSlug);
+  if (!firstRecipe) return { skipped: "no_real_recipe" };
+
+  const response = await fetch(`${sys1Url.trim().replace(/\/$/, '')}/api/sync`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Sync-Secret": secret
+    },
+    body: JSON.stringify({
+      action: "syncRecipe",
+      courseSlug,
+      recipe: firstRecipe.recipe,
+      title: firstRecipe.title
+    })
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`Portal recipe sync failed with status ${response.status}: ${detail.slice(0, 300)}`);
+  }
+
+  return response.json().catch(() => ({ success: true }));
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -160,30 +231,11 @@ export default async function handler(req, res) {
 
         if (insertErr) throw insertErr;
 
-        // Sync recipe text to System 1 Portal
-        if (lessonData.recipeUrl) {
-          try {
-            const recipeText = await fetchRecipeText(lessonData.recipeUrl);
-            const sys1Url = process.env.SYSTEM1_URL;
-            const secret = process.env.INTERNAL_SYNC_SECRET;
-            if (sys1Url && secret && recipeText) {
-              await fetch(`${sys1Url.trim().replace(/\/$/, '')}/api/sync`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "X-Sync-Secret": secret
-                },
-                body: JSON.stringify({
-                  action: "syncRecipe",
-                  courseSlug: lessonData.course,
-                  recipe: recipeText,
-                  title: lessonData.title
-                })
-              });
-            }
-          } catch (syncErr) {
-            console.error("[admin-lessons] Sync recipe failed on create:", syncErr.message);
-          }
+        // Sync the first real course recipe to System 1 Portal.
+        try {
+          await syncFirstCourseRecipeToPortal(lessonData.course);
+        } catch (syncErr) {
+          console.error("[admin-lessons] Sync recipe failed on create:", syncErr.message);
         }
 
         return res.status(200).json({ success: true, message: "Tạo bài học thành công" });
@@ -248,30 +300,11 @@ export default async function handler(req, res) {
 
         if (updateErr) throw updateErr;
 
-        // Sync recipe text to System 1 Portal
-        if (lessonData.recipeUrl) {
-          try {
-            const recipeText = await fetchRecipeText(lessonData.recipeUrl);
-            const sys1Url = process.env.SYSTEM1_URL;
-            const secret = process.env.INTERNAL_SYNC_SECRET;
-            if (sys1Url && secret && recipeText) {
-              await fetch(`${sys1Url.trim().replace(/\/$/, '')}/api/sync`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "X-Sync-Secret": secret
-                },
-                body: JSON.stringify({
-                  action: "syncRecipe",
-                  courseSlug: lessonData.course,
-                  recipe: recipeText,
-                  title: lessonData.title
-                })
-              });
-            }
-          } catch (syncErr) {
-            console.error("[admin-lessons] Sync recipe failed on update:", syncErr.message);
-          }
+        // Sync the first real course recipe to System 1 Portal.
+        try {
+          await syncFirstCourseRecipeToPortal(lessonData.course);
+        } catch (syncErr) {
+          console.error("[admin-lessons] Sync recipe failed on update:", syncErr.message);
         }
 
         return res.status(200).json({ success: true, message: "Cập nhật bài học thành công" });
