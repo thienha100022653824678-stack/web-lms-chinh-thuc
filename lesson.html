@@ -216,21 +216,22 @@
 
   <!-- Header -->
   <header class="bg-white/95 backdrop-blur-md sticky top-0 z-50 border-b border-brandBrown/5 shadow-sm">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-      <!-- Back to Catalog Link & Title -->
-      <div class="flex items-center gap-3">
-        <a id="backBtn" href="/lms.html" class="w-10 h-10 rounded-full hover:bg-brandGray flex items-center justify-center text-brandGreen text-2xl font-bold transition">
-          ‹
+    <div class="max-w-7xl mx-auto px-3 sm:px-6 py-3 flex items-center justify-between gap-2 sm:gap-4">
+      <!-- Back to current LMS course home -->
+      <div class="flex items-center min-w-0 flex-1">
+        <a id="backBtn" href="/lms.html" class="min-w-0 max-w-[56vw] sm:max-w-md rounded-xl border border-brandGreen/20 bg-brandGreen/5 hover:bg-brandGreen/10 px-3 py-2 text-brandGreen transition" title="Quay lại trang chủ khóa học">
+          <span class="block text-xs font-black leading-tight sm:hidden">← Trang chủ khóa học</span>
+          <span id="courseHomeText" class="hidden sm:block text-sm font-black leading-tight truncate">← Quay lại trang chủ khóa học</span>
         </a>
-        <div class="flex flex-col">
-          <span id="siteTitle" class="font-extrabold tracking-tight text-sm text-brandGreen">Culinary Academy</span>
-          <span id="courseNameText" class="text-xs text-brandBrown/65 font-bold truncate max-w-[180px] sm:max-w-xs">Đang tải...</span>
-        </div>
       </div>
 
       <!-- Auth Indicator -->
-      <div id="loginArea" class="flex items-center gap-3">
-        <div class="flex flex-col text-right">
+      <div id="loginArea" class="flex items-center justify-end gap-2 sm:gap-3 flex-shrink-0">
+        <button id="myCoursesBtn" onclick="goMyCourses()" class="px-3 py-2 rounded-xl bg-brandGreen hover:bg-brandGreenLight text-white font-black text-xs shadow-sm whitespace-nowrap transition">
+          <span class="hidden sm:inline">Quản lý khóa học</span>
+          <span class="sm:hidden">Khóa học của tôi</span>
+        </button>
+        <div class="hidden sm:flex flex-col text-right">
           <span class="text-[10px] font-black text-brandGreen">Học Viên</span>
           <span id="studentEmailBadge" class="text-xs text-brandBrown/60 font-semibold truncate max-w-[120px] sm:max-w-[200px]">Đang xác thực...</span>
         </div>
@@ -427,6 +428,7 @@
     let currentLesson = null;
     let courseLessonsList = [];
     let studentEmail = "";
+    const MY_COURSES_URL = "https://www.yeunauan.live/my-courses";
 
     // ── Helper functions ───────────────────────────────────────────────────
     function escapeHtml(text) {
@@ -436,6 +438,33 @@
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
+    }
+
+    function goMyCourses() {
+      window.location.href = MY_COURSES_URL;
+    }
+
+    function resolveCourseHomeTitle(courseInfo, courseSlug) {
+      const title = String(courseInfo?.title || "").trim();
+      const subtitle = String(courseInfo?.subtitle || "").trim();
+      if (title && title.toLowerCase() !== "culinary academy") return title;
+      if (subtitle && subtitle.toLowerCase() !== "culinary academy") return subtitle;
+      return courseSlug || "khóa học";
+    }
+
+    function updateCourseHomeHeader(courseSlug, courseTitle) {
+      const slug = String(courseSlug || currentLesson?.course || "").trim();
+      const title = String(courseTitle || slug || "khóa học").trim();
+      const href = slug ? `/lms.html?course=${encodeURIComponent(slug)}` : "/lms.html";
+      const backBtn = document.getElementById("backBtn");
+      const label = document.getElementById("courseHomeText");
+      if (backBtn) {
+        backBtn.href = href;
+        backBtn.title = `Quay lại trang chủ khóa học ${title}`;
+      }
+      if (label) {
+        label.innerText = `← Quay lại trang chủ khóa học ${title}`;
+      }
     }
 
     function shortenUrlText(urlStr) {
@@ -739,7 +768,7 @@
       const watermark = document.createElement('div');
       watermark.className = 'watermark-overlay';
 
-      const courseName = document.getElementById("courseNameText").innerText || "Khóa Học";
+      const courseName = currentLesson?.course || "Khóa Học";
 
       function updateWatermarkText() {
         const now = new Date();
@@ -1117,7 +1146,7 @@
           }
         }
 
-        document.getElementById("backBtn").href = `/lms.html?course=${encodeURIComponent(currentLesson.course)}`;
+        updateCourseHomeHeader(currentLesson.course, currentLesson.course);
 
         // Video Player Box: Auto-hide if no video is available
         const videoBox = document.getElementById("videoBox");
@@ -1209,13 +1238,7 @@
 
         const data = await response.json();
         if (!response.ok || !data.allowed) return;
-
-        // Set course label
-        if (data.courseInfo && data.courseInfo.title) {
-          document.getElementById("courseNameText").innerText = data.courseInfo.title;
-        } else {
-          document.getElementById("courseNameText").innerText = `Lớp: ${courseSlug.toUpperCase()}`;
-        }
+        updateCourseHomeHeader(courseSlug, resolveCourseHomeTitle(data.courseInfo, courseSlug));
 
         courseLessonsList = data.lessons || [];
 
