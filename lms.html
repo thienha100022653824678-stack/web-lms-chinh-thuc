@@ -220,12 +220,11 @@
   <div id="homeView" class="flex-grow flex flex-col">
     <!-- Header -->
     <header class="bg-white/95 backdrop-blur-md sticky top-0 z-50 border-b border-brandBrown/5 shadow-sm">
-      <div class="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between gap-3">
         <!-- Brand Logo -->
-        <div class="flex items-center gap-2.5">
+        <div class="flex items-center gap-2.5 min-w-0">
           <span class="text-3xl">🍳</span>
-          <span id="siteTitle" class="font-extrabold tracking-tight text-xl text-brandGreen">Culinary Academy</span>
-          <select id="lmsCourseSwitcher" onchange="switchLmsCourse(this.value)" class="hidden ml-4 px-3 py-1.5 bg-brandGray border border-brandBrown/10 rounded-xl text-xs font-bold text-brandGreen outline-none cursor-pointer"></select>
+          <span id="siteTitle" class="font-extrabold tracking-tight text-lg sm:text-xl text-brandGreen truncate">Culinary Academy</span>
         </div>
 
         <!-- Auth Area -->
@@ -318,15 +317,19 @@
   <!-- MOBILE DETAILED LESSON PAGE CONTAINER -->
   <section id="mobileLessonPage" class="hidden min-h-screen bg-brandCream flex flex-col">
     <!-- Back Header -->
-    <div class="bg-white border-b border-brandBrown/5 py-4 px-4 sticky top-0 z-50 flex items-center justify-between gap-4">
-      <button class="w-10 h-10 rounded-full hover:bg-brandGray flex items-center justify-center text-brandGreen text-2xl font-bold" onclick="goHomeView()">
-        ‹
+    <div class="bg-white border-b border-brandBrown/5 py-3 px-3 sm:px-4 sticky top-0 z-50 flex items-center justify-between gap-2 sm:gap-4">
+      <button class="min-h-[42px] px-3 sm:px-4 rounded-xl hover:bg-brandGray flex items-center justify-center text-brandGreen font-extrabold text-xs sm:text-sm text-left leading-tight" onclick="goHomeView()">
+        <span class="hidden sm:inline">&larr; Quay l&#7841;i trang ch&#7911; kh&#243;a h&#7885;c</span>
+        <span class="sm:hidden">&larr; Trang ch&#7911; kh&#243;a h&#7885;c</span>
       </button>
-      <div class="font-extrabold text-sm sm:text-base text-brandBrown truncate text-center flex-grow" id="mobileLessonHeaderTitle">
+      <div class="font-extrabold text-sm sm:text-base text-brandBrown truncate text-center flex-grow min-w-0" id="mobileLessonHeaderTitle">
         Chi tiết bài học
       </div>
-      <div id="mobileLessonAuthIndicator" class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-brandGreen/10 text-brandGreen font-bold text-xs truncate max-w-[120px]">
-        Gmail
+      <div id="mobileLessonAuthIndicator" class="flex items-center justify-end gap-2 shrink-0">
+        <button onclick="goMyCourses()" class="min-h-[42px] px-3 sm:px-4 rounded-xl bg-brandGreen/10 hover:bg-brandGreen/20 text-brandGreen font-extrabold text-xs sm:text-sm leading-tight">
+          <span class="hidden sm:inline">Qu&#7843;n l&#253; kh&#243;a h&#7885;c</span>
+          <span class="sm:hidden">Kh&#243;a h&#7885;c</span>
+        </button>
       </div>
     </div>
 
@@ -335,6 +338,7 @@
       <div class="text-xs text-brandOrange font-bold uppercase tracking-wider mb-1" id="mobileLessonSub">
         BÀI 1
       </div>
+      <div id="mobileLessonChapterMeta" class="hidden mb-2 rounded-xl border border-brandGreen/15 bg-white/80 px-3.5 py-2.5 shadow-sm"></div>
       <h2 class="serif-title text-2xl font-extrabold text-brandBrown mb-4 leading-tight" id="mobileLessonTitle">
         Tiêu đề bài học
       </h2>
@@ -457,9 +461,9 @@
 
     // Configuration values derived from URL query parameters and local storage
     const COURSE = new URLSearchParams(window.location.search).get("course") || "banh-mi";
-    function switchLmsCourse(slug) {
-      if (!slug) return;
-      window.location.href = `?course=${encodeURIComponent(slug)}`;
+    const MY_COURSES_URL = "https://www.yeunauan.live/my-courses";
+    function goMyCourses() {
+      window.location.href = MY_COURSES_URL;
     }
     const SESSION_KEY = `course_session_token_${COURSE}`;
     const SESSION_EMAIL_KEY = `course_session_email_${COURSE}`;
@@ -966,15 +970,19 @@
 
       const headerArea = document.getElementById("loginArea");
       headerArea.innerHTML = `
-        <div class="flex items-center gap-3">
+        <div class="flex items-center justify-end gap-2 sm:gap-3">
           <div class="hidden sm:flex flex-col text-right">
             <span class="text-xs font-black text-brandGreen">Đã đăng nhập</span>
             <span class="text-xs text-brandBrown/60 font-semibold" title="${safeEmail}">${truncatedEmail}</span>
           </div>
+          <button onclick="goMyCourses()" class="min-h-[38px] px-3 sm:px-4 bg-brandGreen/10 hover:bg-brandGreen/20 text-brandGreen font-extrabold text-xs sm:text-sm rounded-xl transition leading-tight">
+            <span class="hidden sm:inline">Qu&#7843;n l&#253; kh&#243;a h&#7885;c</span>
+            <span class="sm:hidden">Kh&#243;a h&#7885;c c&#7911;a t&#244;i</span>
+          </button>
           <div class="w-9 h-9 rounded-full bg-brandGreen text-white flex items-center justify-center font-black text-sm shadow-md" title="${safeEmail}">
             ${safeEmail.charAt(0).toUpperCase()}
           </div>
-          <button onclick="logoutGoogle()" class="px-3 py-1.5 bg-brandOrange/10 hover:bg-brandOrange/25 text-brandOrange font-bold text-xs rounded-lg transition">
+          <button onclick="logoutGoogle()" class="hidden sm:inline-flex px-3 py-1.5 bg-brandOrange/10 hover:bg-brandOrange/25 text-brandOrange font-bold text-xs rounded-lg transition">
             Thoát
           </button>
         </div>
@@ -983,7 +991,15 @@
       // Update mobile details view header indicator
       const mobileAuth = document.getElementById("mobileLessonAuthIndicator");
       if (mobileAuth) {
-        mobileAuth.innerText = truncatedEmail;
+        mobileAuth.innerHTML = `
+          <button onclick="goMyCourses()" class="min-h-[42px] px-3 sm:px-4 rounded-xl bg-brandGreen/10 hover:bg-brandGreen/20 text-brandGreen font-extrabold text-xs sm:text-sm leading-tight">
+            <span class="hidden sm:inline">Qu&#7843;n l&#253; kh&#243;a h&#7885;c</span>
+            <span class="sm:hidden">Kh&#243;a h&#7885;c</span>
+          </button>
+          <div class="w-9 h-9 rounded-full bg-brandGreen text-white flex items-center justify-center font-black text-sm shadow-md" title="${safeEmail}">
+            ${safeEmail.charAt(0).toUpperCase()}
+          </div>
+        `;
         mobileAuth.title = safeEmail;
       }
     }
@@ -995,7 +1011,12 @@
 
       const mobileAuth = document.getElementById("mobileLessonAuthIndicator");
       if (mobileAuth) {
-        mobileAuth.innerText = "Chưa đăng nhập";
+        mobileAuth.innerHTML = `
+          <button onclick="goMyCourses()" class="min-h-[42px] px-3 sm:px-4 rounded-xl bg-brandGreen/10 hover:bg-brandGreen/20 text-brandGreen font-extrabold text-xs sm:text-sm leading-tight">
+            <span class="hidden sm:inline">Qu&#7843;n l&#253; kh&#243;a h&#7885;c</span>
+            <span class="sm:hidden">Kh&#243;a h&#7885;c</span>
+          </button>
+        `;
       }
     }
 
@@ -1440,6 +1461,61 @@
       });
     }
 
+    function normalizePlainText(value) {
+      return String(value || "")
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+    }
+
+    function hasRealDescription(value) {
+      const text = normalizePlainText(value);
+      return Boolean(text && text !== "chua co mo ta ngan." && text !== "chua co mo ta ngan");
+    }
+
+    function lessonDescriptionHtml(lesson) {
+      if (!hasRealDescription(lesson?.description)) return "";
+      return `
+        <p class="text-xs sm:text-sm text-brandBrown/70 line-clamp-2 leading-relaxed">
+          ${escapeHtml(lesson.description)}
+        </p>
+      `;
+    }
+
+    function getLessonChapterMeta(index) {
+      const lesson = currentLessons[index];
+      if (!lesson) {
+        return { hasSection: false, displayLesson: index + 1, chapterIndex: 0, chapterTitle: "" };
+      }
+
+      const hasSection = currentLessons.some(item => Boolean(item.isSection));
+      let chapterIndex = 0;
+      let lessonInChapter = 0;
+      let currentChapterTitle = "";
+      let nonSectionLesson = 0;
+
+      for (let i = 0; i <= index; i++) {
+        const item = currentLessons[i] || {};
+        if (item.isSection) {
+          chapterIndex++;
+          lessonInChapter = 0;
+          currentChapterTitle = item.title || `Chuong ${chapterIndex}`;
+          continue;
+        }
+
+        nonSectionLesson++;
+        lessonInChapter++;
+      }
+
+      return {
+        hasSection,
+        chapterIndex,
+        chapterTitle: currentChapterTitle,
+        displayLesson: hasSection ? Math.max(lessonInChapter, 1) : (lesson.displayLesson || lesson.lesson || nonSectionLesson || index + 1)
+      };
+    }
+
     // Lesson Checklist Renderer (Collapsible Accordion Chapters & Dynamic Lesson Numbering)
     function renderLessons(lessons) {
       const list = document.getElementById("lessonList");
@@ -1527,18 +1603,13 @@
             <h3 class="font-extrabold text-base sm:text-lg text-brandBrown hover:text-brandGreen cursor-pointer truncate mb-1" onclick="window.location.href='/lesson.html?id=${l.id}'">
               ${escapeHtml(l.title || "Bài Học")}
             </h3>
-            <p class="text-xs sm:text-sm text-brandBrown/70 line-clamp-2 leading-relaxed">
-              ${escapeHtml(l.description || "Chưa có mô tả ngắn.")}
-            </p>
+            ${lessonDescriptionHtml(l)}
           </div>
 
           <!-- Buttons area -->
           <div class="flex sm:flex-col gap-2.5 sm:pl-4 sm:border-l border-brandBrown/5 justify-end">
-            <button class="flex-1 sm:flex-none px-4 py-2.5 bg-brandGreen hover:bg-brandGreenLight text-white font-bold text-xs sm:text-sm rounded-xl transition duration-150 shadow-sm" onclick="window.location.href='/lesson.html?id=${l.id}'">
+            <button class="w-full px-4 py-3 bg-brandGreen hover:bg-brandGreenLight text-white font-extrabold text-sm rounded-xl transition duration-150 shadow-sm" onclick="window.location.href='/lesson.html?id=${l.id}'">
               🎬 XEM BÀI HỌC
-            </button>
-            <button class="flex-1 sm:flex-none px-4 py-2.5 bg-white border border-brandGreen/35 hover:bg-brandCream text-brandGreen font-bold text-xs sm:text-sm rounded-xl transition duration-150" onclick="window.location.href='/lesson.html?id=${l.id}#recipe'">
-              📄 CÔNG THỨC
             </button>
           </div>
         `;
@@ -1717,10 +1788,28 @@
       currentView = "lesson";
       currentLessonIndex = Math.max(0, Math.min(index, currentLessons.length - 1));
       const l = currentLessons[currentLessonIndex] || {};
+      const chapterMeta = getLessonChapterMeta(currentLessonIndex);
 
       document.getElementById("mobileLessonHeaderTitle").innerText = l.title || "Chi Tiết Bài Học";
-      document.getElementById("mobileLessonSub").innerText = `BÀI ${l.lesson || currentLessonIndex + 1}`;
+      document.getElementById("mobileLessonSub").innerHTML = `B&#192;I ${chapterMeta.displayLesson}`;
       document.getElementById("mobileLessonTitle").innerText = l.title || "Bài Học";
+      const chapterBox = document.getElementById("mobileLessonChapterMeta");
+      if (chapterBox) {
+        if (chapterMeta.hasSection && chapterMeta.chapterIndex > 0) {
+          chapterBox.innerHTML = `
+            <div class="text-[10px] font-black uppercase tracking-wider text-brandGreen mb-1">
+              CH&#431;&#416;NG ${chapterMeta.chapterIndex}
+            </div>
+            <div class="text-sm sm:text-base font-extrabold text-brandBrown leading-snug break-words">
+              ${escapeHtml(chapterMeta.chapterTitle || `Chuong ${chapterMeta.chapterIndex}`)}
+            </div>
+          `;
+          chapterBox.classList.remove("hidden");
+        } else {
+          chapterBox.innerHTML = "";
+          chapterBox.classList.add("hidden");
+        }
+      }
 
       // Setup recipe
       const recipe = document.getElementById("recipeContent");
@@ -1935,17 +2024,6 @@
         saveSession(data);
         showLoggedInState(data.email);
 
-        // Populate course switcher if student has multiple active courses
-        if (data.allowedCourses && data.allowedCourses.length > 1) {
-          const switcher = document.getElementById("lmsCourseSwitcher");
-          if (switcher) {
-            switcher.innerHTML = data.allowedCourses.map(c => `
-              <option value="${c}" ${c === COURSE ? 'selected' : ''}>Lớp: ${c.toUpperCase()}</option>
-            `).join('');
-            switcher.classList.remove("hidden");
-          }
-        }
-
         // Update Course Config
         if (data.courseInfo) {
           if (data.courseInfo.title) {
@@ -1967,9 +2045,7 @@
         if (startLesson !== null) {
           const lIdx = parseInt(startLesson, 10);
           if (!isNaN(lIdx) && lIdx >= 0 && lIdx < currentLessons.length) {
-            setTimeout(() => {
-              openLessonDetail(lIdx);
-            }, 100);
+            openLessonDetail(lIdx);
           }
         }
 
