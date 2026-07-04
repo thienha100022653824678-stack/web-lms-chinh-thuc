@@ -259,7 +259,7 @@
             Khóa Học Nấu Ăn <br><span class="text-brandOrange font-serif italic font-normal">Chuyên Nghiệp</span>
           </h1>
           <p id="courseSubtitle" class="text-base sm:text-lg text-brandGreen font-semibold mb-6 max-w-xl">
-            Lấy dữ liệu bài học thực tế, học tập bài bản, thao tác cực chuẩn cùng giảng viên.
+            Bài học thực tế, học tập bài bản, thao tác cực chuẩn cùng giảng viên.
           </p>
 
           <div class="space-y-3 mb-8 text-sm sm:text-base font-medium text-brandBrown/80">
@@ -464,6 +464,7 @@
     const SESSION_EXP_KEY = `course_session_exp_${COURSE}`;
     const SESSION_COOKIE = "course_session_token";
     const API_VERSION = "premium-bunny-stream-v1";
+    const HERO_SUBTITLE_TEXT = "Bài học thực tế, học tập bài bản, thao tác cực chuẩn cùng giảng viên.";
     const HERO_PLACEHOLDER_IMAGE = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 600'%3E%3Cdefs%3E%3ClinearGradient id='bg' x1='0' x2='1' y1='0' y2='1'%3E%3Cstop offset='0' stop-color='%23FCF8F2'/%3E%3Cstop offset='1' stop-color='%23DCE8D8'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='800' height='600' fill='url(%23bg)'/%3E%3Ccircle cx='650' cy='120' r='150' fill='%232A4B2A' opacity='.08'/%3E%3Ccircle cx='140' cy='500' r='190' fill='%23D96B27' opacity='.08'/%3E%3Cpath d='M160 385h480' stroke='%232A4B2A' stroke-width='18' stroke-linecap='round' opacity='.18'/%3E%3Cpath d='M220 315h360' stroke='%23D96B27' stroke-width='14' stroke-linecap='round' opacity='.2'/%3E%3Cpath d='M285 245h230' stroke='%232D1914' stroke-width='12' stroke-linecap='round' opacity='.12'/%3E%3C/svg%3E";
 
     let currentLessons = [];
@@ -1146,6 +1147,24 @@
         .replace(/'/g, "&#039;");
     }
 
+    function normalizePlainText(value) {
+      return String(value || "")
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, " ");
+    }
+
+    function lessonDescriptionHtml(lesson) {
+      const description = String(lesson?.description || "").trim();
+      const normalized = normalizePlainText(description);
+      if (!description || normalized === "chua co mo ta ngan" || normalized === "chua co mo ta ngan.") {
+        return "";
+      }
+      return `<p class="text-xs sm:text-sm text-brandBrown/70 line-clamp-2 leading-relaxed">${escapeHtml(description)}</p>`;
+    }
+
     function shortenUrlText(urlStr) {
       let urlClean = String(urlStr || "").trim();
       if (!urlClean) return "";
@@ -1642,18 +1661,13 @@
             <h3 class="font-extrabold text-base sm:text-lg text-brandBrown hover:text-brandGreen cursor-pointer truncate mb-1" onclick="window.location.href='/lesson.html?id=${l.id}'">
               ${escapeHtml(l.title || "Bài Học")}
             </h3>
-            <p class="text-xs sm:text-sm text-brandBrown/70 line-clamp-2 leading-relaxed">
-              ${escapeHtml(l.description || "Chưa có mô tả ngắn.")}
-            </p>
+            ${lessonDescriptionHtml(l)}
           </div>
 
           <!-- Buttons area -->
           <div class="flex sm:flex-col gap-2.5 sm:pl-4 sm:border-l border-brandBrown/5 justify-end">
-            <button class="flex-1 sm:flex-none px-4 py-2.5 bg-brandGreen hover:bg-brandGreenLight text-white font-bold text-xs sm:text-sm rounded-xl transition duration-150 shadow-sm" onclick="window.location.href='/lesson.html?id=${l.id}'">
+            <button class="w-full px-4 py-3 bg-brandGreen hover:bg-brandGreenLight text-white font-bold text-xs sm:text-sm rounded-xl transition duration-150 shadow-sm" onclick="window.location.href='/lesson.html?id=${l.id}'">
               🎬 XEM BÀI HỌC
-            </button>
-            <button class="flex-1 sm:flex-none px-4 py-2.5 bg-white border border-brandGreen/35 hover:bg-brandCream text-brandGreen font-bold text-xs sm:text-sm rounded-xl transition duration-150" onclick="window.location.href='/lesson.html?id=${l.id}#recipe'">
-              📄 CÔNG THỨC
             </button>
           </div>
         `;
@@ -2070,15 +2084,13 @@
         // Update Course Config
         if (data.courseInfo) {
           currentCourseTitle = resolveCurrentCourseTitle(data.courseInfo);
-          if (data.courseInfo.title) {
-            document.getElementById("courseTitle").innerHTML = data.courseInfo.title;
-          }
-          if (data.courseInfo.subtitle) {
-            document.getElementById("courseSubtitle").innerText = data.courseInfo.subtitle;
-          }
+          document.getElementById("courseTitle").innerText = currentCourseTitle;
+          document.getElementById("courseSubtitle").innerText = HERO_SUBTITLE_TEXT;
           setHeroImageSource(data.courseInfo.heroImage || HERO_PLACEHOLDER_IMAGE);
         } else {
           currentCourseTitle = COURSE;
+          document.getElementById("courseTitle").innerText = currentCourseTitle;
+          document.getElementById("courseSubtitle").innerText = HERO_SUBTITLE_TEXT;
           setHeroImageSource(HERO_PLACEHOLDER_IMAGE);
         }
         updateCourseHomeButton();

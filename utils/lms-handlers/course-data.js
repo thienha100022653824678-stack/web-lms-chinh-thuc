@@ -321,7 +321,14 @@ export default async function handler(req, res) {
       });
     }
 
-    // 2. Load Config from site_config table
+    // 2. Load Course Config from courses and site_config table
+    const { data: courseRow } = await supabase
+      .from("courses")
+      .select("title, subtitle, image_url, raw_data")
+      .eq("slug", activeCourseSlug)
+      .maybeSingle();
+    const courseRawData = (courseRow && courseRow.raw_data) || {};
+
     const { data: configRows } = await supabase.from("site_config").select("key, value");
     const rawConfig = {};
     if (configRows) {
@@ -334,9 +341,9 @@ export default async function handler(req, res) {
 
     // Map course-prefixed config values to clean names for the active course
     const courseInfo = {
-      title: rawConfig[`${activeCourseSlug}_title`] || rawConfig.title || "Culinary Academy",
-      subtitle: rawConfig[`${activeCourseSlug}_subtitle`] || rawConfig.subtitle || "",
-      heroImage: rawConfig[`${activeCourseSlug}_heroImage`] || rawConfig.heroImage || ""
+      title: (courseRow && courseRow.title) || rawConfig[`${activeCourseSlug}_title`] || rawConfig.title || "Culinary Academy",
+      subtitle: (courseRow && courseRow.subtitle) || rawConfig[`${activeCourseSlug}_subtitle`] || rawConfig.subtitle || "",
+      heroImage: (courseRow && courseRow.image_url) || courseRawData.heroImageUrl || courseRawData.bannerImageUrl || rawConfig[`${activeCourseSlug}_heroImage`] || rawConfig.heroImage || ""
     };
 
     // 3. Load Lessons from Supabase
