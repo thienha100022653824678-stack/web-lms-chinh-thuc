@@ -1210,12 +1210,12 @@
         renderMediaItems(currentLesson);
         renderLessonMaterials(currentLesson);
 
-        // Transition states
+        // Load siblings, prev/next, sidebar, and chapter metadata before first paint.
+        await loadSiblingsAndSidebar(currentLesson.course);
+
+        // Transition states after all visible lesson metadata is ready.
         document.getElementById("loadingState").classList.add("hidden");
         document.getElementById("mainLayout").classList.remove("hidden");
-
-        // Load siblings for prev/next and sidebar
-        await loadSiblingsAndSidebar(currentLesson.course);
 
       } catch (err) {
         console.error("Failed to load lesson:", err);
