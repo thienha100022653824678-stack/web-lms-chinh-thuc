@@ -220,12 +220,11 @@
   <div id="homeView" class="flex-grow flex flex-col">
     <!-- Header -->
     <header class="bg-white/95 backdrop-blur-md sticky top-0 z-50 border-b border-brandBrown/5 shadow-sm">
-      <div class="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between gap-3">
         <!-- Brand Logo -->
-        <div class="flex items-center gap-2.5">
-          <span class="text-3xl">🍳</span>
-          <span id="siteTitle" class="font-extrabold tracking-tight text-xl text-brandGreen">Culinary Academy</span>
-          <select id="lmsCourseSwitcher" onchange="switchLmsCourse(this.value)" class="hidden ml-4 px-3 py-1.5 bg-brandGray border border-brandBrown/10 rounded-xl text-xs font-bold text-brandGreen outline-none cursor-pointer"></select>
+        <div class="flex items-center gap-2.5 min-w-0">
+          <span class="text-3xl flex-shrink-0">🍳</span>
+          <span id="siteTitle" class="font-extrabold tracking-tight text-lg sm:text-xl text-brandGreen truncate">Culinary Academy</span>
         </div>
 
         <!-- Auth Area -->
@@ -318,15 +317,16 @@
   <!-- MOBILE DETAILED LESSON PAGE CONTAINER -->
   <section id="mobileLessonPage" class="hidden min-h-screen bg-brandCream flex flex-col">
     <!-- Back Header -->
-    <div class="bg-white border-b border-brandBrown/5 py-4 px-4 sticky top-0 z-50 flex items-center justify-between gap-4">
-      <button class="w-10 h-10 rounded-full hover:bg-brandGray flex items-center justify-center text-brandGreen text-2xl font-bold" onclick="goHomeView()">
-        ‹
+    <div class="bg-white border-b border-brandBrown/5 py-3 px-3 sm:px-4 sticky top-0 z-50 flex items-center justify-between gap-2 sm:gap-4">
+      <button id="courseHomeButton" class="min-w-0 flex-1 max-w-[58%] sm:max-w-none rounded-xl border border-brandGreen/20 bg-brandGreen/5 hover:bg-brandGreen/10 px-3 py-2 text-left text-brandGreen transition" onclick="goHomeView()" title="Quay lại trang chủ khóa học">
+        <span class="block text-xs font-black leading-tight sm:hidden">← Trang chủ khóa học</span>
+        <span class="hidden sm:block text-sm font-black leading-tight truncate" id="courseHomeButtonText">← Quay lại trang chủ khóa học</span>
       </button>
-      <div class="font-extrabold text-sm sm:text-base text-brandBrown truncate text-center flex-grow" id="mobileLessonHeaderTitle">
-        Chi tiết bài học
-      </div>
-      <div id="mobileLessonAuthIndicator" class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-brandGreen/10 text-brandGreen font-bold text-xs truncate max-w-[120px]">
-        Gmail
+      <div id="mobileLessonAuthIndicator" class="flex items-center justify-end gap-2 flex-shrink-0">
+        <button class="px-3 py-2 rounded-xl bg-brandGreen text-white font-black text-xs shadow-sm" onclick="goMyCourses()">
+          <span class="hidden sm:inline">Quản lý khóa học</span><span class="sm:hidden">Khóa học của tôi</span>
+        </button>
+        <div class="w-9 h-9 rounded-full bg-brandGreen text-white flex items-center justify-center font-black text-sm shadow-md" title="Gmail">?</div>
       </div>
     </div>
 
@@ -458,10 +458,7 @@
 
     // Configuration values derived from URL query parameters and local storage
     const COURSE = new URLSearchParams(window.location.search).get("course") || "banh-mi";
-    function switchLmsCourse(slug) {
-      if (!slug) return;
-      window.location.href = `?course=${encodeURIComponent(slug)}`;
-    }
+    const MY_COURSES_URL = "https://www.yeunauan.live/my-courses";
     const SESSION_KEY = `course_session_token_${COURSE}`;
     const SESSION_EMAIL_KEY = `course_session_email_${COURSE}`;
     const SESSION_EXP_KEY = `course_session_exp_${COURSE}`;
@@ -472,6 +469,7 @@
     let currentLessons = [];
     let currentView = "home";
     let currentLessonIndex = 0;
+    let currentCourseTitle = COURSE;
 
     // Pagination parameters for Mobile Lesson Checklist
     let currentPage = 0;
@@ -789,6 +787,30 @@
       document.getElementById("lessonsSection").scrollIntoView({ behavior: "smooth" });
     }
 
+    function goMyCourses() {
+      window.location.href = MY_COURSES_URL;
+    }
+
+    function updateCourseHomeButton() {
+      const btn = document.getElementById("courseHomeButton");
+      const label = document.getElementById("courseHomeButtonText");
+      const title = String(currentCourseTitle || COURSE || "khóa học").trim();
+      if (btn) {
+        btn.title = `Quay lại trang chủ khóa học ${title}`;
+      }
+      if (label) {
+        label.innerText = `← Quay lại trang chủ khóa học ${title}`;
+      }
+    }
+
+    function resolveCurrentCourseTitle(courseInfo) {
+      const title = String(courseInfo?.title || "").trim();
+      const subtitle = String(courseInfo?.subtitle || "").trim();
+      if (title && title.toLowerCase() !== "culinary academy") return title;
+      if (subtitle && subtitle.toLowerCase() !== "culinary academy") return subtitle;
+      return COURSE;
+    }
+
     // Get cookie utility
     function getSessionCookie() {
       const cookies = document.cookie ? document.cookie.split(";") : [];
@@ -871,7 +893,7 @@
       const watermark = document.createElement('div');
       watermark.className = 'watermark-overlay';
 
-      const courseName = document.getElementById("mobileLessonHeaderTitle").innerText || "Khóa Học";
+      const courseName = currentCourseTitle || COURSE || "Khóa Học";
 
       function updateWatermarkText() {
         const now = new Date();
@@ -1050,7 +1072,11 @@
 
       const headerArea = document.getElementById("loginArea");
       headerArea.innerHTML = `
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2 sm:gap-3">
+          <button onclick="goMyCourses()" class="px-3 py-2 bg-brandGreen hover:bg-brandGreenLight text-white font-black text-xs rounded-xl transition shadow-sm whitespace-nowrap">
+            <span class="hidden sm:inline">Quản lý khóa học</span>
+            <span class="sm:hidden">Khóa học của tôi</span>
+          </button>
           <div class="hidden sm:flex flex-col text-right">
             <span class="text-xs font-black text-brandGreen">Đã đăng nhập</span>
             <span class="text-xs text-brandBrown/60 font-semibold" title="${safeEmail}">${truncatedEmail}</span>
@@ -1058,7 +1084,7 @@
           <div class="w-9 h-9 rounded-full bg-brandGreen text-white flex items-center justify-center font-black text-sm shadow-md" title="${safeEmail}">
             ${safeEmail.charAt(0).toUpperCase()}
           </div>
-          <button onclick="logoutGoogle()" class="px-3 py-1.5 bg-brandOrange/10 hover:bg-brandOrange/25 text-brandOrange font-bold text-xs rounded-lg transition">
+          <button onclick="logoutGoogle()" class="hidden sm:inline-flex px-3 py-1.5 bg-brandOrange/10 hover:bg-brandOrange/25 text-brandOrange font-bold text-xs rounded-lg transition">
             Thoát
           </button>
         </div>
@@ -1067,7 +1093,14 @@
       // Update mobile details view header indicator
       const mobileAuth = document.getElementById("mobileLessonAuthIndicator");
       if (mobileAuth) {
-        mobileAuth.innerText = truncatedEmail;
+        mobileAuth.innerHTML = `
+          <button class="px-3 py-2 rounded-xl bg-brandGreen text-white font-black text-xs shadow-sm whitespace-nowrap" onclick="goMyCourses()">
+            <span class="hidden sm:inline">Quản lý khóa học</span><span class="sm:hidden">Khóa học của tôi</span>
+          </button>
+          <div class="w-9 h-9 rounded-full bg-brandGreen text-white flex items-center justify-center font-black text-sm shadow-md" title="${safeEmail}">
+            ${safeEmail.charAt(0).toUpperCase()}
+          </div>
+        `;
         mobileAuth.title = safeEmail;
       }
     }
@@ -1079,7 +1112,12 @@
 
       const mobileAuth = document.getElementById("mobileLessonAuthIndicator");
       if (mobileAuth) {
-        mobileAuth.innerText = "Chưa đăng nhập";
+        mobileAuth.innerHTML = `
+          <button class="px-3 py-2 rounded-xl bg-brandGreen text-white font-black text-xs shadow-sm whitespace-nowrap" onclick="goMyCourses()">
+            <span class="hidden sm:inline">Quản lý khóa học</span><span class="sm:hidden">Khóa học của tôi</span>
+          </button>
+          <div class="w-9 h-9 rounded-full bg-brandGreen text-white flex items-center justify-center font-black text-sm shadow-md" title="Chưa đăng nhập">?</div>
+        `;
       }
     }
 
@@ -1811,8 +1849,7 @@
           metaBox.classList.add("hidden");
         }
       }
-
-      document.getElementById("mobileLessonHeaderTitle").innerText = l.title || "Chi Tiết Bài Học";
+      updateCourseHomeButton();
       document.getElementById("mobileLessonSub").innerText = getLessonMetaLabel(l, currentLessonIndex);
       document.getElementById("mobileLessonTitle").innerText = l.title || "Bài Học";
 
@@ -2030,20 +2067,9 @@
         // Save session & setup views
         saveSession(data);
         showLoggedInState(data.email);
-
-        // Populate course switcher if student has multiple active courses
-        if (data.allowedCourses && data.allowedCourses.length > 1) {
-          const switcher = document.getElementById("lmsCourseSwitcher");
-          if (switcher) {
-            switcher.innerHTML = data.allowedCourses.map(c => `
-              <option value="${c}" ${c === COURSE ? 'selected' : ''}>Lớp: ${c.toUpperCase()}</option>
-            `).join('');
-            switcher.classList.remove("hidden");
-          }
-        }
-
         // Update Course Config
         if (data.courseInfo) {
+          currentCourseTitle = resolveCurrentCourseTitle(data.courseInfo);
           if (data.courseInfo.title) {
             document.getElementById("courseTitle").innerHTML = data.courseInfo.title;
           }
@@ -2052,10 +2078,12 @@
           }
           setHeroImageSource(data.courseInfo.heroImage || HERO_PLACEHOLDER_IMAGE);
         } else {
+          currentCourseTitle = COURSE;
           setHeroImageSource(HERO_PLACEHOLDER_IMAGE);
         }
+        updateCourseHomeButton();
 
-      currentLessons = buildLessonChapterMetadata(data.lessons || []);
+        currentLessons = buildLessonChapterMetadata(data.lessons || []);
         renderLessons(currentLessons);
 
         // Auto-open specific lesson details if specified in URL query
