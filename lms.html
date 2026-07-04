@@ -335,6 +335,7 @@
       <div class="text-xs text-brandOrange font-bold uppercase tracking-wider mb-1" id="mobileLessonSub">
         BÀI 1
       </div>
+      <div id="mobileLessonChapterMeta" class="hidden mb-3 rounded-xl border border-brandGreen/15 bg-brandGreen/5 px-3 py-2 text-xs font-extrabold text-brandGreen"></div>
       <h2 class="serif-title text-2xl font-extrabold text-brandBrown mb-4 leading-tight" id="mobileLessonTitle">
         Tiêu đề bài học
       </h2>
@@ -636,6 +637,85 @@
       heroImage.src = normalizeGoogleDriveImageUrl(src) || HERO_PLACEHOLDER_IMAGE;
     }
 
+    function isSectionLesson(lesson) {
+      return Boolean(lesson && (lesson.isSection === true || lesson.is_section === true));
+    }
+
+    function buildLessonChapterMetadata(lessons) {
+      let chapterCounter = 0;
+      let lessonCounterInChapter = 0;
+      let currentSection = null;
+
+      return (lessons || []).map((lesson, globalIndex) => {
+        const isSection = isSectionLesson(lesson);
+        if (isSection) {
+          chapterCounter += 1;
+          lessonCounterInChapter = 0;
+          currentSection = {
+            id: lesson.id || `section-${globalIndex}`,
+            title: lesson.title || "Tên Chương",
+            description: lesson.description || "",
+            chapterNumber: chapterCounter
+          };
+
+          return {
+            ...lesson,
+            isSection: true,
+            sectionTitle: currentSection.title,
+            chapterNumber: chapterCounter,
+            lessonNumberInChapter: null,
+            currentSectionId: currentSection.id,
+            currentSection
+          };
+        }
+
+        const hasSection = Boolean(currentSection);
+        if (hasSection) lessonCounterInChapter += 1;
+
+        return {
+          ...lesson,
+          isSection: false,
+          sectionTitle: currentSection?.title || "",
+          chapterNumber: currentSection?.chapterNumber || null,
+          lessonNumberInChapter: hasSection ? lessonCounterInChapter : null,
+          currentSectionId: currentSection?.id || null,
+          currentSection,
+          displayLesson: hasSection ? lessonCounterInChapter : (lesson.displayLesson || lesson.lesson || globalIndex + 1)
+        };
+      });
+    }
+
+    function getLessonMetaLabel(lesson, index) {
+      if (lesson?.lessonNumberInChapter) {
+        return `BÀI ${lesson.lessonNumberInChapter}`;
+      }
+      return `BÀI ${lesson?.displayLesson || lesson?.lesson || index + 1}`;
+    }
+
+    function renderChapterHeader(section, options = {}) {
+      if (!section) return null;
+      const chapterBox = document.createElement("div");
+      chapterBox.className = "col-span-full mt-6 mb-3 bg-white border border-brandGreen/15 rounded-2xl overflow-hidden shadow-sm";
+
+      const sectionId = options.sectionId || `chapter_sec_${section.chapterNumber}`;
+      const title = section.title || "Tên Chương";
+      const description = section.description || "";
+
+      chapterBox.innerHTML = `
+            <div class="px-5 py-3.5 bg-brandGreen/5 hover:bg-brandGreen/10 cursor-pointer transition flex items-center justify-between select-none" onclick="toggleChapterSection('${sectionId}')">
+              <div class="flex items-center gap-3">
+                <span id="icon_${sectionId}" class="text-xs font-black text-brandGreen transition-transform transform rotate-0">▼</span>
+                <span class="text-xs font-black px-2.5 py-1 rounded-md bg-brandGreen text-white uppercase tracking-wider">CHƯƠNG ${section.chapterNumber}</span>
+                <h2 class="text-sm sm:text-base font-extrabold text-brandBrown">${escapeHtml(title)}</h2>
+              </div>
+              ${description ? `<span class="text-xs text-brandBrown/50 font-semibold hidden md:inline">${escapeHtml(description)}</span>` : ""}
+            </div>
+            <div id="${sectionId}" class="p-4 space-y-3 bg-slate-50/50"></div>
+          `;
+
+      return chapterBox;
+    }
+
     async function refreshCourseDataBeforePlayIfNeeded(index) {
       const lesson = currentLessons[index];
       if (!lesson) return null;
@@ -675,14 +755,16 @@
 
       if (data.sessionToken) saveSession(data);
 
-      currentLessons = data.lessons || [];
+        currentLessons = buildLessonChapterMetadata(data.lessons || []);
 
-      const oldLessonNo = String(lesson.lesson || "");
+      const oldLessonId = String(lesson.id || "");
       const oldTitle = String(lesson.title || "");
+      const oldLessonNo = String(lesson.lesson || "");
 
       const refreshedLesson =
-        currentLessons.find(l => String(l.lesson || "") === oldLessonNo) ||
+        currentLessons.find(l => oldLessonId && String(l.id || "") === oldLessonId) ||
         currentLessons.find(l => String(l.title || "") === oldTitle) ||
+        currentLessons.find(l => String(l.lesson || "") === oldLessonNo) ||
         currentLessons[index];
 
       return refreshedLesson || null;
@@ -931,12 +1013,14 @@
       const directIndex = currentLessons.indexOf(lesson);
       if (directIndex !== -1) return directIndex;
 
+      const lessonId = String(lesson.id || "");
       const lessonNo = String(lesson.lesson || "");
       const title = String(lesson.title || "");
 
       const matchedIndex = currentLessons.findIndex(l =>
-        (lessonNo && String(l.lesson || "") === lessonNo) ||
-        (title && String(l.title || "") === title)
+        (lessonId && String(l.id || "") === lessonId) ||
+        (title && String(l.title || "") === title) ||
+        (lessonNo && String(l.lesson || "") === lessonNo)
       );
 
       return matchedIndex !== -1 ? matchedIndex : fallbackIndex;
@@ -1470,40 +1554,33 @@
       }
 
       const hasSection = lessons.some(l => l.isSection);
-      let currentSectionIndex = 0;
-      let lessonInChapterCounter = 0;
+      const renderedChapters = new Set();
       let currentContainer = list;
 
       renderSet.forEach((l, idx) => {
         // Render Section/Chapter Header with Accordion toggle
         if (l.isSection) {
-          currentSectionIndex++;
-          lessonInChapterCounter = 0; // Reset lesson counter to 1 for each chapter
-
-          const chapterBox = document.createElement("div");
-          chapterBox.className = "col-span-full mt-6 mb-3 bg-white border border-brandGreen/15 rounded-2xl overflow-hidden shadow-sm";
-
-          const sectionId = `chapter_sec_${currentSectionIndex}`;
-
-          chapterBox.innerHTML = `
-            <div class="px-5 py-3.5 bg-brandGreen/5 hover:bg-brandGreen/10 cursor-pointer transition flex items-center justify-between select-none" onclick="toggleChapterSection('${sectionId}')">
-              <div class="flex items-center gap-3">
-                <span id="icon_${sectionId}" class="text-xs font-black text-brandGreen transition-transform transform rotate-0">▼</span>
-                <span class="text-xs font-black px-2.5 py-1 rounded-md bg-brandGreen text-white uppercase tracking-wider">CHƯƠNG ${currentSectionIndex}</span>
-                <h2 class="text-sm sm:text-base font-extrabold text-brandBrown">${escapeHtml(l.title || "Tên Chương")}</h2>
-              </div>
-              ${l.description ? `<span class="text-xs text-brandBrown/50 font-semibold hidden md:inline">${escapeHtml(l.description)}</span>` : ""}
-            </div>
-            <div id="${sectionId}" class="p-4 space-y-3 bg-slate-50/50"></div>
-          `;
-
+          const sectionId = `chapter_sec_${l.chapterNumber}_${currentPage}`;
+          const chapterBox = renderChapterHeader(l.currentSection || l, { sectionId });
+          if (!chapterBox) return;
           list.appendChild(chapterBox);
+          renderedChapters.add(l.chapterNumber);
           currentContainer = chapterBox.querySelector(`#${sectionId}`);
           return;
         }
 
-        lessonInChapterCounter++;
-        const displayLessonNo = l.displayLesson || (hasSection ? lessonInChapterCounter : (l.lesson || (idx + 1)));
+        if (hasSection && l.currentSection && !renderedChapters.has(l.chapterNumber)) {
+          const sectionId = `chapter_sec_${l.chapterNumber}_${currentPage}`;
+          const chapterBox = renderChapterHeader(l.currentSection, { sectionId });
+          if (chapterBox) {
+            list.appendChild(chapterBox);
+            renderedChapters.add(l.chapterNumber);
+            currentContainer = chapterBox.querySelector(`#${sectionId}`);
+          }
+        }
+
+        const globalIndex = currentLessons.indexOf(l);
+        const displayLessonNo = l.displayLesson || l.lesson || (globalIndex >= 0 ? globalIndex + 1 : idx + 1);
 
         const item = document.createElement("div");
         item.className = "bg-white border border-brandBrown/5 rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition duration-200 grid gap-4 sm:grid-cols-[180px_1fr] md:grid-cols-[240px_1fr_200px] items-center";
@@ -1715,11 +1792,28 @@
     // Detailed Mobile Lesson Page Interactions
     function openLessonDetail(index) {
       currentView = "lesson";
-      currentLessonIndex = Math.max(0, Math.min(index, currentLessons.length - 1));
+      const requestedIndex = Math.max(0, Math.min(index, currentLessons.length - 1));
+      if (currentLessons[requestedIndex]?.isSection) {
+        const nextLessonIndex = currentLessons.findIndex((lesson, idx) => idx > requestedIndex && !lesson.isSection);
+        const prevLessonIndex = currentLessons.map((lesson, idx) => ({ lesson, idx })).reverse().find(item => item.idx < requestedIndex && !item.lesson.isSection)?.idx;
+        currentLessonIndex = nextLessonIndex !== -1 ? nextLessonIndex : (prevLessonIndex ?? requestedIndex);
+      } else {
+        currentLessonIndex = requestedIndex;
+      }
       const l = currentLessons[currentLessonIndex] || {};
+      const metaBox = document.getElementById("mobileLessonChapterMeta");
+      if (metaBox) {
+        if (l.chapterNumber && l.lessonNumberInChapter) {
+          metaBox.innerText = `CHƯƠNG ${l.chapterNumber} / BÀI ${l.lessonNumberInChapter}`;
+          metaBox.classList.remove("hidden");
+        } else {
+          metaBox.innerText = "";
+          metaBox.classList.add("hidden");
+        }
+      }
 
       document.getElementById("mobileLessonHeaderTitle").innerText = l.title || "Chi Tiết Bài Học";
-      document.getElementById("mobileLessonSub").innerText = `BÀI ${l.lesson || currentLessonIndex + 1}`;
+      document.getElementById("mobileLessonSub").innerText = getLessonMetaLabel(l, currentLessonIndex);
       document.getElementById("mobileLessonTitle").innerText = l.title || "Bài Học";
 
       // Setup recipe
@@ -1871,16 +1965,18 @@
     }
 
     function openPrevLesson() {
-      if (currentLessonIndex > 0) {
-        openLessonDetail(currentLessonIndex - 1);
+      const prevIndex = currentLessons.map((lesson, idx) => ({ lesson, idx })).reverse().find(item => item.idx < currentLessonIndex && !item.lesson.isSection)?.idx;
+      if (prevIndex !== undefined) {
+        openLessonDetail(prevIndex);
       } else {
         alert("Đây là bài học đầu tiên.");
       }
     }
 
     function openNextLesson() {
-      if (currentLessonIndex < currentLessons.length - 1) {
-        openLessonDetail(currentLessonIndex + 1);
+      const nextIndex = currentLessons.findIndex((lesson, idx) => idx > currentLessonIndex && !lesson.isSection);
+      if (nextIndex !== -1) {
+        openLessonDetail(nextIndex);
       } else {
         alert("Đây là bài học cuối cùng.");
       }
@@ -1959,7 +2055,7 @@
           setHeroImageSource(HERO_PLACEHOLDER_IMAGE);
         }
 
-        currentLessons = data.lessons || [];
+      currentLessons = buildLessonChapterMetadata(data.lessons || []);
         renderLessons(currentLessons);
 
         // Auto-open specific lesson details if specified in URL query
@@ -1967,9 +2063,7 @@
         if (startLesson !== null) {
           const lIdx = parseInt(startLesson, 10);
           if (!isNaN(lIdx) && lIdx >= 0 && lIdx < currentLessons.length) {
-            setTimeout(() => {
-              openLessonDetail(lIdx);
-            }, 100);
+            openLessonDetail(lIdx);
           }
         }
 
