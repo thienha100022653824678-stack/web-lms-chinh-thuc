@@ -24,6 +24,13 @@ function normalizeMaterials(value) {
 }
 
 const PORTAL_RECIPE_PLACEHOLDER = "noi dung bai viet se som duoc cap nhat boi giang vien";
+const MIN_REAL_RECIPE_CHARS = 40;
+const TITLE_ONLY_RECIPE_TEXTS = new Set([
+  "tai lieu lop hoc",
+  "tai lieu khoa hoc",
+  "tong quan",
+  "chua co mo ta ngan"
+]);
 
 function normalizePlainText(value) {
   return String(value || "")
@@ -35,12 +42,16 @@ function normalizePlainText(value) {
     .replace(/\s+/g, " ");
 }
 
-function hasRealRecipeText(value) {
+function hasRealRecipeText(value, lessonTitle = "") {
   const normalized = normalizePlainText(value);
-  return Boolean(normalized && !normalized.includes(PORTAL_RECIPE_PLACEHOLDER));
+  if (!normalized || normalized.length < MIN_REAL_RECIPE_CHARS) return false;
+  if (normalized.includes(PORTAL_RECIPE_PLACEHOLDER)) return false;
+  if (TITLE_ONLY_RECIPE_TEXTS.has(normalized)) return false;
+  if (normalized === normalizePlainText(lessonTitle)) return false;
+  return true;
 }
 
-async function findFirstCourseRecipe(courseSlug) {
+export async function buildCourseRecipeDigest(courseSlug) {
   const { data: lessons, error } = await supabase
     .from("lessons")
     .select("lesson_no, title, recipe_url, is_section, status")
@@ -50,27 +61,64 @@ async function findFirstCourseRecipe(courseSlug) {
 
   if (error) throw error;
 
+  const sections = (lessons || []).some((lesson) => Boolean(lesson.is_section));
+  const chunks = [];
+  let chapterNumber = 0;
+  let lessonNumberInChapter = 0;
+  let lessonNumberNoSections = 0;
+  let currentChapter = null;
+  let emittedChapterKey = null;
+  let recipeLessonCount = 0;
+
   for (const lesson of lessons || []) {
-    if (Boolean(lesson.is_section)) continue;
+    if (Boolean(lesson.is_section)) {
+      chapterNumber++;
+      lessonNumberInChapter = 0;
+      currentChapter = {
+        key: chapterNumber,
+        title: String(lesson.title || `Chương ${chapterNumber}`).trim()
+      };
+      continue;
+    }
+
+    if (sections) {
+      lessonNumberInChapter++;
+    } else {
+      lessonNumberNoSections++;
+    }
+
     if (!lesson.recipe_url) continue;
     const recipeText = await fetchRecipeText(lesson.recipe_url);
-    if (hasRealRecipeText(recipeText)) {
-      return {
-        title: lesson.title || courseSlug,
-        recipe: recipeText
-      };
+    if (!hasRealRecipeText(recipeText, lesson.title)) continue;
+
+    if (sections && currentChapter && emittedChapterKey !== currentChapter.key) {
+      chunks.push(`# CHƯƠNG ${currentChapter.key} — ${currentChapter.title}`);
+      emittedChapterKey = currentChapter.key;
     }
+
+    const displayLesson = sections ? lessonNumberInChapter : lessonNumberNoSections;
+    const title = String(lesson.title || `Bài ${displayLesson}`).trim();
+    chunks.push(`## Bài ${displayLesson} — ${title}`);
+    chunks.push(String(recipeText).trim());
+    recipeLessonCount++;
   }
-  return null;
+
+  const recipe = chunks.join("\n\n").trim();
+  return {
+    recipe,
+    totalLessons: (lessons || []).filter((lesson) => !Boolean(lesson.is_section)).length,
+    recipeLessons: recipeLessonCount,
+    recipeLength: recipe.length
+  };
 }
 
-async function syncFirstCourseRecipeToPortal(courseSlug) {
+async function syncCourseRecipeDigestToPortal(courseSlug) {
   const sys1Url = process.env.SYSTEM1_URL;
   const secret = process.env.INTERNAL_SYNC_SECRET;
   if (!sys1Url || !secret || !courseSlug) return { skipped: "missing_sync_config" };
 
-  const firstRecipe = await findFirstCourseRecipe(courseSlug);
-  if (!firstRecipe) return { skipped: "no_real_recipe" };
+  const digest = await buildCourseRecipeDigest(courseSlug);
+  if (!digest.recipe) return { skipped: "no_real_recipe", ...digest };
 
   const response = await fetch(`${sys1Url.trim().replace(/\/$/, '')}/api/sync`, {
     method: "POST",
@@ -81,8 +129,8 @@ async function syncFirstCourseRecipeToPortal(courseSlug) {
     body: JSON.stringify({
       action: "syncRecipe",
       courseSlug,
-      recipe: firstRecipe.recipe,
-      title: firstRecipe.title
+      recipe: digest.recipe,
+      createIfMissing: false
     })
   });
 
@@ -91,7 +139,8 @@ async function syncFirstCourseRecipeToPortal(courseSlug) {
     throw new Error(`Portal recipe sync failed with status ${response.status}: ${detail.slice(0, 300)}`);
   }
 
-  return response.json().catch(() => ({ success: true }));
+  const result = await response.json().catch(() => ({ success: true }));
+  return { ...result, ...digest };
 }
 
 export default async function handler(req, res) {
@@ -231,9 +280,9 @@ export default async function handler(req, res) {
 
         if (insertErr) throw insertErr;
 
-        // Sync the first real course recipe to System 1 Portal.
+        // Sync the aggregated real course recipe to System 1 Portal.
         try {
-          await syncFirstCourseRecipeToPortal(lessonData.course);
+          await syncCourseRecipeDigestToPortal(lessonData.course);
         } catch (syncErr) {
           console.error("[admin-lessons] Sync recipe failed on create:", syncErr.message);
         }
@@ -300,9 +349,9 @@ export default async function handler(req, res) {
 
         if (updateErr) throw updateErr;
 
-        // Sync the first real course recipe to System 1 Portal.
+        // Sync the aggregated real course recipe to System 1 Portal.
         try {
-          await syncFirstCourseRecipeToPortal(lessonData.course);
+          await syncCourseRecipeDigestToPortal(lessonData.course);
         } catch (syncErr) {
           console.error("[admin-lessons] Sync recipe failed on update:", syncErr.message);
         }
