@@ -376,7 +376,12 @@
                   <div class="flex flex-wrap gap-2 pt-2 border-t border-slate-200">
                     <button onclick="openGDriveVideoModal()" class="bg-blue-50 text-blue-600 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-blue-100 transition">+ Video (GDrive)</button>
                     <button onclick="addMediaBlock('image')" class="bg-emerald-50 text-emerald-600 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-emerald-100 transition">+ Thêm Ảnh</button>
+                    <button type="button" onclick="triggerBulkMediaUpload('video')" class="bg-indigo-50 text-indigo-700 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition">+ Thêm Video hàng loạt</button>
+                    <button type="button" onclick="triggerBulkMediaUpload('image')" class="bg-teal-50 text-teal-700 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-teal-100 transition">+ Thêm Ảnh hàng loạt</button>
                   </div>
+                  <input type="file" id="bulkVideoMediaInput" multiple class="hidden" accept="video/*,.mp4,.mov,.avi,.mkv,.webm" onchange="handleBulkMediaFiles('video', this.files, this)"/>
+                  <input type="file" id="bulkImageMediaInput" multiple class="hidden" accept="image/*,.jpg,.jpeg,.png,.webp,.gif" onchange="handleBulkMediaFiles('image', this.files, this)"/>
+                  <div id="bulkMediaUploadStatus" class="hidden bg-white border border-slate-200 rounded-xl p-3 text-[11px] font-semibold text-slate-600 whitespace-pre-line leading-relaxed"></div>
                 </div>
               </div>
 
@@ -1685,6 +1690,124 @@
 
     // ── Video URLs checking ────────────────────────────────────────────────
 
+    const BULK_VIDEO_EXTENSIONS = new Set(["mp4", "mov", "avi", "mkv", "webm"]);
+    const BULK_IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "gif"]);
+
+    function getFileExtension(fileName) {
+      const cleanName = String(fileName || "").toLowerCase().split("?")[0];
+      const idx = cleanName.lastIndexOf(".");
+      return idx >= 0 ? cleanName.slice(idx + 1) : "";
+    }
+
+    function naturalFileSort(files) {
+      return Array.from(files || []).sort((a, b) => {
+        return String(a.name || "").localeCompare(String(b.name || ""), "vi", {
+          numeric: true,
+          sensitivity: "base"
+        });
+      });
+    }
+
+    function isAllowedBulkMediaFile(file, type) {
+      const ext = getFileExtension(file.name);
+      if (type === "video") {
+        return (file.type || "").startsWith("video/") || BULK_VIDEO_EXTENSIONS.has(ext);
+      }
+      return (file.type || "").startsWith("image/") || BULK_IMAGE_EXTENSIONS.has(ext);
+    }
+
+    function triggerBulkMediaUpload(type) {
+      const inputId = type === "video" ? "bulkVideoMediaInput" : "bulkImageMediaInput";
+      const input = document.getElementById(inputId);
+      if (input) input.click();
+    }
+
+    function updateBulkMediaStatus(lines, isError = false) {
+      const box = document.getElementById("bulkMediaUploadStatus");
+      if (!box) return;
+      box.classList.remove("hidden");
+      box.classList.toggle("border-red-200", Boolean(isError));
+      box.classList.toggle("text-red-600", Boolean(isError));
+      box.classList.toggle("border-slate-200", !isError);
+      box.classList.toggle("text-slate-600", !isError);
+      box.textContent = Array.isArray(lines) ? lines.join("\n") : String(lines || "");
+    }
+
+    async function handleBulkMediaFiles(type, fileList, inputEl) {
+      const rawFiles = naturalFileSort(fileList);
+      if (inputEl) inputEl.value = "";
+      if (!rawFiles.length) return;
+
+      const validFiles = [];
+      const failed = [];
+      rawFiles.forEach(file => {
+        if (isAllowedBulkMediaFile(file, type)) {
+          validFiles.push(file);
+        } else {
+          failed.push({ name: file.name, reason: "Dinh dang khong ho tro" });
+        }
+      });
+
+      if (!validFiles.length) {
+        updateBulkMediaStatus([
+          "Khong co file hop le de upload.",
+          ...failed.map(item => `- ${item.name}: ${item.reason}`)
+        ], true);
+        toast("Khong co file hop le de upload.", "error");
+        return;
+      }
+
+      const total = validFiles.length;
+      let successCount = 0;
+      updateBulkMediaStatus([
+        `Dang upload ${type === "video" ? "video" : "anh"} hang loat...`,
+        `Da sap xep ${total} file theo ten A-Z.`
+      ]);
+
+      for (let i = 0; i < validFiles.length; i++) {
+        const file = validFiles[i];
+        updateBulkMediaStatus([
+          `Dang upload file ${i + 1}/${total}: ${file.name}`,
+          `Thanh cong: ${successCount}`,
+          `Loi: ${failed.length}`
+        ]);
+
+        try {
+          let url = "";
+          if (type === "video") {
+            url = await uploadVideoFileToDrive(file, "lesson_media_video", ({ percent, status }) => {
+              updateBulkMediaStatus([
+                `Dang upload file ${i + 1}/${total}: ${file.name}`,
+                status || `Tien trinh: ${percent || 0}%`,
+                `Thanh cong: ${successCount}`,
+                `Loi: ${failed.length}`
+              ]);
+            });
+          } else {
+            url = await uploadImageFile(file, "lesson_media_image", { silent: true });
+          }
+
+          if (!url) throw new Error("Upload khong tra ve URL");
+          addMediaBlock(type, file.name, url);
+          successCount++;
+        } catch (err) {
+          failed.push({ name: file.name, reason: err.message || "Upload that bai" });
+          console.error("[bulk-media-upload] Failed:", file.name, err);
+        }
+      }
+
+      const summary = [
+        `Upload hoan tat: ${successCount}/${total} file thanh cong.`,
+        `So file loi: ${failed.length}.`
+      ];
+      if (failed.length) {
+        summary.push("File loi:");
+        failed.forEach(item => summary.push(`- ${item.name}: ${item.reason}`));
+      }
+      updateBulkMediaStatus(summary, failed.length > 0);
+      toast(`Upload hang loat xong: ${successCount} thanh cong, ${failed.length} loi.`, failed.length ? "warning" : "success");
+    }
+
     const MATERIAL_ALLOWED_EXTENSIONS = new Set(["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "jpg", "jpeg", "png", "webp", "gif"]);
     const MATERIAL_MAX_BYTES = 50 * 1024 * 1024;
 
@@ -2102,7 +2225,7 @@
       }
     }
 
-    async function uploadImageFile(file, imageType = "") {
+    async function uploadImageFile(file, imageType = "", options = {}) {
       let driveToken;
       try {
         driveToken = await ensureDriveAccess();
@@ -2350,6 +2473,122 @@
           }
         }
       }, false);
+    }
+
+    async function uploadVideoFileToDrive(file, type, onProgress = () => {}) {
+      const courseEl = document.getElementById("fCourse");
+      const course_slug = courseEl ? courseEl.value.trim() : "";
+      if (!course_slug) throw new Error("Vui long chon khoa hoc truoc khi upload video");
+
+      const lessonEl = document.getElementById("fLesson");
+      const lesson_no = lessonEl ? lessonEl.value.trim() : "1";
+      const titleEl = document.getElementById("fTitle");
+      const lesson_title = titleEl ? titleEl.value.trim() : "Chua dat ten";
+      const course_title = (STATE.globalConfig && STATE.globalConfig[`${course_slug}_title`]) || course_slug.toUpperCase();
+
+      let driveToken;
+      try {
+        driveToken = await ensureDriveAccess();
+      } catch {
+        throw new Error("Vui long ket noi Google Drive de upload video");
+      }
+
+      onProgress({ percent: 0, status: "Dang chuan bi thu muc Google Drive..." });
+      const folderRes = await fetch("/api/lms/admin?endpoint=upload-gdrive-video", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders(),
+          "x-drive-access-token": driveToken
+        },
+        body: JSON.stringify({
+          action: "get-folder",
+          course_slug,
+          course_title,
+          lesson_no,
+          lesson_title,
+          media_type: type,
+          accessToken: driveToken
+        })
+      });
+
+      const folderData = await folderRes.json();
+      if (!folderRes.ok || !folderData.success) {
+        throw new Error(folderData.error || "Khong the khoi tao thu muc upload");
+      }
+
+      let uploadMime = file.type || "";
+      const unacceptedMimes = [
+        "video/x-matroska",
+        "video/x-msvideo",
+        "video/x-ms-wmv",
+        "video/x-flv",
+        "video/x-ms-vob",
+        "video/x-generic"
+      ];
+      if (!uploadMime || unacceptedMimes.includes(uploadMime)) {
+        uploadMime = "video/mp4";
+      }
+
+      onProgress({ percent: 0, status: "Khoi tao phien upload Google Drive..." });
+      const sessionUrl = await new Promise((resolve, reject) => {
+        const initXhr = new XMLHttpRequest();
+        initXhr.open("POST", "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable", true);
+        initXhr.setRequestHeader("Authorization", `Bearer ${driveToken}`);
+        initXhr.setRequestHeader("Content-Type", "application/json; charset=UTF-8");
+        initXhr.setRequestHeader("X-Upload-Content-Type", uploadMime);
+        initXhr.setRequestHeader("X-Upload-Content-Length", file.size);
+        initXhr.onload = function() {
+          if (initXhr.status === 200 || initXhr.status === 201) {
+            const location = initXhr.getResponseHeader("Location");
+            if (location) resolve(location);
+            else reject(new Error("Khong nhan duoc session upload tu Google Drive"));
+          } else {
+            reject(new Error(`Khoi tao upload that bai: code ${initXhr.status}`));
+          }
+        };
+        initXhr.onerror = function() {
+          reject(new Error("Loi ket noi khi khoi tao upload Google Drive"));
+        };
+        initXhr.send(JSON.stringify({
+          name: file.name,
+          parents: [folderData.folderId],
+          copyRequiresWriterPermission: true
+        }));
+      });
+
+      onProgress({ percent: 0, status: "Dang tai video len Drive..." });
+      const fileId = await new Promise((resolve, reject) => {
+        const putXhr = new XMLHttpRequest();
+        putXhr.open("PUT", sessionUrl, true);
+        putXhr.setRequestHeader("Content-Type", uploadMime);
+        putXhr.setRequestHeader("Content-Range", `bytes 0-${file.size - 1}/${file.size}`);
+        putXhr.upload.onprogress = function(e) {
+          if (e.lengthComputable) {
+            const percent = Math.round((e.loaded / e.total) * 100);
+            onProgress({ percent, status: `Dang tai video len Drive... ${percent}%` });
+          }
+        };
+        putXhr.onload = function() {
+          if (putXhr.status === 200 || putXhr.status === 201) {
+            let driveFileData = {};
+            try {
+              driveFileData = JSON.parse(putXhr.responseText);
+            } catch {}
+            if (driveFileData.id) resolve(driveFileData.id);
+            else reject(new Error("Google Drive khong tra ve file ID"));
+          } else {
+            reject(new Error(`Upload video that bai: code ${putXhr.status}`));
+          }
+        };
+        putXhr.onerror = function() {
+          reject(new Error("Loi ket noi khi upload video len Google Drive"));
+        };
+        putXhr.send(file);
+      });
+
+      onProgress({ percent: 100, status: "Upload xong" });
+      return `https://drive.google.com/uc?export=download&id=${fileId}`;
     }
 
     async function handleVideoUpload(input, type, blockId = "") {
