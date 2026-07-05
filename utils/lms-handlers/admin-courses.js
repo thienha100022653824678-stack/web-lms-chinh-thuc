@@ -48,7 +48,7 @@ export default async function handler(req, res) {
         const rawData = course.raw_data || {};
         if (!slug) continue;
 
-        if (!config[`${slug}_title`] && course.title) {
+        if (course.title) {
           config[`${slug}_title`] = course.title;
         }
         if (!config[`${slug}_subtitle`] && course.subtitle) {
@@ -86,6 +86,7 @@ export default async function handler(req, res) {
       }
 
       for (const [field, value] of Object.entries(newConfig)) {
+        if (field === "title") continue;
         const prefixedKey = `${course}_${field}`;
         const val = String(value || "").trim();
 
@@ -116,7 +117,6 @@ export default async function handler(req, res) {
           const nextQrImage = String(newConfig.qrImage || "").trim();
           const nextPosterImage = String(newConfig.posterImage || "").trim();
           const nextStudentDisplayTitle = String(newConfig.studentDisplayTitle || "").trim();
-          const nextTitle = String(newConfig.title || "").trim();
           const nextSubtitle = String(newConfig.subtitle || "").trim();
           const nextHeroImage = String(newConfig.heroImage || "").trim();
 
@@ -134,9 +134,6 @@ export default async function handler(req, res) {
             updated_at: new Date().toISOString()
           };
 
-          if (newConfig.title !== undefined && nextTitle) {
-            updatePayload.title = nextTitle;
-          }
           if (newConfig.subtitle !== undefined && nextSubtitle) {
             updatePayload.subtitle = nextSubtitle;
           }

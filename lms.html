@@ -1590,6 +1590,9 @@
       const total = lessons.length;
       if (total === 0) {
         list.innerHTML = `<p class="text-center font-bold text-brandBrown/50 py-8">Không tìm thấy bài học nào.</p>`;
+        const statusBox = document.getElementById("statusBox");
+        if (statusBox) statusBox.classList.add("hidden");
+        list.classList.remove("hidden");
         return;
       }
 
@@ -2048,12 +2051,16 @@
 
       try {
         const payload = { course: COURSE, ...authPayload };
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 25000);
         const response = await fetch("/api/lms/portal?endpoint=course-data", {
           method: "POST",
           credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payload),
+          signal: controller.signal
         });
+        clearTimeout(timeoutId);
 
         const data = await response.json();
 

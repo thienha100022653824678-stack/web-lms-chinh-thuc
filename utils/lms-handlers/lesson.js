@@ -9,6 +9,26 @@ import {
 import { google } from "googleapis";
 
 const SESSION_COOKIE = "course_session_token";
+const ACTIVE_ENROLLMENT_STATUSES = new Set([
+  "active",
+  "approved",
+  "approved_ready",
+  "approved_waiting_content",
+  "completed",
+  "da duyet"
+]);
+
+function normalizeEnrollmentStatus(status) {
+  return String(status || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function isActiveEnrollment(status) {
+  return ACTIVE_ENROLLMENT_STATUSES.has(normalizeEnrollmentStatus(status));
+}
 
 function normalizeMaterials(value) {
   const raw = Array.isArray(value) ? value : [];
@@ -303,14 +323,14 @@ export default async function handler(req, res) {
     // 3. Verify student enrollment for the course that this lesson belongs to
     const { data: enrollment, error: enrollError } = await supabase
       .from("student_enrollments")
-      .select("id")
+      .select("id, status")
       .eq("email", email)
       .eq("course_slug", lesson.course_slug)
-      .eq("status", "active")
-      .maybeSingle();
+      .limit(10);
 
     if (enrollError) throw enrollError;
-    if (!enrollment) {
+    const activeEnrollment = (enrollment || []).find(e => isActiveEnrollment(e.status));
+    if (!activeEnrollment) {
       return res.status(403).json({
         success: false,
         error: "Bạn không có quyền xem bài học của khóa học này.",

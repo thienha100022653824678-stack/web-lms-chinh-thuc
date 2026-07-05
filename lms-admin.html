@@ -1184,7 +1184,6 @@
         action: "updateConfig",
         course,
         config: {
-          title: document.getElementById("metaTitle").value.trim(),
           studentDisplayTitle: document.getElementById("metaStudentDisplayTitle").value.trim(),
           subtitle: document.getElementById("metaSubtitle").value.trim(),
           heroImage: document.getElementById("metaHeroImage").value.trim(),
@@ -1205,7 +1204,6 @@
         if (res.ok && d.success) {
           toast("Lưu cấu hình khóa học thành công!");
           // Refresh globalConfig
-          STATE.globalConfig[`${course}_title`] = payload.config.title;
           STATE.globalConfig[`${course}_studentDisplayTitle`] = payload.config.studentDisplayTitle;
           STATE.globalConfig[`${course}_subtitle`] = payload.config.subtitle;
           STATE.globalConfig[`${course}_heroImage`] = payload.config.heroImage;

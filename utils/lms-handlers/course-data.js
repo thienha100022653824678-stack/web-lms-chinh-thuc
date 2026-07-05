@@ -14,6 +14,26 @@ import crypto from "crypto";
 
 const SESSION_COOKIE = "course_session_token";
 const API_VERSION = "premium-bunny-stream-v1";
+const ACTIVE_ENROLLMENT_STATUSES = new Set([
+  "active",
+  "approved",
+  "approved_ready",
+  "approved_waiting_content",
+  "completed",
+  "da duyet"
+]);
+
+function normalizeEnrollmentStatus(status) {
+  return String(status || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function isActiveEnrollment(status) {
+  return ACTIVE_ENROLLMENT_STATUSES.has(normalizeEnrollmentStatus(status));
+}
 
 function getGoogleAuth() {
   const privateKey = (process.env.GOOGLE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
@@ -288,16 +308,18 @@ export default async function handler(req, res) {
       });
     }
 
-    // 1. Fetch all active course enrollments for this student
+    // 1. Fetch all course enrollments for this student and normalize status locally.
     const { data: enrollments, error: enrollError } = await supabase
       .from("student_enrollments")
-      .select("course_slug")
-      .eq("email", email)
-      .eq("status", "active");
+      .select("course_slug, status")
+      .eq("email", email);
 
     if (enrollError) throw enrollError;
 
-    const allowedCourses = (enrollments || []).map(e => e.course_slug);
+    const allowedCourses = (enrollments || [])
+      .filter(e => isActiveEnrollment(e.status))
+      .map(e => String(e.course_slug || "").trim())
+      .filter(Boolean);
 
     if (allowedCourses.length === 0) {
       return res.status(403).json({
