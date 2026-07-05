@@ -158,6 +158,11 @@
                   <input id="metaTitle" type="text" placeholder="Khóa học Bánh Mì..." class="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium"/>
                 </div>
                 <div>
+                  <label class="block text-[10px] font-bold text-slate-500 mb-1">Tên hiển thị trả lớp cho học viên</label>
+                  <input id="metaStudentDisplayTitle" type="text" placeholder="Để trống nếu muốn dùng tên khóa học gốc" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium"/>
+                  <p class="text-[10px] text-slate-400 font-medium mt-1 leading-relaxed">Nếu nhập tên tại đây, học viên sẽ thấy tên này trong trang học bài và trang post. Web bán hàng vẫn giữ tên khóa học gốc.</p>
+                </div>
+                <div>
                   <label class="block text-[10px] font-bold text-slate-500 mb-1">Phụ đề khóa học</label>
                   <input id="metaSubtitle" type="text" placeholder="Học làm bánh chuyên nghiệp..." class="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium"/>
                 </div>
@@ -1151,6 +1156,7 @@
 
       // Fill configs
       document.getElementById("metaTitle").value = STATE.globalConfig[`${course}_title`] || "";
+      document.getElementById("metaStudentDisplayTitle").value = STATE.globalConfig[`${course}_studentDisplayTitle`] || "";
       document.getElementById("metaSubtitle").value = STATE.globalConfig[`${course}_subtitle`] || "";
       document.getElementById("metaHeroImage").value = STATE.globalConfig[`${course}_heroImage`] || "";
       document.getElementById("metaPosterImage").value = STATE.globalConfig[`${course}_posterImage`] || "";
@@ -1179,6 +1185,7 @@
         course,
         config: {
           title: document.getElementById("metaTitle").value.trim(),
+          studentDisplayTitle: document.getElementById("metaStudentDisplayTitle").value.trim(),
           subtitle: document.getElementById("metaSubtitle").value.trim(),
           heroImage: document.getElementById("metaHeroImage").value.trim(),
           posterImage: document.getElementById("metaPosterImage").value.trim(),
@@ -1199,6 +1206,7 @@
           toast("Lưu cấu hình khóa học thành công!");
           // Refresh globalConfig
           STATE.globalConfig[`${course}_title`] = payload.config.title;
+          STATE.globalConfig[`${course}_studentDisplayTitle`] = payload.config.studentDisplayTitle;
           STATE.globalConfig[`${course}_subtitle`] = payload.config.subtitle;
           STATE.globalConfig[`${course}_heroImage`] = payload.config.heroImage;
           STATE.globalConfig[`${course}_posterImage`] = payload.config.posterImage;

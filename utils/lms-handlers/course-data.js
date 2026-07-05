@@ -339,9 +339,18 @@ export default async function handler(req, res) {
       });
     }
 
+    const studentDisplayTitle = String(
+      courseRawData.studentDisplayTitle ||
+      rawConfig[`${activeCourseSlug}_studentDisplayTitle`] ||
+      ""
+    ).trim();
+    const originalCourseTitle = (courseRow && courseRow.title) || rawConfig[`${activeCourseSlug}_title`] || rawConfig.title || activeCourseSlug;
+
     // Map course-prefixed config values to clean names for the active course
     const courseInfo = {
-      title: (courseRow && courseRow.title) || rawConfig[`${activeCourseSlug}_title`] || rawConfig.title || "Culinary Academy",
+      title: studentDisplayTitle || originalCourseTitle || "Culinary Academy",
+      originalTitle: originalCourseTitle,
+      studentDisplayTitle,
       subtitle: (courseRow && courseRow.subtitle) || rawConfig[`${activeCourseSlug}_subtitle`] || rawConfig.subtitle || "",
       heroImage: (courseRow && courseRow.image_url) || courseRawData.heroImageUrl || courseRawData.bannerImageUrl || rawConfig[`${activeCourseSlug}_heroImage`] || rawConfig.heroImage || ""
     };

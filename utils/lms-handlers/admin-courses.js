@@ -94,6 +94,9 @@ export default async function handler(req, res) {
           if (newConfig.posterImage !== undefined) {
             rawData.posterImageUrl = String(newConfig.posterImage || "").trim();
           }
+          if (newConfig.studentDisplayTitle !== undefined) {
+            rawData.studentDisplayTitle = String(newConfig.studentDisplayTitle || "").trim();
+          }
 
           const updatePayload = {
             updated_at: new Date().toISOString()

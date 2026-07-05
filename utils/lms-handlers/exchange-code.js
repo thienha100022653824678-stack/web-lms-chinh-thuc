@@ -102,8 +102,17 @@ export default async function handler(req, res) {
       rawConfig[row.key] = (valObj && typeof valObj === "object" && valObj.val !== undefined) ? valObj.val : valObj;
     });
 
+    const studentDisplayTitle = String(
+      courseRawData.studentDisplayTitle ||
+      rawConfig[activeCourseSlug + "_studentDisplayTitle"] ||
+      ""
+    ).trim();
+    const originalCourseTitle = (courseRow && courseRow.title) || rawConfig[activeCourseSlug + "_title"] || rawConfig.title || activeCourseSlug;
+
     const courseInfo = {
-      title: (courseRow && courseRow.title) || rawConfig[activeCourseSlug + "_title"] || rawConfig.title || "Culinary Academy",
+      title: studentDisplayTitle || originalCourseTitle || "Culinary Academy",
+      originalTitle: originalCourseTitle,
+      studentDisplayTitle,
       subtitle: (courseRow && courseRow.subtitle) || rawConfig[activeCourseSlug + "_subtitle"] || rawConfig.subtitle || "",
       heroImage: (courseRow && courseRow.image_url) || courseRawData.heroImageUrl || courseRawData.bannerImageUrl || rawConfig[activeCourseSlug + "_heroImage"] || rawConfig.heroImage || ""
     };
