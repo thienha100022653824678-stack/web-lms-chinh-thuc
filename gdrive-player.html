@@ -31,6 +31,7 @@
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
+      align-items: flex-start;
     }
 
     .btn {
@@ -54,7 +55,7 @@
     }
 
     .btn-back {
-      background-color: #2A4B2A; /* Brand green */
+      background-color: #2A4B2A;
     }
     .btn-back:active {
       background-color: #1E351E;
@@ -62,19 +63,53 @@
     }
 
     .btn-open {
-      background-color: #2563eb; /* Blue */
+      background-color: #16a34a;
+      flex-direction: column;
+      align-items: flex-start;
+      line-height: 1.25;
     }
     .btn-open:active {
-      background-color: #1d4ed8;
+      background-color: #15803d;
       transform: scale(0.96);
     }
 
+    .cookie-hint-text {
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .cookie-hint-helper {
+      font-size: 11px;
+      font-weight: 600;
+      opacity: 0.9;
+      max-width: min(420px, calc(100vw - 64px));
+    }
+
+    .btn-open.is-hidden {
+      display: none;
+    }
+
     .btn-download {
-      background-color: #e11d48; /* Rose */
+      background-color: #e11d48;
     }
     .btn-download:active {
       background-color: #be123c;
       transform: scale(0.96);
+    }
+
+    @media (max-width: 560px) {
+      .controls-container {
+        left: 12px;
+        right: 12px;
+      }
+
+      .btn {
+        padding: 9px 14px;
+      }
+
+      .cookie-hint-helper {
+        max-width: calc(100vw - 56px);
+      }
     }
   </style>
 </head>
@@ -85,8 +120,9 @@
     <button class="btn btn-back" onclick="goBack()">
       ← Quay lại bài học
     </button>
-    <a id="openDriveBtn" class="btn btn-open" target="_blank">
-      Phát video bị lỗi ──► Mở xem TT qua GDrive
+    <a id="openDriveBtn" class="btn btn-open" target="_blank" rel="noopener">
+      <span class="cookie-hint-text">Ấn Cho phép cookies để xem video</span>
+      <span class="cookie-hint-helper">Nếu màn hình Google hiện nút Cho phép cookie, hãy bấm vào đó để xem video.</span>
     </a>
   </div>
 
@@ -97,17 +133,33 @@
     const urlParams = new URLSearchParams(window.location.search);
     const fileId = urlParams.get('id') || '';
     const iframe = document.getElementById('playerIframe');
+    const openDriveBtn = document.getElementById('openDriveBtn');
+    let cookieHintTimer = null;
+
+    function hideCookieHint() {
+      openDriveBtn.classList.add('is-hidden');
+    }
+
+    function scheduleCookieHintHide(delayMs) {
+      clearTimeout(cookieHintTimer);
+      cookieHintTimer = setTimeout(hideCookieHint, delayMs);
+    }
 
     if (fileId) {
       iframe.src = `https://drive.google.com/file/d/${fileId}/preview`;
-      document.getElementById('openDriveBtn').href = `https://drive.google.com/file/d/${fileId}/view?usp=drivesdk`;
+      openDriveBtn.href = `https://drive.google.com/file/d/${fileId}/view?usp=drivesdk`;
+      iframe.addEventListener('load', () => scheduleCookieHintHide(12000));
+      window.addEventListener('focus', () => scheduleCookieHintHide(1500));
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) scheduleCookieHintHide(1500);
+      });
     } else {
       alert('Không tìm thấy ID video Google Drive!');
     }
 
     function goBack() {
       const returnUrl = urlParams.get('returnUrl') || sessionStorage.getItem('courseReturnUrl');
-      
+
       if (returnUrl) {
         window.location.href = returnUrl;
       } else if (window.history.length > 1) {
