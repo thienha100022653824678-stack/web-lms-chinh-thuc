@@ -21,7 +21,7 @@ export default async function handler(req, res) {
       // 1. Get course slugs from courses table
       const { data: courseRows, error: courseErr } = await supabase
         .from("courses")
-        .select("slug")
+        .select("slug, title, subtitle, image_url, raw_data")
         .order("sort_order", { ascending: true });
 
       if (courseErr) throw courseErr;
@@ -41,6 +41,31 @@ export default async function handler(req, res) {
           const val = (valObj && typeof valObj === "object" && valObj.val !== undefined) ? valObj.val : valObj;
           config[row.key] = val;
         });
+      }
+
+      for (const course of courseRows || []) {
+        const slug = course.slug;
+        const rawData = course.raw_data || {};
+        if (!slug) continue;
+
+        if (!config[`${slug}_title`] && course.title) {
+          config[`${slug}_title`] = course.title;
+        }
+        if (!config[`${slug}_subtitle`] && course.subtitle) {
+          config[`${slug}_subtitle`] = course.subtitle;
+        }
+        if (!config[`${slug}_heroImage`] && course.image_url) {
+          config[`${slug}_heroImage`] = course.image_url;
+        }
+        if (!config[`${slug}_posterImage`] && rawData.posterImageUrl) {
+          config[`${slug}_posterImage`] = rawData.posterImageUrl;
+        }
+        if (!config[`${slug}_qrImage`] && rawData.qrImageUrl) {
+          config[`${slug}_qrImage`] = rawData.qrImageUrl;
+        }
+        if (!config[`${slug}_studentDisplayTitle`] && rawData.studentDisplayTitle) {
+          config[`${slug}_studentDisplayTitle`] = rawData.studentDisplayTitle;
+        }
       }
 
       return res.status(200).json({ success: true, courses, config });
@@ -88,28 +113,35 @@ export default async function handler(req, res) {
         if (courseRow) {
           const rawData = courseRow.raw_data || {};
           
-          if (newConfig.qrImage !== undefined) {
-            rawData.qrImageUrl = String(newConfig.qrImage || "").trim();
+          const nextQrImage = String(newConfig.qrImage || "").trim();
+          const nextPosterImage = String(newConfig.posterImage || "").trim();
+          const nextStudentDisplayTitle = String(newConfig.studentDisplayTitle || "").trim();
+          const nextTitle = String(newConfig.title || "").trim();
+          const nextSubtitle = String(newConfig.subtitle || "").trim();
+          const nextHeroImage = String(newConfig.heroImage || "").trim();
+
+          if (newConfig.qrImage !== undefined && nextQrImage) {
+            rawData.qrImageUrl = nextQrImage;
           }
-          if (newConfig.posterImage !== undefined) {
-            rawData.posterImageUrl = String(newConfig.posterImage || "").trim();
+          if (newConfig.posterImage !== undefined && nextPosterImage) {
+            rawData.posterImageUrl = nextPosterImage;
           }
           if (newConfig.studentDisplayTitle !== undefined) {
-            rawData.studentDisplayTitle = String(newConfig.studentDisplayTitle || "").trim();
+            rawData.studentDisplayTitle = nextStudentDisplayTitle;
           }
 
           const updatePayload = {
             updated_at: new Date().toISOString()
           };
 
-          if (newConfig.title !== undefined) {
-            updatePayload.title = String(newConfig.title || "").trim();
+          if (newConfig.title !== undefined && nextTitle) {
+            updatePayload.title = nextTitle;
           }
-          if (newConfig.subtitle !== undefined) {
-            updatePayload.subtitle = String(newConfig.subtitle || "").trim();
+          if (newConfig.subtitle !== undefined && nextSubtitle) {
+            updatePayload.subtitle = nextSubtitle;
           }
-          if (newConfig.heroImage !== undefined) {
-            updatePayload.image_url = String(newConfig.heroImage || "").trim();
+          if (newConfig.heroImage !== undefined && nextHeroImage) {
+            updatePayload.image_url = nextHeroImage;
           }
           
           updatePayload.raw_data = rawData;

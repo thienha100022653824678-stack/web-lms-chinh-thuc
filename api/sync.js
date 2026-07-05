@@ -50,19 +50,28 @@ export default async function handler(req, res) {
 
       if (fetchErr) throw fetchErr;
 
+      const nextTitle = String(title || "").trim();
+      const nextSubtitle = String(subtitle || "").trim();
+      const nextImageUrl = String(imageUrl || "").trim();
+
       let result;
       if (existingCourse) {
         // Update metadata without breaking lessons or existing raw_data
-        const rawData = existingCourse.raw_data || {};
+        const updatePayload = {
+          title: nextTitle,
+          active: active !== undefined ? active : true,
+          updated_at: new Date().toISOString()
+        };
+        if (nextSubtitle) {
+          updatePayload.subtitle = nextSubtitle;
+        }
+        if (nextImageUrl) {
+          updatePayload.image_url = nextImageUrl;
+        }
+
         const { error: updateErr } = await supabase
           .from("courses")
-          .update({
-            title: title.trim(),
-            subtitle: subtitle ? subtitle.trim() : null,
-            image_url: imageUrl ? imageUrl.trim() : null,
-            active: active !== undefined ? active : true,
-            updated_at: new Date().toISOString()
-          })
+          .update(updatePayload)
           .eq("id", existingCourse.id);
 
         if (updateErr) throw updateErr;
@@ -73,9 +82,9 @@ export default async function handler(req, res) {
           .from("courses")
           .insert({
             slug: slug.trim(),
-            title: title.trim(),
-            subtitle: subtitle ? subtitle.trim() : null,
-            image_url: imageUrl ? imageUrl.trim() : null,
+            title: nextTitle,
+            subtitle: nextSubtitle || null,
+            image_url: nextImageUrl || null,
             active: active !== undefined ? active : true,
             sort_order: 999 // Default to end of list
           })
