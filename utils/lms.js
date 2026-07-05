@@ -290,10 +290,13 @@ export function signMediaUrls(rawMediaUrlsStr) {
     if (firstPipe === -1) return line;
     const secondPipe = trimmed.indexOf("|", firstPipe + 1);
     if (secondPipe === -1) return line;
+    const thirdPipe = trimmed.indexOf("|", secondPipe + 1);
 
     const type = trimmed.slice(0, firstPipe).trim();
     const title = trimmed.slice(firstPipe + 1, secondPipe).trim();
-    const rawUrl = trimmed.slice(secondPipe + 1).trim();
+    const rawUrl = (thirdPipe === -1 ? trimmed.slice(secondPipe + 1) : trimmed.slice(secondPipe + 1, thirdPipe)).trim();
+    const captionPart = thirdPipe === -1 ? "" : trimmed.slice(thirdPipe + 1).trim();
+    const captionSuffix = captionPart ? `|${captionPart}` : "";
     const url = extractIframeSrc(rawUrl).replace(/&amp;/g, "&").trim();
 
     if (type === "video") {
@@ -310,17 +313,18 @@ export function signMediaUrls(rawMediaUrlsStr) {
           if (match) fileId = match[1];
         }
         const previewUrl = fileId ? `https://drive.google.com/file/d/${fileId}/preview` : url;
-        return `${type}|${title}|${previewUrl}`;
+        return `${type}|${title}|${previewUrl}${captionSuffix}`;
       }
 
       const parsed = parseBunnyVideoIdAndLibraryId(url);
       if (parsed) {
         const { libraryId, videoId } = parsed;
         if (url.includes("token=") && url.includes("expires=")) {
-          return `${type}|${title}|${url}`;
+          return `${type}|${title}|${url}${captionSuffix}`;
         }
         if (!tokenKey) {
-          return `video|${title}|error:Thiếu BUNNY_STREAM_TOKEN_KEY nên không ký được media`;
+          const errorMessage = "Thieu BUNNY_STREAM_TOKEN_KEY nen khong ky duoc media";
+          return `video|${title}|error:${errorMessage}${captionSuffix}`;
         }
 
         let queryParams = "";
@@ -352,10 +356,10 @@ export function signMediaUrls(rawMediaUrlsStr) {
         if (queryParams) {
           secureUrl = `${normalizedVideoUrl}${queryParams}&token=${token}&expires=${expires}`;
         }
-        return `${type}|${title}|${secureUrl}`;
+        return `${type}|${title}|${secureUrl}${captionSuffix}`;
       }
     }
-    return `${type}|${title}|${url}`;
+    return `${type}|${title}|${url}${captionSuffix}`;
   }).filter(Boolean).join("\n");
 }
 

@@ -1317,7 +1317,23 @@
     }
 
     // ── Parse mediaUrls ─────────────────────────────────────────────────────
-    // Format: "type|title|url\ntype|title|url\n..."
+    // Format: "type|title|url|captionEncoded\ntype|title|url|captionEncoded\n..."
+    function decodeMediaCaption(value) {
+      const raw = String(value || "");
+      if (!raw) return "";
+      try {
+        return decodeURIComponent(raw);
+      } catch {
+        return raw;
+      }
+    }
+
+    function renderMediaCaption(caption) {
+      const text = String(caption || "").trim();
+      if (!text) return "";
+      return `<p class="mt-2 px-1 text-xs sm:text-sm leading-relaxed text-brandBrown/60 whitespace-pre-line">${escapeHtml(text)}</p>`;
+    }
+
     function parseMediaUrls(raw) {
       if (!raw || typeof raw !== "string") return [];
       return raw.split("\n")
@@ -1328,11 +1344,13 @@
           if (firstPipe === -1) return null;
           const secondPipe = trimmed.indexOf("|", firstPipe + 1);
           if (secondPipe === -1) return null;
+          const thirdPipe = trimmed.indexOf("|", secondPipe + 1);
           const type  = trimmed.slice(0, firstPipe).trim();
           const title = trimmed.slice(firstPipe + 1, secondPipe).trim();
-          const url   = trimmed.slice(secondPipe + 1).trim();
+          const url   = (thirdPipe === -1 ? trimmed.slice(secondPipe + 1) : trimmed.slice(secondPipe + 1, thirdPipe)).trim();
+          const caption = thirdPipe === -1 ? "" : decodeMediaCaption(trimmed.slice(thirdPipe + 1).trim()).slice(0, 250);
           if (!type || !url) return null;
-          return { type, title, url };
+          return { type, title, url, caption };
         })
         .filter(Boolean);
     }
@@ -1358,6 +1376,7 @@
       // Build HTML for each media item
       const html = parsedItems.map(item => {
         const safeTitle = escapeHtml(item.title || "");
+        const captionHtml = renderMediaCaption(item.caption);
 
         if (item.type === "video") {
           const rawUrl = item.url.trim();
@@ -1395,6 +1414,7 @@
                     loading="lazy">
                   </iframe>
                 </div>
+                ${captionHtml ? `<div class="px-4 pb-4">${captionHtml}</div>` : ""}
               </div>`;
           }
 
@@ -1427,6 +1447,7 @@
                     </div>
                   </div>
                 </div>
+                ${captionHtml ? `<div class="px-4 pb-4">${captionHtml}</div>` : ""}
               </div>`;
           }
 
@@ -1458,6 +1479,7 @@
                     loading="lazy">
                   </iframe>
                 </div>
+                ${captionHtml ? `<div class="px-4 pb-4">${captionHtml}</div>` : ""}
                 <div data-bunny-warning class="hidden p-3 bg-brandOrange/5 border-t border-brandOrange/10 text-brandOrange text-[11px] font-semibold flex items-center gap-1.5">
                   ⚠️ Video Bunny chưa phát được? Kiểm tra token, expires hoặc Allowed Referrers trong Bunny.
                 </div>
@@ -1477,6 +1499,7 @@
                     class="w-full rounded-xl object-contain max-h-[400px] border border-brandBrown/5"
                     loading="lazy"
                   />
+                  ${captionHtml}
                 </div>
               </div>`;
           }
@@ -1487,6 +1510,7 @@
               <div>
                 <div class="font-bold text-sm text-brandBrown">${safeTitle || "Tài liệu đính kèm"}</div>
                 <div class="text-xs text-brandBrown/50 truncate max-w-[300px] sm:max-w-[400px] mt-0.5">${escapeHtml(url)}</div>
+                ${captionHtml}
               </div>
               <a
                 href="${escapeHtml(url)}"
@@ -1523,6 +1547,7 @@
                   loading="lazy">
                 </iframe>
               </div>
+              ${captionHtml ? `<div class="px-4 pb-4">${captionHtml}</div>` : ""}
             </div>`;
         }
 
@@ -1545,6 +1570,7 @@
                   class="w-full rounded-xl object-contain max-h-[400px] border border-brandBrown/5"
                   loading="lazy"
                 />
+                ${captionHtml}
               </div>
             </div>`;
         }

@@ -1524,13 +1524,9 @@
       container.innerHTML = "";
       if (l.mediaUrls) {
         l.mediaUrls.split("\n").filter(Boolean).forEach(line => {
-          const firstPipe = line.indexOf("|");
-          const secondPipe = line.indexOf("|", firstPipe + 1);
-          if (firstPipe === -1 || secondPipe === -1) return;
-          const type = line.slice(0, firstPipe).trim();
-          const title = line.slice(firstPipe + 1, secondPipe).trim();
-          const url = line.slice(secondPipe + 1).trim();
-          addMediaBlock(type, title, url);
+          const item = parseMediaLineForAdmin(line);
+          if (!item) return;
+          addMediaBlock(item.type, item.title, item.url, item.caption);
         });
       }
     }
@@ -1629,7 +1625,50 @@
 
      // ── Media Blocks construction ──────────────────────────────────────────
     let blockIdCounter = 0;
-    function addMediaBlock(type, titleVal = "", urlVal = "") {
+    const MEDIA_CAPTION_MAX_LENGTH = 250;
+
+    function decodeMediaCaption(value) {
+      const raw = String(value || "");
+      if (!raw) return "";
+      try {
+        return decodeURIComponent(raw);
+      } catch {
+        return raw;
+      }
+    }
+
+    function encodeMediaCaption(value) {
+      return encodeURIComponent(String(value || "").trim().slice(0, MEDIA_CAPTION_MAX_LENGTH));
+    }
+
+    function parseMediaLineForAdmin(line) {
+      const trimmed = String(line || "").trim();
+      if (!trimmed) return null;
+      const firstPipe = trimmed.indexOf("|");
+      const secondPipe = trimmed.indexOf("|", firstPipe + 1);
+      if (firstPipe === -1 || secondPipe === -1) return null;
+      const thirdPipe = trimmed.indexOf("|", secondPipe + 1);
+      const type = trimmed.slice(0, firstPipe).trim();
+      const title = trimmed.slice(firstPipe + 1, secondPipe).trim();
+      const url = (thirdPipe === -1 ? trimmed.slice(secondPipe + 1) : trimmed.slice(secondPipe + 1, thirdPipe)).trim();
+      const caption = thirdPipe === -1 ? "" : decodeMediaCaption(trimmed.slice(thirdPipe + 1).trim());
+      if (!type || !url) return null;
+      return { type, title, url, caption };
+    }
+
+    function updateMediaCaptionCount(id) {
+      const block = document.getElementById(id);
+      if (!block) return;
+      const input = block.querySelector("[data-media-caption]");
+      const counter = block.querySelector("[data-media-caption-count]");
+      if (!input || !counter) return;
+      if (input.value.length > MEDIA_CAPTION_MAX_LENGTH) {
+        input.value = input.value.slice(0, MEDIA_CAPTION_MAX_LENGTH);
+      }
+      counter.textContent = `${input.value.length}/${MEDIA_CAPTION_MAX_LENGTH}`;
+    }
+
+    function addMediaBlock(type, titleVal = "", urlVal = "", captionVal = "") {
       // Auto-generate title if empty
       if (!titleVal) {
         const existingBlocks = Array.from(document.querySelectorAll("[data-media-block]"));
@@ -1657,7 +1696,7 @@
           <span class="text-[10px] font-black px-2 py-0.5 rounded ${color}">${label}</span>
           <button onclick="document.getElementById('${id}').remove()" class="text-xs text-red-500 font-bold hover:underline">Xóa</button>
         </div>
-        <div class="grid grid-cols-[120px_1fr] gap-2">
+        <div class="grid grid-cols-1 sm:grid-cols-[120px_1fr] gap-2">
           <input data-media-title type="text" placeholder="Tiêu đề..." value="${escapeHtml(titleVal)}" class="border border-slate-200 rounded-lg px-2.5 py-1 text-xs"/>
           <div class="flex flex-col gap-1.5">
             <div class="flex gap-1">
@@ -1670,8 +1709,16 @@
             </div>
           </div>
         </div>
+        <div class="space-y-1">
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-[10px] font-black text-slate-500 uppercase">Chú thích</label>
+            <span data-media-caption-count class="text-[10px] font-bold text-slate-400">0/${MEDIA_CAPTION_MAX_LENGTH}</span>
+          </div>
+          <textarea data-media-caption maxlength="${MEDIA_CAPTION_MAX_LENGTH}" rows="2" placeholder="Nhập chú thích ngắn cho ảnh/video này..." oninput="updateMediaCaptionCount('${id}')" class="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs leading-relaxed resize-y">${escapeHtml(String(captionVal || "").slice(0, MEDIA_CAPTION_MAX_LENGTH))}</textarea>
+        </div>
       `;
       container.appendChild(div);
+      updateMediaCaptionCount(id);
     }
 
     function buildMediaUrls() {
@@ -1680,8 +1727,10 @@
         const type = block.getAttribute("data-media-type") || block.dataset.mediaType;
         const title = String(block.querySelector("[data-media-title]")?.value || "").trim().replace(/[|\n\r]/g, "-");
         const url = String(block.querySelector("[data-media-url]")?.value || "").trim().replace(/[|\n\r]/g, "");
+        const caption = String(block.querySelector("[data-media-caption]")?.value || "").trim().slice(0, MEDIA_CAPTION_MAX_LENGTH);
         if (!type || !url) return "";
-        return `${type}|${title || "Tài liệu"}|${url}`;
+        const encodedCaption = encodeMediaCaption(caption);
+        return `${type}|${title || "Tài liệu"}|${url}${encodedCaption ? `|${encodedCaption}` : ""}`;
       }).filter(Boolean).join("\n");
     }
 
