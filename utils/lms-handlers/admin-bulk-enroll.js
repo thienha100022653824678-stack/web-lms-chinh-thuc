@@ -132,7 +132,12 @@ export default async function handler(req, res) {
           });
           if (syncResult.success) {
             successCount++;
-            reportDetails.push({ email, status: "success", error: null });
+            reportDetails.push({
+              email,
+              status: "success",
+              error: syncResult.driveSync?.success === false ? `Drive: ${syncResult.driveSync.error || "pending retry"}` : null,
+              driveSync: syncResult.driveSync || null
+            });
           } else {
             failedCount++;
             reportDetails.push({ email, status: "failed", error: syncResult.error || "Lỗi đồng bộ phân quyền" });

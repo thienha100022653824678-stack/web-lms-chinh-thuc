@@ -467,6 +467,7 @@
                   <th class="p-4">Họ Tên</th>
                   <th class="p-4">Số điện thoại</th>
                   <th class="p-4 text-center">Trạng thái</th>
+                  <th class="p-4">Drive</th>
                   <th class="p-4">Hết hạn</th>
                   <th class="p-4">Ngày cấp</th>
                   <th class="p-4 text-center">Hành động</th>
@@ -3063,10 +3064,55 @@
       }
     }
 
+    function renderEnrollmentDriveStatus(e) {
+      const status = String(e.drive_permission_status || "").toLowerCase();
+      const adminEmail = e.drive_permission_admin_email || "";
+      const errorText = e.drive_permission_error || "";
+      const retryCount = Number(e.drive_permission_retry_count || 0);
+      const updatedAt = e.drive_permission_updated_at ? new Date(e.drive_permission_updated_at).toLocaleString("vi-VN") : "";
+      let label = "Chưa đồng bộ Drive";
+      let badgeClass = "bg-slate-100 text-slate-600 border-slate-200";
+      let showRetry = e.status === "active";
+
+      if (status === "success") {
+        label = "Drive: Đã cấp quyền";
+        badgeClass = "bg-emerald-50 text-emerald-700 border-emerald-200";
+        showRetry = false;
+      } else if (status === "pending_retry") {
+        label = "Drive: Đang chờ cấp lại";
+        badgeClass = "bg-amber-50 text-amber-700 border-amber-200";
+      } else if (status === "quota_limited") {
+        label = "Drive: Lỗi quota";
+        badgeClass = "bg-orange-50 text-orange-700 border-orange-200";
+      } else if (status === "failed" || status === "error") {
+        label = "Drive: Cấp quyền lỗi";
+        badgeClass = "bg-red-50 text-red-600 border-red-200";
+      } else if (status === "revoked") {
+        label = "Drive: Đã thu hồi";
+        badgeClass = "bg-slate-100 text-slate-500 border-slate-200";
+        showRetry = false;
+      }
+
+      const meta = [
+        adminEmail ? `Cấp bởi: ${escapeHtml(adminEmail)}` : "",
+        retryCount ? `Retry: ${retryCount}` : "",
+        updatedAt ? `Cập nhật: ${escapeHtml(updatedAt)}` : ""
+      ].filter(Boolean).join("<br>");
+
+      return `
+        <div class="space-y-1.5">
+          <div class="inline-flex items-center px-2 py-1 rounded-lg border text-[11px] font-bold ${badgeClass}">${label}</div>
+          ${meta ? `<div class="text-[10px] text-slate-500 leading-relaxed">${meta}</div>` : ""}
+          ${errorText ? `<div class="text-[10px] text-red-500 leading-relaxed max-w-[260px] truncate" title="${escapeHtml(errorText)}">${escapeHtml(errorText)}</div>` : ""}
+          ${showRetry ? `<button type="button" onclick="retryDrivePermission('${e.id}')" class="text-[11px] font-bold text-blue-600 hover:underline">Cấp lại quyền Drive</button>` : ""}
+        </div>
+      `;
+    }
+
     function renderEnrollmentsTable() {
       const tbody = document.getElementById("enrollmentsTableBody");
       if (STATE.enrollments.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="p-6 text-center text-slate-400">Chưa có phân quyền học viên nào thỏa mãn.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="p-6 text-center text-slate-400">Chưa có phân quyền học viên nào thỏa mãn.</td></tr>`;
         return;
       }
 
@@ -3076,6 +3122,7 @@
         const expStr = e.expired_at ? new Date(e.expired_at).toLocaleString("vi-VN") : "Vĩnh viễn";
         const studentName = e.student?.full_name || "N/A";
         const studentPhone = e.student?.phone || "N/A";
+        const driveHtml = renderEnrollmentDriveStatus(e);
         
         return `
           <tr class="border-b border-slate-100 hover:bg-slate-50 transition">
@@ -3089,6 +3136,7 @@
                 <option value="inactive" ${!isAct ? 'selected' : ''}>Inactive</option>
               </select>
             </td>
+            <td class="p-4 min-w-[220px]">${driveHtml}</td>
             <td class="p-4 text-xs text-slate-500 font-semibold">${expStr}</td>
             <td class="p-4 text-xs text-slate-400">${dateStr}</td>
             <td class="p-4 text-center">
@@ -3323,15 +3371,6 @@
         return;
       }
 
-      let driveToken = "";
-      try {
-        driveToken = await ensureDriveAccess();
-      } catch (err) {
-        if (!confirm("Chưa kết nối Google Drive. Quyền học trên website vẫn được cấp, nhưng quyền xem ảnh/video trên Drive sẽ KHÔNG được tự động đồng bộ. Bạn có muốn tiếp tục?")) {
-          return;
-        }
-      }
-
       showLoader("Đang tiến hành cấp quyền hàng loạt...");
       try {
         const payload = {
@@ -3346,7 +3385,7 @@
           method: "POST",
           headers: {
             ...authHeaders(),
-            "x-drive-access-token": driveToken || ""
+            "x-drive-access-token": ""
           },
           body: JSON.stringify(payload)
         });
@@ -3420,15 +3459,6 @@
         return;
       }
 
-      let driveToken = "";
-      try {
-        driveToken = await ensureDriveAccess();
-      } catch (err) {
-        if (!confirm("Chưa kết nối Google Drive. Quyền học trên website vẫn được cấp, nhưng quyền xem ảnh/video trên Drive sẽ KHÔNG được tự động đồng bộ. Bạn có muốn tiếp tục?")) {
-          return;
-        }
-      }
-
       const payload = {
         email,
         courseSlug,
@@ -3441,14 +3471,18 @@
           method: "POST",
           headers: {
             ...authHeaders(),
-            "x-drive-access-token": driveToken || ""
+            "x-drive-access-token": ""
           },
           body: JSON.stringify(payload)
         });
         const d = await res.json();
 
         if (res.ok && d.success) {
-          toast(`Đã phân quyền lớp ${courseSlug.toUpperCase()} cho học viên ${email}!`);
+          if (d.driveSync && !d.driveSync.success) {
+            toast(`Đã cấp quyền học, nhưng Drive chưa cấp được: ${d.driveSync.error || "cần cấp lại quyền Drive"}`, "warning");
+          } else {
+            toast(`Đã phân quyền lớp ${courseSlug.toUpperCase()} cho học viên ${email}!`);
+          }
           closeEnrollModal();
           searchEnrollments();
         } else {
@@ -3484,17 +3518,34 @@
       }
     }
 
+    async function retryDrivePermission(id) {
+      if (!id) return;
+      showLoader("Đang cấp lại quyền Drive...");
+      try {
+        const res = await fetch("/api/lms/admin?endpoint=drive-permission", {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify({ enrollmentId: id })
+        });
+        const d = await res.json();
+        if (res.ok && d.success) {
+          const adminEmail = d.driveSync?.driveAdminEmail ? ` bởi ${d.driveSync.driveAdminEmail}` : "";
+          toast(`Đã cấp lại quyền Drive${adminEmail}`);
+          searchEnrollments();
+        } else {
+          toast(d.error || d.driveSync?.error || "Cấp lại quyền Drive thất bại", "error");
+          searchEnrollments();
+        }
+      } catch (err) {
+        console.error(err);
+        toast("Lỗi kết nối khi cấp lại quyền Drive", "error");
+      } finally {
+        hideLoader();
+      }
+    }
+
     async function revokeAccess(id) {
       if (!confirm("Bạn có chắc chắn muốn thu hồi quyền truy cập lớp học này của học viên?")) return;
-
-      let driveToken = "";
-      try {
-        driveToken = await ensureDriveAccess();
-      } catch (err) {
-        if (!confirm("Chưa kết nối Google Drive. Quyền học trên website vẫn bị thu hồi, nhưng quyền truy cập trên Drive của học viên sẽ KHÔNG bị tự động xóa. Bạn có muốn tiếp tục?")) {
-          return;
-        }
-      }
 
       showLoader("Đang thu hồi quyền học...");
       try {
@@ -3502,7 +3553,7 @@
           method: "DELETE",
           headers: {
             ...authHeaders(),
-            "x-drive-access-token": driveToken || ""
+            "x-drive-access-token": ""
           }
         });
         const d = await res.json();

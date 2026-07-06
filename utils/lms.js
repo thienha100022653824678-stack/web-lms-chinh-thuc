@@ -464,6 +464,16 @@ export async function getCourseDriveFolderId(supabase, courseSlug) {
     const val = data.value;
     return (val && typeof val === "object" && val.val !== undefined) ? val.val : val;
   }
+  try {
+    const { data: course, error } = await supabase
+      .from("courses")
+      .select("drive_folder_id")
+      .eq("slug", courseSlug)
+      .maybeSingle();
+    if (!error && course?.drive_folder_id) return course.drive_folder_id;
+  } catch {
+    // Older databases may not have courses.drive_folder_id yet.
+  }
   return null;
 }
 
@@ -666,6 +676,20 @@ export async function saveCourseFolderId(supabase, courseSlug, folderId) {
   } catch (err) {
     console.error(`[saveCourseFolderId] Failed to save to courses:`, err.message);
   }
+
+  try {
+    const { error } = await supabase
+      .from("courses")
+      .update({
+        drive_folder_id: folderId,
+        drive_permission_mode: "folder",
+        updated_at: new Date().toISOString()
+      })
+      .eq("slug", courseSlug);
+    if (error) throw error;
+  } catch (err) {
+    console.warn(`[saveCourseFolderId] courses.drive_folder_id unavailable:`, err.message);
+  }
 }
 
 export async function getCourseFolderIdOrDiscover(supabase, drive, courseSlug, courseTitle = "") {
@@ -796,7 +820,7 @@ export async function getGoogleDriveClient(supabase) {
 
 export async function addDriveFolderPermissionDirect(drive, folderId, emailAddress) {
   if (!drive || !folderId || !emailAddress) return;
-  await drive.permissions.create({
+  const res = await drive.permissions.create({
     fileId: folderId,
     requestBody: {
       role: "reader",
@@ -804,8 +828,10 @@ export async function addDriveFolderPermissionDirect(drive, folderId, emailAddre
       emailAddress: emailAddress
     },
     supportsAllDrives: true,
-    sendNotificationEmail: false
+    sendNotificationEmail: false,
+    fields: "id"
   });
+  return res?.data?.id || null;
 }
 
 export async function removeDriveFolderPermissionDirect(drive, folderId, emailAddress) {
@@ -841,6 +867,399 @@ export async function writeDriveLog(supabase, { course_slug, folder_id, email, a
   } catch (err) {
     console.error("Failed to write to drive_permission_logs:", err.message);
   }
+}
+
+function getDriveAdminEnvAccounts() {
+  const accounts = [];
+  for (let i = 1; i <= 3; i++) {
+    const email = normalizeEmail(process.env[`DRIVE_ADMIN_${i}_EMAIL`]);
+    const clientId = process.env[`DRIVE_ADMIN_${i}_CLIENT_ID`];
+    const clientSecret = process.env[`DRIVE_ADMIN_${i}_CLIENT_SECRET`];
+    const refreshToken = process.env[`DRIVE_ADMIN_${i}_REFRESH_TOKEN`];
+    if (email && clientId && clientSecret && refreshToken) {
+      accounts.push({
+        slot: i,
+        email,
+        display_name: `Drive Admin ${i}`,
+        clientId,
+        clientSecret,
+        refreshToken,
+        status: "active",
+        daily_share_count: 0
+      });
+    }
+  }
+  return accounts;
+}
+
+function createDriveClientFromAdmin(account) {
+  const auth = new google.auth.OAuth2(account.clientId, account.clientSecret);
+  auth.setCredentials({ refresh_token: account.refreshToken });
+  return google.drive({ version: "v3", auth });
+}
+
+function extractDriveErrorCode(err) {
+  return err?.errors?.[0]?.reason || err?.response?.data?.error || err?.code || "unknown";
+}
+
+function isDriveQuotaError(err) {
+  const text = [
+    err?.message,
+    err?.code,
+    err?.errors?.map(e => `${e.reason || ""} ${e.message || ""}`).join(" "),
+    err?.response?.data ? JSON.stringify(err.response.data) : ""
+  ].filter(Boolean).join(" ").toLowerCase();
+  return [
+    "ratelimit",
+    "rate limit",
+    "quota",
+    "user_rate_limit",
+    "userratelimitexceeded",
+    "sharingratelimitexceeded",
+    "dailylimitexceeded",
+    "quotaexceeded"
+  ].some(token => text.includes(token));
+}
+
+async function safeUpsertDriveAdminAccount(supabase, account, patch = {}) {
+  try {
+    const { error } = await supabase.from("drive_admin_accounts").upsert({
+      email: account.email,
+      display_name: account.display_name || `Drive Admin ${account.slot}`,
+      status: patch.status || account.status || "active",
+      last_used_at: patch.last_used_at || null,
+      last_error: patch.last_error || null,
+      last_error_at: patch.last_error_at || null,
+      daily_share_count: patch.daily_share_count ?? account.daily_share_count ?? 0,
+      updated_at: new Date().toISOString()
+    }, { onConflict: "email" });
+    if (error) throw error;
+  } catch (err) {
+    console.warn("[drive-admin-pool] drive_admin_accounts unavailable:", err.message);
+  }
+}
+
+async function getDriveAdminPoolAccounts(supabase) {
+  const envAccounts = getDriveAdminEnvAccounts();
+  if (!envAccounts.length) return [];
+
+  let dbByEmail = new Map();
+  try {
+    const { data } = await supabase
+      .from("drive_admin_accounts")
+      .select("email, display_name, status, daily_share_count, last_used_at, last_error, last_error_at");
+    dbByEmail = new Map((data || []).map(row => [normalizeEmail(row.email), row]));
+  } catch (err) {
+    console.warn("[drive-admin-pool] Could not read drive_admin_accounts:", err.message);
+  }
+
+  const accounts = envAccounts.map(account => {
+    const db = dbByEmail.get(account.email);
+    return {
+      ...account,
+      display_name: db?.display_name || account.display_name,
+      status: db?.status || account.status,
+      daily_share_count: Number(db?.daily_share_count || 0),
+      last_used_at: db?.last_used_at || null,
+      last_error: db?.last_error || null,
+      last_error_at: db?.last_error_at || null
+    };
+  });
+
+  await Promise.all(accounts.map(account => safeUpsertDriveAdminAccount(supabase, account)));
+  return accounts;
+}
+
+async function getDrivePoolCursor(supabase) {
+  try {
+    const { data } = await supabase
+      .from("site_config")
+      .select("value")
+      .eq("key", "drive_admin_pool_cursor")
+      .maybeSingle();
+    return Number(data?.value?.val || 0) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function setDrivePoolCursor(supabase, cursor) {
+  try {
+    await supabase.from("site_config").upsert({
+      key: "drive_admin_pool_cursor",
+      value: { val: cursor },
+      updated_at: new Date().toISOString()
+    }, { onConflict: "key" });
+  } catch (err) {
+    console.warn("[drive-admin-pool] Could not save cursor:", err.message);
+  }
+}
+
+async function orderDriveAdminsRoundRobin(supabase, accounts) {
+  if (!accounts.length) return [];
+  const cursor = await getDrivePoolCursor(supabase);
+  const start = cursor % accounts.length;
+  return [...accounts.slice(start), ...accounts.slice(0, start)];
+}
+
+async function advanceDrivePoolCursor(supabase, accounts, usedEmail) {
+  const idx = accounts.findIndex(a => a.email === usedEmail);
+  if (idx >= 0) {
+    await setDrivePoolCursor(supabase, (idx + 1) % accounts.length);
+  }
+}
+
+async function writeDrivePermissionLog(supabase, {
+  email,
+  courseSlug,
+  courseId = null,
+  folderId = null,
+  adminEmail = null,
+  permissionId = null,
+  action = "create",
+  status,
+  errorCode = null,
+  errorMessage = null,
+  retryCount = 0,
+  requestId = null
+}) {
+  const cleanEmail = normalizeEmail(email);
+  const now = new Date().toISOString();
+  try {
+    const { error } = await supabase.from("drive_permission_logs").insert({
+      student_email: cleanEmail,
+      email: cleanEmail,
+      course_slug: courseSlug,
+      course_id: courseId,
+      drive_folder_id: folderId,
+      folder_id: folderId,
+      drive_admin_email: adminEmail,
+      permission_id: permissionId,
+      action,
+      status,
+      error_code: errorCode,
+      error_message: errorMessage,
+      message: errorMessage || (status === "success" || status === "SUCCESS" ? "Drive permission success" : ""),
+      retry_count: retryCount,
+      last_retry_at: retryCount > 0 ? now : null,
+      updated_at: now,
+      request_id: requestId,
+      time: now
+    });
+    if (error) throw error;
+  } catch (err) {
+    await writeDriveLog(supabase, {
+      course_slug: courseSlug,
+      folder_id: folderId,
+      email: cleanEmail,
+      action,
+      status: status === "success" ? "SUCCESS" : "FAILED",
+      message: [adminEmail ? `Admin: ${adminEmail}` : "", errorMessage || status].filter(Boolean).join(" | "),
+      request_id: requestId
+    });
+  }
+}
+
+async function safeUpdateEnrollmentDriveState(supabase, {
+  email,
+  courseSlug,
+  status,
+  adminEmail = null,
+  permissionId = null,
+  folderId = null,
+  errorMessage = null,
+  retryCount = null
+}) {
+  const payload = {
+    drive_permission_status: status,
+    drive_permission_admin_email: adminEmail,
+    drive_permission_id: permissionId,
+    drive_folder_id: folderId,
+    drive_permission_error: errorMessage,
+    drive_permission_updated_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+  if (retryCount !== null) payload.drive_permission_retry_count = retryCount;
+
+  try {
+    const { error } = await supabase
+      .from("student_enrollments")
+      .update(payload)
+      .eq("email", normalizeEmail(email))
+      .eq("course_slug", courseSlug);
+    if (error) throw error;
+  } catch (err) {
+    console.warn("[drive-admin-pool] Could not update enrollment drive state:", err.message);
+  }
+}
+
+async function getCourseIdBySlug(supabase, courseSlug) {
+  try {
+    const { data } = await supabase
+      .from("courses")
+      .select("id, title")
+      .eq("slug", courseSlug)
+      .maybeSingle();
+    return data || null;
+  } catch {
+    return null;
+  }
+}
+
+async function syncGoogleDrivePermissionWithAdminPool(supabase, { email, courseSlug, action }) {
+  const cleanEmail = normalizeEmail(email);
+  const actionName = action === "create" || action === "syncEnrollment" ? "create" : "revoke";
+  const course = await getCourseIdBySlug(supabase, courseSlug);
+  const accounts = await getDriveAdminPoolAccounts(supabase);
+  const activeAccounts = accounts.filter(account => (account.status || "active") === "active");
+
+  if (!activeAccounts.length) {
+    const errorMsg = "Không có Gmail admin active trong Drive admin pool";
+    await writeDrivePermissionLog(supabase, {
+      email: cleanEmail,
+      courseSlug,
+      courseId: course?.id || null,
+      action: actionName,
+      status: "pending_retry",
+      errorCode: "no_active_drive_admin",
+      errorMessage: errorMsg
+    });
+    await addToDriveSyncQueue(supabase, { email: cleanEmail, course_slug: courseSlug, action: actionName, error: errorMsg });
+    return { success: false, error: errorMsg, pendingRetry: true };
+  }
+
+  let folderId = await getCourseFolderIdOrDiscover(supabase, null, courseSlug);
+  const orderedAccounts = await orderDriveAdminsRoundRobin(supabase, activeAccounts);
+  let lastError = null;
+  let attempt = 0;
+
+  for (const account of orderedAccounts) {
+    attempt++;
+    let drive;
+    try {
+      drive = createDriveClientFromAdmin(account);
+      if (!folderId) {
+        folderId = await getCourseFolderIdOrDiscover(supabase, drive, courseSlug, course?.title || "");
+      }
+      if (!folderId) {
+        throw new Error(`Thư mục khóa học chưa được cấu hình Drive cho slug: ${courseSlug}`);
+      }
+
+      if (actionName === "create") {
+        let existingPermissionId = null;
+        try {
+          const listRes = await drive.permissions.list({
+            fileId: folderId,
+            fields: "permissions(id, emailAddress)",
+            supportsAllDrives: true
+          });
+          const permissions = listRes.data.permissions || [];
+          existingPermissionId = permissions.find(
+            p => p.emailAddress && p.emailAddress.toLowerCase().trim() === cleanEmail
+          )?.id || null;
+        } catch (listErr) {
+          console.warn(`[drive-admin-pool] Could not list folder permissions with ${account.email}:`, listErr.message);
+        }
+
+        const permissionId = existingPermissionId || await addDriveFolderPermissionDirect(drive, folderId, cleanEmail);
+        await safeUpsertDriveAdminAccount(supabase, account, {
+          status: "active",
+          last_used_at: new Date().toISOString(),
+          daily_share_count: (account.daily_share_count || 0) + (existingPermissionId ? 0 : 1)
+        });
+        await advanceDrivePoolCursor(supabase, activeAccounts, account.email);
+        await writeDrivePermissionLog(supabase, {
+          email: cleanEmail,
+          courseSlug,
+          courseId: course?.id || null,
+          folderId,
+          adminEmail: account.email,
+          permissionId,
+          action: actionName,
+          status: "success",
+          retryCount: attempt - 1
+        });
+        await safeUpdateEnrollmentDriveState(supabase, {
+          email: cleanEmail,
+          courseSlug,
+          status: "success",
+          adminEmail: account.email,
+          permissionId,
+          folderId,
+          errorMessage: null,
+          retryCount: attempt - 1
+        });
+        return { success: true, skipped: !!existingPermissionId, driveAdminEmail: account.email, folderId, permissionId };
+      }
+
+      await removeDriveFolderPermissionDirect(drive, folderId, cleanEmail);
+      await safeUpsertDriveAdminAccount(supabase, account, {
+        status: "active",
+        last_used_at: new Date().toISOString()
+      });
+      await advanceDrivePoolCursor(supabase, activeAccounts, account.email);
+      await writeDrivePermissionLog(supabase, {
+        email: cleanEmail,
+        courseSlug,
+        courseId: course?.id || null,
+        folderId,
+        adminEmail: account.email,
+        action: actionName,
+        status: "success",
+        retryCount: attempt - 1
+      });
+      await safeUpdateEnrollmentDriveState(supabase, {
+        email: cleanEmail,
+        courseSlug,
+        status: "revoked",
+        adminEmail: account.email,
+        folderId,
+        errorMessage: null,
+        retryCount: attempt - 1
+      });
+      return { success: true, driveAdminEmail: account.email, folderId };
+    } catch (err) {
+      lastError = err;
+      const quota = isDriveQuotaError(err);
+      const errorMessage = err.message || "Lỗi Google Drive không xác định";
+      const errorCode = extractDriveErrorCode(err);
+      await safeUpsertDriveAdminAccount(supabase, account, {
+        status: quota ? "quota_limited" : "error",
+        last_error: errorMessage,
+        last_error_at: new Date().toISOString()
+      });
+      await writeDrivePermissionLog(supabase, {
+        email: cleanEmail,
+        courseSlug,
+        courseId: course?.id || null,
+        folderId,
+        adminEmail: account.email,
+        action: actionName,
+        status: quota ? "quota_limited" : "failed",
+        errorCode,
+        errorMessage,
+        retryCount: attempt - 1
+      });
+      console.error(`[drive-admin-pool] ${account.email} failed for ${cleanEmail}/${courseSlug}:`, errorMessage);
+    }
+  }
+
+  const finalError = lastError?.message || "Tất cả Gmail admin cấp quyền Drive đều lỗi";
+  await safeUpdateEnrollmentDriveState(supabase, {
+    email: cleanEmail,
+    courseSlug,
+    status: "pending_retry",
+    folderId,
+    errorMessage: finalError,
+    retryCount: Math.max(0, attempt - 1)
+  });
+  await addToDriveSyncQueue(supabase, {
+    email: cleanEmail,
+    course_slug: courseSlug,
+    action: actionName,
+    error: finalError
+  });
+  return { success: false, error: finalError, pendingRetry: true, attempts: attempt };
 }
 
 export async function addToDriveSyncQueue(supabase, { email, course_slug, action, error }) {
@@ -879,7 +1298,7 @@ export async function addToDriveSyncQueue(supabase, { email, course_slug, action
   }
 }
 
-export async function syncGoogleDrivePermission(supabase, { email, courseSlug, action }) {
+async function syncGoogleDrivePermissionLegacy(supabase, { email, courseSlug, action }) {
   const cleanEmail = normalizeEmail(email);
   const actionName = action === "create" || action === "syncEnrollment" ? "create" : "revoke";
   
@@ -1001,6 +1420,14 @@ export async function syncGoogleDrivePermission(supabase, { email, courseSlug, a
   });
 
   return { success: false, error: finalErrorMsg };
+}
+
+export async function syncGoogleDrivePermission(supabase, { email, courseSlug, action }) {
+  const poolAccounts = getDriveAdminEnvAccounts();
+  if (poolAccounts.length > 0) {
+    return syncGoogleDrivePermissionWithAdminPool(supabase, { email, courseSlug, action });
+  }
+  return syncGoogleDrivePermissionLegacy(supabase, { email, courseSlug, action });
 }
 
 export async function syncEnrollment(supabase, { email, courseSlug, action, name = null, phone = null, orderId = null, expiredAt = null }) {

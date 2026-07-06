@@ -22,13 +22,7 @@ export default async function handler(req, res) {
       let query = supabase
         .from("student_enrollments")
         .select(`
-          id,
-          email,
-          course_slug,
-          status,
-          expired_at,
-          created_at,
-          student_id,
+          *,
           student:students (
             full_name,
             phone
@@ -66,7 +60,7 @@ export default async function handler(req, res) {
         return res.status(500).json({ success: false, error: syncResult.error || "Lỗi đồng bộ phân quyền" });
       }
 
-      return res.status(200).json({ success: true, enrollment: syncResult.enrollment });
+      return res.status(200).json({ success: true, enrollment: syncResult.enrollment, driveSync: syncResult.driveSync });
     }
 
     // ── PUT: Update Enrollment Status / Expiry ────────────────────────────────
