@@ -852,17 +852,29 @@ export async function removeDriveFolderPermissionDirect(drive, folderId, emailAd
   }
 }
 
-export async function writeDriveLog(supabase, { course_slug, folder_id, email, action, status, message, request_id = null }) {
+export async function writeDriveLog(supabase, { course_slug, folder_id, email, action, status, message, error_message = null, request_id = null }) {
   try {
+    const cleanEmail = normalizeEmail(email);
+    const course = await getCourseIdBySlug(supabase, course_slug);
+    const isError = String(status || "").toLowerCase() === "failed" || String(status || "").toLowerCase() === "error";
+    const now = new Date().toISOString();
+
     await supabase.from("drive_permission_logs").insert({
       course_slug,
       folder_id,
-      email: normalizeEmail(email),
+      drive_folder_id: folder_id,
+      email: cleanEmail,
+      student_email: cleanEmail,
       action,
       status,
       message,
+      error_message: error_message || (isError ? message : null),
+      course_id: course?.id || null,
+      drive_admin_email: process.env.GOOGLE_CLIENT_EMAIL || null,
       request_id,
-      time: new Date().toISOString()
+      time: now,
+      created_at: now,
+      updated_at: now
     });
   } catch (err) {
     console.error("Failed to write to drive_permission_logs:", err.message);
@@ -1025,12 +1037,18 @@ async function writeDrivePermissionLog(supabase, {
 }) {
   const cleanEmail = normalizeEmail(email);
   const now = new Date().toISOString();
+  let resolvedCourseId = courseId;
+  if (!resolvedCourseId) {
+    const course = await getCourseIdBySlug(supabase, courseSlug);
+    resolvedCourseId = course?.id || null;
+  }
+
   try {
     const { error } = await supabase.from("drive_permission_logs").insert({
       student_email: cleanEmail,
       email: cleanEmail,
       course_slug: courseSlug,
-      course_id: courseId,
+      course_id: resolvedCourseId,
       drive_folder_id: folderId,
       folder_id: folderId,
       drive_admin_email: adminEmail,
@@ -1039,7 +1057,9 @@ async function writeDrivePermissionLog(supabase, {
       status,
       error_code: errorCode,
       error_message: errorMessage,
-      message: errorMessage || (status === "success" || status === "SUCCESS" ? "Drive permission success" : ""),
+      message: (status === "success" || status === "SUCCESS")
+        ? (action === "create" ? "Cấp quyền Drive thành công" : "Thu hồi quyền Drive thành công")
+        : (action === "create" ? "Cấp quyền Drive thất bại" : "Thu hồi quyền Drive thất bại"),
       retry_count: retryCount,
       last_retry_at: retryCount > 0 ? now : null,
       updated_at: now,
@@ -1048,13 +1068,17 @@ async function writeDrivePermissionLog(supabase, {
     });
     if (error) throw error;
   } catch (err) {
+    console.error("[writeDrivePermissionLog] First insert failed, falling back to legacy log wrapper:", err.message);
     await writeDriveLog(supabase, {
       course_slug: courseSlug,
       folder_id: folderId,
       email: cleanEmail,
       action,
-      status: status === "success" ? "SUCCESS" : "FAILED",
-      message: [adminEmail ? `Admin: ${adminEmail}` : "", errorMessage || status].filter(Boolean).join(" | "),
+      status: (status === "success" || status === "SUCCESS") ? "success" : "failed",
+      message: (status === "success" || status === "SUCCESS")
+        ? (action === "create" ? "Cấp quyền Drive thành công" : "Thu hồi quyền Drive thành công")
+        : (action === "create" ? "Cấp quyền Drive thất bại" : "Thu hồi quyền Drive thất bại"),
+      error_message: [adminEmail ? `Admin: ${adminEmail}` : "", errorMessage || status].filter(Boolean).join(" | "),
       request_id: requestId
     });
   }
@@ -1106,6 +1130,49 @@ async function getCourseIdBySlug(supabase, courseSlug) {
   }
 }
 
+async function ensureAdminHasFolderAccess(supabase, folderId, adminEmail) {
+  try {
+    const { drive } = await getGoogleDriveClient(supabase);
+
+    // 1. List permissions to check if the admin already has Editor or Owner access
+    let existingPermissions = [];
+    try {
+      const listRes = await drive.permissions.list({
+        fileId: folderId,
+        fields: "permissions(id, emailAddress, role)",
+        supportsAllDrives: true
+      });
+      existingPermissions = listRes.data.permissions || [];
+    } catch (listErr) {
+      console.warn(`[drive-admin-pool] Could not list permissions to check admin access:`, listErr.message);
+    }
+
+    const matched = existingPermissions.find(
+      p => p.emailAddress && p.emailAddress.toLowerCase().trim() === adminEmail.toLowerCase().trim()
+    );
+
+    if (matched && (matched.role === "writer" || matched.role === "owner")) {
+      // Admin already has Editor/Owner access, skip sharing API call!
+      return;
+    }
+
+    // 2. Grant writer permission if not present, do not send email notification
+    await drive.permissions.create({
+      fileId: folderId,
+      requestBody: {
+        role: "writer",
+        type: "user",
+        emailAddress: adminEmail
+      },
+      supportsAllDrives: true,
+      sendNotificationEmail: false
+    });
+    console.log(`[drive-admin-pool] Proactively shared folder ${folderId} with admin ${adminEmail} as Editor`);
+  } catch (err) {
+    console.warn(`[drive-admin-pool] Could not proactively share folder ${folderId} with admin ${adminEmail}:`, err.message);
+  }
+}
+
 async function syncGoogleDrivePermissionWithAdminPool(supabase, { email, courseSlug, action }) {
   const cleanEmail = normalizeEmail(email);
   const actionName = action === "create" || action === "syncEnrollment" ? "create" : "revoke";
@@ -1144,6 +1211,9 @@ async function syncGoogleDrivePermissionWithAdminPool(supabase, { email, courseS
       if (!folderId) {
         throw new Error(`Thư mục khóa học chưa được cấu hình Drive cho slug: ${courseSlug}`);
       }
+
+      // Proactively ensure the admin account has Editor/Writer access to the folder via main service account
+      await ensureAdminHasFolderAccess(supabase, folderId, account.email);
 
       if (actionName === "create") {
         let existingPermissionId = null;
@@ -1322,8 +1392,9 @@ async function syncGoogleDrivePermissionLegacy(supabase, { email, courseSlug, ac
       folder_id: null,
       email: cleanEmail,
       action: actionName,
-      status: "FAILED",
-      message: errorMsg
+      status: "failed",
+      message: actionName === "create" ? "Cấp quyền Drive thất bại" : "Thu hồi quyền Drive thất bại",
+      error_message: errorMsg
     });
     await addToDriveSyncQueue(supabase, { email: cleanEmail, course_slug: courseSlug, action: actionName, error: errorMsg });
     return { success: false, error: errorMsg };
@@ -1339,8 +1410,9 @@ async function syncGoogleDrivePermissionLegacy(supabase, { email, courseSlug, ac
       folder_id: folderId,
       email: cleanEmail,
       action: actionName,
-      status: "FAILED",
-      message: errorMsg
+      status: "failed",
+      message: actionName === "create" ? "Cấp quyền Drive thất bại" : "Thu hồi quyền Drive thất bại",
+      error_message: errorMsg
     });
     await addToDriveSyncQueue(supabase, { email: cleanEmail, course_slug: courseSlug, action: actionName, error: errorMsg });
     return { success: false, error: errorMsg };
@@ -1372,8 +1444,16 @@ async function syncGoogleDrivePermissionLegacy(supabase, { email, courseSlug, ac
             folder_id: folderId,
             email: cleanEmail,
             action: actionName,
-            status: "SUCCESS",
+            status: "success",
             message: "Gmail đã được chia sẻ trước đó (bỏ qua)"
+          });
+          await safeUpdateEnrollmentDriveState(supabase, {
+            email: cleanEmail,
+            courseSlug,
+            status: "success",
+            folderId,
+            errorMessage: null,
+            retryCount: attempt
           });
           return { success: true, skipped: true };
         }
@@ -1388,8 +1468,16 @@ async function syncGoogleDrivePermissionLegacy(supabase, { email, courseSlug, ac
         folder_id: folderId,
         email: cleanEmail,
         action: actionName,
-        status: "SUCCESS",
+        status: "success",
         message: actionName === "create" ? "Cấp quyền Drive thành công" : "Thu hồi quyền Drive thành công"
+      });
+      await safeUpdateEnrollmentDriveState(supabase, {
+        email: cleanEmail,
+        courseSlug,
+        status: actionName === "create" ? "success" : "revoked",
+        folderId,
+        errorMessage: null,
+        retryCount: attempt
       });
       return { success: true };
     } catch (err) {
@@ -1408,8 +1496,18 @@ async function syncGoogleDrivePermissionLegacy(supabase, { email, courseSlug, ac
     folder_id: folderId,
     email: cleanEmail,
     action: actionName,
-    status: "FAILED",
-    message: `Thất bại sau 3 lần thử. Chi tiết: ${finalErrorMsg}`
+    status: "failed",
+    message: actionName === "create" ? "Cấp quyền Drive thất bại" : "Thu hồi quyền Drive thất bại",
+    error_message: `Thất bại sau 3 lần thử. Chi tiết: ${finalErrorMsg}`
+  });
+
+  await safeUpdateEnrollmentDriveState(supabase, {
+    email: cleanEmail,
+    courseSlug,
+    status: "failed",
+    folderId,
+    errorMessage: finalErrorMsg,
+    retryCount: attempt
   });
 
   await addToDriveSyncQueue(supabase, {
