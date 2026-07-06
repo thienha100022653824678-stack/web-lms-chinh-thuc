@@ -56,3 +56,15 @@ This document lists critical components, configurations, and logic paths that mu
   - Breaking `is_section` can corrupt Chapter/Lesson display and navigation.
   - Breaking `materials` can hide or lose attached documents.
 - **Secret handling**: Never paste Supabase keys, service role keys, anon keys, or pulled env values into handover docs, terminal summaries, commits, or chat.
+
+## 7. Final Antigravity Resume Guardrails - 2026-07-06
+- Current handover is from Codex/Coex back to Antigravity.
+- Latest pushed commit at handover: `7d5e92b3a5cf8022865cf1798500237078ab19e8` (`chore: add Drive refresh token helper script`).
+- Git baseline: branch `main`, local even with `origin/main`, working tree clean, no untracked files.
+- Drive admin refresh tokens are secret Vercel ENV values if the Drive admin permission pool is used:
+  - `DRIVE_ADMIN_1_REFRESH_TOKEN`
+  - `DRIVE_ADMIN_2_REFRESH_TOKEN`
+  - `DRIVE_ADMIN_3_REFRESH_TOKEN`
+- `scripts/generate-drive-refresh-token.js` is only a local helper. It contains no real token, but when run it prints a generated token in the terminal. Never write generated token values into docs, commits, logs, or chat.
+- Immediate next audits should focus on Student LMS shortened links, Chapter/Lesson display, and lesson count consistency.
+- Do not break Google OAuth, session/cookie restore, `/api/sync`, or the Supabase A/B boundary while auditing these areas.

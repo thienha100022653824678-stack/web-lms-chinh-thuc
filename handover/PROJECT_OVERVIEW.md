@@ -59,3 +59,42 @@ web-lms-chinh-thuc/
 - Supabase B org: `thienha336501903-a11y's Org`.
 - Supabase B project ref: `aqozjkfwzmyfunqvcyjv`.
 - Before changing database code, sync code, or schema, confirm which Supabase is affected.
+
+## 7. Final Codex/Coex to Antigravity Handover - 2026-07-06
+- This is the final handover from Codex/Coex back to Antigravity for continued development.
+- Latest pushed commit: `7d5e92b3a5cf8022865cf1798500237078ab19e8`
+- Latest commit message: `chore: add Drive refresh token helper script`
+- Git status at handover:
+  - Branch: `main`
+  - Local is even with `origin/main`
+  - Working tree is clean
+  - No untracked files
+- Recent Codex/Coex work includes:
+  - Student LMS link display, chapter metadata, and lesson numbering polish.
+  - Separate student-facing course title via `student_display_title` while preserving sales/admin title.
+  - Recipe sync fixes from LMS to Student Portal.
+  - Lesson media bulk upload.
+  - Per-media captions.
+  - Drive admin permission pool.
+  - Google Drive cookie guidance for students.
+- New operations helper:
+  - `scripts/generate-drive-refresh-token.js`
+  - Purpose: create a Google OAuth URL, receive a local callback, and exchange the OAuth code for a `refresh_token` for the Drive admin pool.
+  - The script does not contain real tokens.
+  - When run, it prints the generated refresh token in the local terminal.
+  - Real tokens must only be configured in Vercel ENV as `DRIVE_ADMIN_1_REFRESH_TOKEN`, `DRIVE_ADMIN_2_REFRESH_TOKEN`, and `DRIVE_ADMIN_3_REFRESH_TOKEN`.
+- Supabase status:
+  - Runtime uses Supabase B.
+  - Supabase B project ref: `aqozjkfwzmyfunqvcyjv`.
+  - Supabase B org: `thienha336501903-a11y's Org`.
+  - Supabase A is the old Portal/legacy database.
+- Env still needing attention:
+  - `BUNNY_STREAM_TOKEN_KEY` if Bunny secured playback is used.
+  - `DRIVE_ADMIN_1_REFRESH_TOKEN`, `DRIVE_ADMIN_2_REFRESH_TOKEN`, and `DRIVE_ADMIN_3_REFRESH_TOKEN` if the Drive admin permission pool is used.
+- Migration note:
+  - `migration_drive_admin_pool.sql` must be run against Supabase if it has not already been applied.
+- Next Antigravity tasks:
+  - Audit shortened links in Student LMS.
+  - Audit Chapter/Lesson display.
+  - Standardize lesson counts and numbering.
+  - Do not break OAuth, session/cookie restore, or sync boundaries.

@@ -49,3 +49,38 @@ This is the task list for the incoming AI developer.
 ### [ ] Local draft auto-save in CMS
 - **Target Files**: `lms-admin.html`
 - **Objective**: Auto-save drafts to `localStorage` when creating/editing lessons in case of accidental reload.
+
+---
+
+## Final Antigravity Resume Tasks - Updated 2026-07-06
+
+### [ ] Audit Student LMS shortened links
+- Confirm shortened link display still preserves the original `href`.
+- Check recipe and description links in Student LMS listing/detail views.
+
+### [ ] Audit Chapter/Lesson display
+- Verify Chapter/Section metadata for lessons under `lessons.is_section`.
+- Confirm lesson detail headers, listing cards, and admin display agree.
+
+### [ ] Standardize lesson counts and numbering
+- Confirm lesson counts exclude Section records.
+- Confirm `displayLesson` restarts under each Chapter and does not overwrite database `lesson_no`.
+
+### [ ] Complete remaining env/migration operations if used
+- Configure `BUNNY_STREAM_TOKEN_KEY` if Bunny secured playback is used.
+- Configure `DRIVE_ADMIN_1_REFRESH_TOKEN`, `DRIVE_ADMIN_2_REFRESH_TOKEN`, and `DRIVE_ADMIN_3_REFRESH_TOKEN` in Vercel ENV if using the Drive admin permission pool.
+- Use `scripts/generate-drive-refresh-token.js` to generate Drive admin refresh tokens locally. The script contains no real token but prints the generated token in the terminal when run.
+- Run `migration_drive_admin_pool.sql` against Supabase if it has not already been applied.
+- Never commit or document secret values.
+
+### Do not break while doing the above
+- Google OAuth.
+- Session/cookie restore.
+- `/api/sync`.
+- Supabase A/B boundary.
+- `course_slug` mapping.
+- `student_enrollments`.
+- `orders` / `source_order_id`.
+- `sync_lms_status`, `sync_portal_status`, `sync_error`.
+- `lessons.is_section`.
+- `lessons.materials`.

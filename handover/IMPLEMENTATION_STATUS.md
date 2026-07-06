@@ -1,6 +1,6 @@
 # Project Handover: IMPLEMENTATION_STATUS.md
 
-This document summarizes the current status of all features in the LMS system as of the latest verified production commit `c5f87d2a1f20302e8f37baaafa820fca810cd33c`.
+This document summarizes the current status of all features in the LMS system as of the latest pushed commit `7d5e92b3a5cf8022865cf1798500237078ab19e8`.
 
 ---
 
@@ -21,6 +21,47 @@ This document summarizes the current status of all features in the LMS system as
 ---
 
 ## 2. Details of Key Statuses
+
+### Final Codex/Coex to Antigravity Handover - 2026-07-06
+- This is the final handover from Codex/Coex back to Antigravity.
+- **Latest pushed commit**: `7d5e92b3a5cf8022865cf1798500237078ab19e8`
+- **Commit message**: `chore: add Drive refresh token helper script`
+- **Git status at handover**:
+  - Branch: `main`
+  - Local `main` is even with `origin/main`
+  - Working tree is clean
+  - No untracked files
+- **Recent Codex/Coex work**:
+  - Student LMS link/chapter/lesson numbering polish.
+  - `student_display_title` support while preserving the original sales/admin course title.
+  - Recipe sync fixes to Student Portal.
+  - Media bulk upload.
+  - Media captions.
+  - Drive admin permission pool.
+  - Google Drive cookie guidance for students.
+- **Drive refresh token helper script**:
+  - File: `scripts/generate-drive-refresh-token.js`
+  - Purpose: create a Google OAuth URL, receive the local callback, and exchange the OAuth code for a Drive admin `refresh_token`.
+  - The script contains no real token.
+  - When run, it prints the generated refresh token in the local terminal.
+  - Real tokens must only be configured in Vercel ENV: `DRIVE_ADMIN_1_REFRESH_TOKEN`, `DRIVE_ADMIN_2_REFRESH_TOKEN`, `DRIVE_ADMIN_3_REFRESH_TOKEN`.
+- **Supabase status**:
+  - Runtime uses Supabase B.
+  - Supabase B project ref: `aqozjkfwzmyfunqvcyjv`.
+  - Supabase B org: `thienha336501903-a11y's Org`.
+  - Supabase A remains the old Portal/legacy database.
+- **Env still needing configuration if used**:
+  - `BUNNY_STREAM_TOKEN_KEY`
+  - `DRIVE_ADMIN_1_REFRESH_TOKEN`
+  - `DRIVE_ADMIN_2_REFRESH_TOKEN`
+  - `DRIVE_ADMIN_3_REFRESH_TOKEN`
+- **Migration note**:
+  - Run `migration_drive_admin_pool.sql` on Supabase if it has not already been applied.
+- **Next tasks for Antigravity**:
+  - Audit shortened links in Student LMS.
+  - Audit Chapter/Lesson display.
+  - Standardize lesson counts and numbering.
+  - Do not break OAuth, session/cookie restore, or sync.
 
 ### Codex Takeover Update - 2026-07-03
 - **Pushed commit**: `c5f87d2a1f20302e8f37baaafa820fca810cd33c`

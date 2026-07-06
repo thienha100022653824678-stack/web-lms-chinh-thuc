@@ -4,6 +4,33 @@ This document tracks all files modified during the styling, numbering, and navig
 
 ---
 
+## Final Codex/Coex to Antigravity Update - 2026-07-06
+- Latest pushed commit: `7d5e92b3a5cf8022865cf1798500237078ab19e8`
+- Commit message: `chore: add Drive refresh token helper script`
+- Git status at handover: branch `main`, local even with `origin/main`, working tree clean, no untracked files.
+- Recent Codex/Coex work covered:
+  - Student LMS link/chapter/lesson numbering.
+  - `student_display_title` and course title separation.
+  - Recipe sync to Student Portal.
+  - Media bulk upload.
+  - Media captions.
+  - Drive admin permission pool.
+  - Google Drive cookie guidance.
+
+### New Operations Script
+- File: `scripts/generate-drive-refresh-token.js`
+- Purpose: create a Google OAuth URL, receive the local callback, and exchange the OAuth code for a Drive admin `refresh_token`.
+- The script does not contain a real token.
+- When run, it prints the generated refresh token in the local terminal.
+- Real tokens must only be configured in Vercel ENV:
+  - `DRIVE_ADMIN_1_REFRESH_TOKEN`
+  - `DRIVE_ADMIN_2_REFRESH_TOKEN`
+  - `DRIVE_ADMIN_3_REFRESH_TOKEN`
+
+### Migration Note
+- File: `migration_drive_admin_pool.sql`
+- Run this migration against Supabase if the Drive admin permission pool tables/status fields have not already been applied.
+
 ## 1. Backend API Handlers
 
 ### 📄 [`utils/lms-handlers/course-data.js`](file:///C:/Users/gaomi/Downloads/Telegram%20Desktop/web-ban-hang-chinh-thuc/web-lms-chinh-thuc/utils/lms-handlers/course-data.js)
