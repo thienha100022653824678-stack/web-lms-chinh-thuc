@@ -32,8 +32,9 @@ export default async function handler(req, res) {
       if (!enrollment) {
         return res.status(404).json({ success: false, error: "Không tìm thấy phân quyền học viên" });
       }
-      if (enrollment.status !== "active") {
-        return res.status(400).json({ success: false, error: "Chỉ cấp lại Drive cho enrollment đang Active" });
+      const ACTIVE_ENROLLMENT_STATUSES = ["active", "approved", "approved_ready", "approved_waiting_content", "completed", "da duyet"];
+      if (!ACTIVE_ENROLLMENT_STATUSES.includes(enrollment.status)) {
+        return res.status(400).json({ success: false, error: "Chỉ cấp lại Drive cho học viên có quyền học hợp lệ trên LMS" });
       }
       targetEmail = normalizeEmail(enrollment.email);
       targetCourseSlug = String(enrollment.course_slug || "").trim();

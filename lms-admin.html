@@ -447,7 +447,8 @@
               <h2 class="text-lg font-extrabold text-slate-800">Cấp Quyền Học Viên (Enrollments)</h2>
               <p class="text-xs text-slate-500">Quản lý và kích hoạt quyền truy cập của học viên vào từng lớp học cụ thể.</p>
             </div>
-            <div class="flex gap-2 shrink-0">
+            <div class="flex gap-2 shrink-0 flex-wrap">
+              <button onclick="retryCourseDrive()" class="bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold px-4 py-2.5 rounded-xl transition shadow-md">🔁 Retry Drive lỗi khóa này</button>
               <button onclick="openBulkEnrollModal()" class="bg-brandOrange hover:bg-orange-600 text-white text-sm font-bold px-4 py-2.5 rounded-xl transition shadow-md shadow-brandOrange/10">+ Cấp quyền hàng loạt</button>
               <button onclick="openEnrollModal()" class="bg-brandGreen hover:bg-brandGreenLight text-white text-sm font-bold px-4 py-2.5 rounded-xl transition shadow-md">🔑 Cấp quyền mới</button>
             </div>
@@ -493,12 +494,16 @@
               <p class="text-xs text-slate-500">Giám sát trạng thái cấp quyền Drive, danh sách lỗi đồng bộ và sức khỏe Drive Admin Pool.</p>
             </div>
             
-            <!-- Date range selector -->
-            <div class="flex bg-slate-100 p-1 rounded-xl shrink-0 text-xs font-bold gap-1">
-              <button onclick="setDriveHealthRange('today')" id="btnRange-today" class="px-3 py-1.5 rounded-lg transition-all text-slate-600">Hôm nay</button>
-              <button onclick="setDriveHealthRange('7d')" id="btnRange-7d" class="px-3 py-1.5 rounded-lg transition-all text-slate-600">7 ngày</button>
-              <button onclick="setDriveHealthRange('30d')" id="btnRange-30d" class="px-3 py-1.5 rounded-lg transition-all text-slate-600">30 ngày</button>
-              <button onclick="setDriveHealthRange('all_errors')" id="btnRange-all_errors" class="px-3 py-1.5 rounded-lg transition-all text-slate-600">Tất cả lỗi</button>
+            <div class="flex items-center gap-3 shrink-0 flex-wrap">
+              <button onclick="retryAllDriveErrors()" class="bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition shadow-md shadow-rose-600/10">🚨 Retry tất cả lỗi Drive</button>
+              
+              <!-- Date range selector -->
+              <div class="flex bg-slate-100 p-1 rounded-xl text-xs font-bold gap-1">
+                <button onclick="setDriveHealthRange('today')" id="btnRange-today" class="px-3 py-1.5 rounded-lg transition-all text-slate-600">Hôm nay</button>
+                <button onclick="setDriveHealthRange('7d')" id="btnRange-7d" class="px-3 py-1.5 rounded-lg transition-all text-slate-600">7 ngày</button>
+                <button onclick="setDriveHealthRange('30d')" id="btnRange-30d" class="px-3 py-1.5 rounded-lg transition-all text-slate-600">30 ngày</button>
+                <button onclick="setDriveHealthRange('all_errors')" id="btnRange-all_errors" class="px-3 py-1.5 rounded-lg transition-all text-slate-600">Tất cả lỗi</button>
+              </div>
             </div>
           </div>
 
@@ -3216,7 +3221,7 @@
       const updatedAt = e.drive_permission_updated_at ? new Date(e.drive_permission_updated_at).toLocaleString("vi-VN") : "";
       let label = "Chưa đồng bộ Drive";
       let badgeClass = "bg-slate-100 text-slate-600 border-slate-200";
-      let showRetry = e.status === "active";
+      let showRetry = e.status === "active" && ["failed", "pending_retry", "error", "quota_limited"].includes(status);
 
       if (status === "success") {
         label = "Drive: Đã cấp quyền";
@@ -3664,6 +3669,7 @@
 
     async function retryDrivePermission(id) {
       if (!id) return;
+      if (!confirm("Bạn có chắc chắn muốn chạy lại cấp quyền Drive cho học viên này?")) return;
       showLoader("Đang cấp lại quyền Drive...");
       try {
         const res = await fetch("/api/lms/admin?endpoint=drive-permission", {
@@ -3683,6 +3689,69 @@
       } catch (err) {
         console.error(err);
         toast("Lỗi kết nối khi cấp lại quyền Drive", "error");
+      } finally {
+        hideLoader();
+      }
+    }
+
+    async function retryCourseDrive() {
+      if (!selectedCourseFilter) {
+        alert("Vui lòng chọn một khóa học cụ thể ở ô tìm kiếm/lọc trước khi thực hiện retry toàn khóa.");
+        return;
+      }
+
+      if (!confirm(`Bạn có chắc chắn muốn chạy lại quyền Drive cho toàn bộ học viên đang bị lỗi của khóa học ${selectedCourseFilter.toUpperCase()}?`)) {
+        return;
+      }
+
+      showLoader("Đang chạy lại quyền Drive cho khóa...");
+      try {
+        const res = await fetch("/api/lms/admin?endpoint=drive-retry", {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify({ type: "course", courseSlug: selectedCourseFilter })
+        });
+        const d = await res.json();
+        if (res.ok && d.success) {
+          alert(`Đã hoàn tất retry toàn khóa!\n- Tổng số lỗi tìm thấy: ${d.report.processed}\n- Thành công: ${d.report.success}\n- Thất bại: ${d.report.failed}`);
+          searchEnrollments();
+        } else {
+          alert(d.error || "Gặp lỗi khi retry toàn khóa");
+        }
+      } catch (err) {
+        console.error(err);
+        toast("Lỗi kết nối khi retry toàn khóa", "error");
+      } finally {
+        hideLoader();
+      }
+    }
+
+    async function retryAllDriveErrors() {
+      if (!confirm("CẢNH BÁO: Hành động này sẽ chạy lại cấp quyền Drive cho TẤT CẢ học viên đang gặp lỗi trên toàn bộ hệ thống. Bạn có chắc muốn tiếp tục?")) {
+        return;
+      }
+
+      showLoader("Đang xử lý cấp lại tất cả lỗi Drive...");
+      try {
+        const res = await fetch("/api/lms/admin?endpoint=drive-retry", {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify({ type: "all" })
+        });
+        const d = await res.json();
+        if (res.ok && d.success) {
+          alert(`Đã hoàn tất cấp lại tất cả lỗi Drive!\n- Tổng số lỗi tìm thấy: ${d.report.processed}\n- Thành công: ${d.report.success}\n- Thất bại: ${d.report.failed}`);
+          if (activeTab === "drive-health") {
+            loadDriveHealth();
+          } else {
+            searchEnrollments();
+          }
+        } else {
+          alert(d.error || "Gặp lỗi khi cấp lại toàn bộ lỗi");
+        }
+      } catch (err) {
+        console.error(err);
+        toast("Lỗi kết nối khi cấp lại toàn bộ lỗi", "error");
       } finally {
         hideLoader();
       }
