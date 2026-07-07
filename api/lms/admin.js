@@ -12,6 +12,7 @@ import adminUploadMaterialHandler from "../../utils/lms-handlers/admin-upload-ma
 import adminSyncDrivePermissionsHandler from "../../utils/lms-handlers/admin-sync-drive-permissions.js";
 import adminRepairDriveHandler from "../../utils/lms-handlers/admin-repair-drive.js";
 import adminDrivePermissionHandler from "../../utils/lms-handlers/admin-drive-permission.js";
+import adminDriveHealthHandler from "../../utils/lms-handlers/admin-drive-health.js";
 
 export const config = {
   api: {
@@ -65,6 +66,9 @@ export default async function handler(req, res) {
   }
   if (endpoint === "drive-permission") {
     return adminDrivePermissionHandler(req, res);
+  }
+  if (endpoint === "drive-health") {
+    return adminDriveHealthHandler(req, res);
   }
 
   return res.status(404).json({ success: false, error: "LMS Admin Endpoint not found" });

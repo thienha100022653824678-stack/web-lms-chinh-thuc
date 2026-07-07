@@ -114,6 +114,9 @@
         <button onclick="switchTab('enrollments')" id="tabBtn-enrollments" class="tab-btn flex-grow lg:flex-none flex items-center justify-center lg:justify-start gap-2.5 py-4 lg:py-3 px-5 text-sm font-bold border-b-2 lg:border-b-0 lg:border-l-4 border-transparent text-slate-500 hover:bg-slate-50 transition">
           🔑 Phân Quyền
         </button>
+        <button onclick="switchTab('drive-health')" id="tabBtn-drive-health" class="tab-btn flex-grow lg:flex-none flex items-center justify-center lg:justify-start gap-2.5 py-4 lg:py-3 px-5 text-sm font-bold border-b-2 lg:border-b-0 lg:border-l-4 border-transparent text-slate-500 hover:bg-slate-50 transition">
+          🏥 Sức Khỏe Drive
+        </button>
       </aside>
 
       <!-- Main Panel Workspace -->
@@ -477,6 +480,145 @@
                 <!-- Dynamically populated -->
               </tbody>
             </table>
+          </div>
+        </div>
+
+        <!-- ── TAB: DRIVE HEALTH ── -->
+        <div id="tabContent-drive-health" class="tab-content hidden flex-grow bg-slate-50 border border-slate-200 rounded-2xl p-5 shadow-sm space-y-6">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200">
+            <div>
+              <h2 class="text-lg font-extrabold text-slate-800 flex items-center gap-2">
+                <span>🏥 Sức Khỏe Hệ Thống Google Drive (Drive Health)</span>
+              </h2>
+              <p class="text-xs text-slate-500">Giám sát trạng thái cấp quyền Drive, danh sách lỗi đồng bộ và sức khỏe Drive Admin Pool.</p>
+            </div>
+            
+            <!-- Date range selector -->
+            <div class="flex bg-slate-100 p-1 rounded-xl shrink-0 text-xs font-bold gap-1">
+              <button onclick="setDriveHealthRange('today')" id="btnRange-today" class="px-3 py-1.5 rounded-lg transition-all text-slate-600">Hôm nay</button>
+              <button onclick="setDriveHealthRange('7d')" id="btnRange-7d" class="px-3 py-1.5 rounded-lg transition-all text-slate-600">7 ngày</button>
+              <button onclick="setDriveHealthRange('30d')" id="btnRange-30d" class="px-3 py-1.5 rounded-lg transition-all text-slate-600">30 ngày</button>
+              <button onclick="setDriveHealthRange('all_errors')" id="btnRange-all_errors" class="px-3 py-1.5 rounded-lg transition-all text-slate-600">Tất cả lỗi</button>
+            </div>
+          </div>
+
+          <!-- Stats Grid -->
+          <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col justify-between">
+              <span class="text-xs font-semibold text-slate-400 uppercase">Tổng lượt thử cấp quyền</span>
+              <span id="healthStat-total" class="text-2xl font-black text-slate-700 mt-2">-</span>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col justify-between">
+              <span class="text-xs font-semibold text-slate-400 uppercase">Cấp thành công</span>
+              <span id="healthStat-success" class="text-2xl font-black text-emerald-600 mt-2">-</span>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col justify-between">
+              <span class="text-xs font-semibold text-slate-400 uppercase">Cấp thất bại (Logs)</span>
+              <span id="healthStat-failed" class="text-2xl font-black text-rose-600 mt-2">-</span>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col justify-between">
+              <span class="text-xs font-semibold text-slate-400 uppercase">Đang chờ thử lại (Logs)</span>
+              <span id="healthStat-pendingRetry" class="text-2xl font-black text-amber-500 mt-2">-</span>
+            </div>
+            <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col justify-between col-span-2 lg:col-span-1">
+              <span class="text-xs font-semibold text-slate-400 uppercase">Tổng Enrollment lỗi Drive</span>
+              <span id="healthStat-enrollmentErrors" class="text-2xl font-black text-rose-700 mt-2">-</span>
+            </div>
+          </div>
+
+          <!-- Admin Pool Health & Courses missing folder -->
+          <div class="grid lg:grid-cols-[1fr_380px] gap-6">
+            <!-- Left side: Admin pool details -->
+            <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+              <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div>
+                  <h3 class="text-sm font-bold text-slate-800">Cấu hình Drive Admin Pool</h3>
+                  <p class="text-[11px] text-slate-500">Danh sách tài khoản phụ thực hiện phân quyền GDrive học viên.</p>
+                </div>
+                <div class="flex gap-2">
+                  <span id="badge-activeAdmins" class="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-bold">Active: -</span>
+                  <span id="badge-quotaAdmins" class="text-[10px] bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-bold">Limited: -</span>
+                  <span id="badge-errorAdmins" class="text-[10px] bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-full font-bold">Error: -</span>
+                </div>
+              </div>
+
+              <!-- Admin Pool Accounts List -->
+              <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr class="text-slate-400 uppercase border-b border-slate-100">
+                      <th class="py-2.5 font-bold">Email</th>
+                      <th class="py-2.5 font-bold text-center">Trạng thái</th>
+                      <th class="py-2.5 font-bold text-center">Lượt chia sẻ trong ngày</th>
+                      <th class="py-2.5 font-bold">Lỗi gần nhất</th>
+                    </tr>
+                  </thead>
+                  <tbody id="healthAdminPoolTableBody">
+                    <!-- Loaded dynamically -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Right side: Courses with lessons but missing folder ID -->
+            <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4 flex flex-col">
+              <div class="border-b border-slate-100 pb-3">
+                <h3 class="text-sm font-bold text-slate-800">Khóa học thiếu drive_folder_id</h3>
+                <p class="text-[11px] text-slate-500">Khóa đã có bài học (lessons) nhưng chưa cấu hình thư mục Drive.</p>
+              </div>
+              <div class="flex-grow overflow-y-auto max-h-[220px]">
+                <ul id="healthMissingFolderList" class="space-y-2.5 text-xs text-slate-600">
+                  <!-- Loaded dynamically -->
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- Detailed Error Lists (Collapsible or side by side) -->
+          <div class="grid lg:grid-cols-2 gap-6">
+            <!-- Left: Recent logs errors -->
+            <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+              <div class="border-b border-slate-100 pb-3">
+                <h3 class="text-sm font-bold text-slate-800">Nhật ký Lỗi Cấp Quyền Gần Nhất (Logs)</h3>
+                <p class="text-[11px] text-slate-500">30 log thất bại hoặc pending_retry gần nhất.</p>
+              </div>
+              <div class="overflow-y-auto max-h-[350px]">
+                <table class="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr class="text-slate-400 uppercase border-b border-slate-100">
+                      <th class="py-2 font-bold">Học viên / Khóa</th>
+                      <th class="py-2 font-bold">Lỗi</th>
+                      <th class="py-2 font-bold text-right">Thời gian</th>
+                    </tr>
+                  </thead>
+                  <tbody id="healthRecentErrorsTableBody">
+                    <!-- Loaded dynamically -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Right: Student Enrollments with active error states -->
+            <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+              <div class="border-b border-slate-100 pb-3">
+                <h3 class="text-sm font-bold text-slate-800">Học Viên Đang Lỗi Quyền Drive (Enrollments)</h3>
+                <p class="text-[11px] text-slate-500">Danh sách học viên có enrollment nhưng chưa có quyền Drive.</p>
+              </div>
+              <div class="overflow-y-auto max-h-[350px]">
+                <table class="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr class="text-slate-400 uppercase border-b border-slate-100">
+                      <th class="py-2 font-bold">Học viên / Khóa</th>
+                      <th class="py-2 font-bold">Trạng thái Drive</th>
+                      <th class="py-2 font-bold">Chi tiết lỗi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="healthErrorEnrollmentsTableBody">
+                    <!-- Loaded dynamically -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1012,6 +1154,8 @@
       } else if (tabId === "enrollments") {
         const search = document.getElementById("enrollSearchInput") ? document.getElementById("enrollSearchInput").value.trim() : "";
         loadEnrollments(selectedCourseFilter, search);
+      } else if (tabId === "drive-health") {
+        loadDriveHealth();
       }
     }
 
@@ -3738,6 +3882,165 @@
         activeEl.focus();
       }
     });
+    let currentDriveHealthRange = '7d';
+
+    async function loadDriveHealth() {
+      // Highlight active range button
+      document.querySelectorAll("[id^='btnRange-']").forEach(btn => {
+        btn.classList.remove("bg-white", "shadow-sm", "text-slate-800");
+        btn.classList.add("text-slate-600");
+      });
+      const activeBtn = document.getElementById(`btnRange-${currentDriveHealthRange}`);
+      if (activeBtn) {
+        activeBtn.classList.remove("text-slate-600");
+        activeBtn.classList.add("bg-white", "shadow-sm", "text-slate-800");
+      }
+
+      showLoader("Đang tải dữ liệu Sức khỏe Drive...");
+      try {
+        const res = await fetch(`/api/lms/admin?endpoint=drive-health&range=${currentDriveHealthRange}`, {
+          method: "GET",
+          headers: authHeaders()
+        });
+        const d = await res.json();
+        
+        if (res.ok && d.success) {
+          // Render stats
+          document.getElementById("healthStat-total").innerText = d.stats.totalAttempts;
+          document.getElementById("healthStat-success").innerText = d.stats.success;
+          document.getElementById("healthStat-failed").innerText = d.stats.failed;
+          document.getElementById("healthStat-pendingRetry").innerText = d.stats.pendingRetry;
+          document.getElementById("healthStat-enrollmentErrors").innerText = d.stats.enrollmentErrors;
+
+          // Render admin badges
+          document.getElementById("badge-activeAdmins").innerText = `Active: ${d.adminPool.active}`;
+          document.getElementById("badge-quotaAdmins").innerText = `Limited: ${d.adminPool.quotaLimited}`;
+          document.getElementById("badge-errorAdmins").innerText = `Error: ${d.adminPool.error}`;
+
+          // Render Admin Pool Accounts Table
+          const poolTable = document.getElementById("healthAdminPoolTableBody");
+          poolTable.innerHTML = "";
+          if (d.adminPool.accounts.length === 0) {
+            poolTable.innerHTML = `<tr><td colspan="4" class="py-4 text-center text-slate-400">Không có tài khoản admin nào trong pool</td></tr>`;
+          } else {
+            d.adminPool.accounts.forEach(acc => {
+              const statusStr = String(acc.status || "active").toLowerCase().trim();
+              let badgeColor = "bg-emerald-50 text-emerald-700 border-emerald-200";
+              if (statusStr === "quota_limited") {
+                badgeColor = "bg-amber-50 text-amber-700 border-amber-200";
+              } else if (statusStr === "error") {
+                badgeColor = "bg-rose-50 text-rose-700 border-rose-200";
+              }
+
+              const errorMsg = acc.last_error ? `${acc.last_error} (${new Date(acc.last_error_at).toLocaleString('vi-VN')})` : "-";
+
+              poolTable.innerHTML += `
+                <tr class="border-b border-slate-50 hover:bg-slate-50/50">
+                  <td class="py-3 font-semibold text-slate-700">${escapeHtml(acc.email)}</td>
+                  <td class="py-3 text-center">
+                    <span class="inline-block px-2.5 py-0.5 rounded-full border text-[10px] font-bold ${badgeColor}">
+                      ${escapeHtml(acc.status || "active").toUpperCase()}
+                    </span>
+                  </td>
+                  <td class="py-3 text-center text-slate-600 font-bold">${acc.daily_share_count || 0} Lượt</td>
+                  <td class="py-3 text-slate-500 font-medium max-w-[300px] truncate" title="${escapeHtml(errorMsg)}">${escapeHtml(errorMsg)}</td>
+                </tr>
+              `;
+            });
+          }
+
+          // Render Missing Folder Courses List
+          const missingFolderList = document.getElementById("healthMissingFolderList");
+          missingFolderList.innerHTML = "";
+          if (d.missingFolderCourses.length === 0) {
+            missingFolderList.innerHTML = `<li class="text-center py-4 text-slate-400 font-medium">Không có khóa học nào thiếu Drive Folder ID</li>`;
+          } else {
+            d.missingFolderCourses.forEach(c => {
+              missingFolderList.innerHTML += `
+                <li class="flex items-center justify-between p-2.5 bg-rose-50/50 border border-rose-100 rounded-xl">
+                  <div class="flex flex-col gap-0.5">
+                    <span class="font-extrabold text-rose-900">${escapeHtml(c.title)}</span>
+                    <span class="text-[10px] text-slate-400 font-mono">Slug: ${escapeHtml(c.slug)}</span>
+                  </div>
+                  <span class="text-[10px] bg-rose-100 text-rose-800 border border-rose-200 px-2 py-0.5 rounded-md font-bold">Thiếu Folder ID</span>
+                </li>
+              `;
+            });
+          }
+
+          // Render Recent Logs Errors
+          const recentErrorsTable = document.getElementById("healthRecentErrorsTableBody");
+          recentErrorsTable.innerHTML = "";
+          if (d.recentErrors.length === 0) {
+            recentErrorsTable.innerHTML = `<tr><td colspan="3" class="py-4 text-center text-slate-400">Không tìm thấy bản ghi lỗi nào</td></tr>`;
+          } else {
+            d.recentErrors.forEach(log => {
+              const timeFormatted = new Date(log.time).toLocaleString('vi-VN');
+              const errText = log.error_message || "-";
+              const adminStr = log.drive_admin_email ? ` (Admin: ${log.drive_admin_email})` : "";
+              const actionStr = log.action === "create" ? "Cấp quyền" : "Thu hồi";
+              recentErrorsTable.innerHTML += `
+                <tr class="border-b border-slate-50 hover:bg-slate-50/50">
+                  <td class="py-2.5">
+                    <div class="flex flex-col gap-0.5">
+                      <span class="font-bold text-slate-700">${escapeHtml(log.email)}</span>
+                      <span class="text-[10px] text-slate-400 font-bold">${escapeHtml(actionStr)} / Slug: ${escapeHtml(log.course_slug)}</span>
+                    </div>
+                  </td>
+                  <td class="py-2.5 font-medium text-slate-600 max-w-[280px] break-words">
+                    <span class="text-rose-600 font-bold">[${escapeHtml(log.status)}]</span> ${escapeHtml(errText)}${escapeHtml(adminStr)}
+                  </td>
+                  <td class="py-2.5 text-right text-slate-400 text-[10px] font-bold">${timeFormatted}</td>
+                </tr>
+              `;
+            });
+          }
+
+          // Render Student Enrollments in Error
+          const errorEnrollmentsTable = document.getElementById("healthErrorEnrollmentsTableBody");
+          errorEnrollmentsTable.innerHTML = "";
+          if (d.errorEnrollments.length === 0) {
+            errorEnrollmentsTable.innerHTML = `<tr><td colspan="3" class="py-4 text-center text-slate-400">Không có học viên nào bị lỗi quyền Drive</td></tr>`;
+          } else {
+            d.errorEnrollments.forEach(en => {
+              const statusStr = String(en.drive_permission_status || "failed").toLowerCase().trim();
+              const badgeClass = statusStr === "pending_retry" ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-rose-50 text-rose-700 border-rose-200";
+              const errDetail = en.drive_permission_error || "Chưa có thông tin chi tiết lỗi";
+              errorEnrollmentsTable.innerHTML += `
+                <tr class="border-b border-slate-50 hover:bg-slate-50/50">
+                  <td class="py-2.5">
+                    <div class="flex flex-col gap-0.5">
+                      <span class="font-bold text-slate-700">${escapeHtml(en.email)}</span>
+                      <span class="text-[10px] text-slate-400 font-bold">Slug: ${escapeHtml(en.course_slug)}</span>
+                    </div>
+                  </td>
+                  <td class="py-2.5">
+                    <span class="inline-block px-2 py-0.5 rounded-full border text-[9px] font-bold ${badgeClass}">
+                      ${escapeHtml(statusStr).toUpperCase()}
+                    </span>
+                  </td>
+                  <td class="py-2.5 font-medium text-slate-500 max-w-[250px] break-words" title="${escapeHtml(errDetail)}">
+                    ${escapeHtml(errDetail)}
+                  </td>
+                </tr>
+              `;
+            });
+          }
+        } else {
+          toast(d.error || "Không thể tải dữ liệu Sức khỏe Drive", "error");
+        }
+      } catch (err) {
+        console.error(err);
+        toast("Lỗi kết nối khi tải Sức khỏe Drive", "error");
+      } finally {
+        hideLoader();
+      }
+    }
+
+    function setDriveHealthRange(range) {
+      currentDriveHealthRange = range;
+      loadDriveHealth();
+    }
 
 
 
