@@ -1725,6 +1725,46 @@
         lessonData
       };
 
+      if (isSection) {
+        executeSaveLesson(payload);
+        return;
+      }
+
+      showLoader("Đang xác minh các tệp tin media...");
+      try {
+        const checkRes = await fetch("/api/lms/admin?endpoint=verify-media", {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify({ courseSlug: course, lessonData })
+        });
+        const d = await checkRes.json();
+        hideLoader();
+
+        if (checkRes.ok && d.success) {
+          if (d.hasIssues) {
+            showMediaIssuesModal(d.issues, () => {
+              executeSaveLesson(payload);
+            }, () => {
+              toast("Đã hủy lưu bài học để chỉnh sửa media.", "info");
+            });
+          } else {
+            executeSaveLesson(payload);
+          }
+        } else {
+          if (confirm(`Không thể xác minh media (${d.error || "Lỗi không xác định"}). Bạn có muốn bỏ qua kiểm tra và vẫn lưu bài học?`)) {
+            executeSaveLesson(payload);
+          }
+        }
+      } catch (err) {
+        console.error(err);
+        hideLoader();
+        if (confirm("Lỗi kết nối khi xác minh media. Bạn có muốn bỏ qua kiểm tra và vẫn lưu bài học?")) {
+          executeSaveLesson(payload);
+        }
+      }
+    }
+
+    async function executeSaveLesson(payload) {
       showLoader("Đang lưu bài học...");
       try {
         const res = await fetch("/api/lms/admin?endpoint=lessons", {
@@ -1736,7 +1776,7 @@
 
         if (res.ok && d.success) {
           toast(STATE.isEditMode ? "Cập nhật bài học thành công!" : "Tạo bài học thành công!");
-          await loadLessonsList(course);
+          await loadLessonsList(payload.course);
         } else {
           toast(d.error || "Lỗi khi lưu bài học", "error");
         }
@@ -1745,6 +1785,114 @@
       } finally {
         hideLoader();
       }
+    }
+
+    function showMediaIssuesModal(issues, onProceed, onCancel) {
+      const overlay = document.createElement("div");
+      overlay.id = "mediaIssuesModal";
+      overlay.className = "fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4";
+      
+      const dialog = document.createElement("div");
+      dialog.className = "bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col max-h-[85vh]";
+      
+      const header = document.createElement("div");
+      header.className = "px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-rose-50/50";
+      
+      const hasCriticalError = issues.some(i => i.severity === "error");
+      const titleIcon = hasCriticalError ? "⚠️" : "⚡";
+      const titleText = hasCriticalError ? "Cảnh Báo Lỗi Media Nghiêm Trọng" : "Cảnh Báo Định Vị Media";
+      
+      header.innerHTML = `
+        <h3 class="text-sm font-extrabold ${hasCriticalError ? 'text-rose-800' : 'text-amber-855'} flex items-center gap-1.5">
+          <span>${titleIcon} ${titleText}</span>
+        </h3>
+        <button type="button" class="text-slate-400 hover:text-slate-600 transition font-bold text-lg close-btn">✕</button>
+      `;
+      
+      const body = document.createElement("div");
+      body.className = "p-5 overflow-y-auto space-y-4 text-xs leading-relaxed text-slate-600";
+      
+      const introHtml = hasCriticalError 
+        ? `<div class="p-3 bg-red-50 border border-red-100 rounded-xl text-red-800 font-medium">Hệ thống phát hiện một hoặc nhiều lỗi nghiêm trọng về media bài học. Học viên sẽ hoàn toàn không xem được bài học này nếu không sửa!</div>`
+        : `<div class="p-3 bg-amber-50 border border-amber-100 rounded-xl text-amber-800 font-medium">Các tệp tin media dưới đây nằm ngoài thư mục lưu trữ được chia sẻ của khóa học. Học viên có khả năng sẽ bị Google Drive hỏi quyền truy cập (Request Access).</div>`;
+        
+      let issuesHtml = "";
+      issues.forEach(issue => {
+        const severityBadge = issue.severity === "error" 
+          ? `<span class="bg-red-100 text-red-800 border-red-200 border px-2 py-0.5 rounded font-extrabold text-[9px] uppercase">Lỗi Chết</span>`
+          : `<span class="bg-amber-100 text-amber-800 border-amber-200 border px-2 py-0.5 rounded font-extrabold text-[9px] uppercase">Cảnh Báo Vị Trí</span>`;
+          
+        let folderDetail = "";
+        if (issue.currentFolders && issue.correctFolderName) {
+          folderDetail = `
+            <div class="mt-1 font-medium text-slate-500">
+              Folder hiện tại: <span class="text-rose-600 font-bold">${escapeHtml(issue.currentFolders.join(", "))}</span><br/>
+              Folder khóa học: <span class="text-emerald-600 font-bold">${escapeHtml(issue.correctFolderName)}</span>
+            </div>
+          `;
+        }
+
+        issuesHtml += `
+          <div class="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1 shadow-sm">
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-extrabold text-slate-800">${escapeHtml(issue.field)}</span>
+              ${severityBadge}
+            </div>
+            <div class="text-[11px] text-slate-700">${escapeHtml(issue.message)}</div>
+            ${folderDetail}
+            <div class="text-[9px] text-slate-400 font-mono break-all mt-1">ID File: ${escapeHtml(issue.fileId || "N/A")}</div>
+          </div>
+        `;
+      });
+      
+      const promptText = hasCriticalError 
+        ? "Vui lòng quay lại sửa các lỗi nghiêm trọng này để có thể lưu bài học."
+        : "Bạn có muốn tiếp tục lưu hay quay lại để sửa?";
+        
+      body.innerHTML = `
+        ${introHtml}
+        <div class="space-y-3 mt-2">
+          ${issuesHtml}
+        </div>
+        <div class="pt-2 text-slate-400 font-bold">${promptText}</div>
+      `;
+      
+      const footer = document.createElement("div");
+      footer.className = "px-5 py-4 border-t border-slate-100 flex justify-end gap-2 bg-slate-50";
+      
+      const cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.className = hasCriticalError 
+        ? "px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl transition shadow-sm"
+        : "px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-750 font-bold rounded-xl transition shadow-sm";
+      cancelBtn.innerText = hasCriticalError ? "Quay lại sửa" : "Hủy để sửa";
+      
+      footer.appendChild(cancelBtn);
+      
+      if (!hasCriticalError) {
+        const proceedBtn = document.createElement("button");
+        proceedBtn.type = "button";
+        proceedBtn.className = "px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition shadow-md shadow-amber-500/10";
+        proceedBtn.innerText = "Vẫn lưu";
+        footer.appendChild(proceedBtn);
+        proceedBtn.onclick = () => { close(); onProceed(); };
+      }
+      
+      dialog.appendChild(header);
+      dialog.appendChild(body);
+      dialog.appendChild(footer);
+      overlay.appendChild(dialog);
+      
+      document.body.appendChild(overlay);
+      
+      function close() {
+        if (document.body.contains(overlay)) {
+          document.body.removeChild(overlay);
+        }
+      }
+      
+      header.querySelector(".close-btn").onclick = () => { close(); onCancel(); };
+      cancelBtn.onclick = () => { close(); onCancel(); };
     }
 
     // ── Hide/Delete Lesson ─────────────────────────────────────────────────
