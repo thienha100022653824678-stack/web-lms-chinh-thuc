@@ -117,6 +117,9 @@
         <button onclick="switchTab('drive-health')" id="tabBtn-drive-health" class="tab-btn flex-grow lg:flex-none flex items-center justify-center lg:justify-start gap-2.5 py-4 lg:py-3 px-5 text-sm font-bold border-b-2 lg:border-b-0 lg:border-l-4 border-transparent text-slate-500 hover:bg-slate-50 transition">
           🏥 Sức Khỏe Drive
         </button>
+        <button onclick="switchTab('student-trace')" id="tabBtn-student-trace" class="tab-btn flex-grow lg:flex-none flex items-center justify-center lg:justify-start gap-2.5 py-4 lg:py-3 px-5 text-sm font-bold border-b-2 lg:border-b-0 lg:border-l-4 border-transparent text-slate-500 hover:bg-slate-50 transition">
+          🔍 Tra Cứu Học Viên
+        </button>
       </aside>
 
       <!-- Main Panel Workspace -->
@@ -624,6 +627,44 @@
                 </table>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- ── TAB: STUDENT TRACE ── -->
+        <div id="tabContent-student-trace" class="tab-content hidden flex-grow bg-slate-50 border border-slate-200 rounded-2xl p-5 shadow-sm space-y-6">
+          <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+            <div>
+              <h2 class="text-base font-extrabold text-slate-800 flex items-center gap-2">
+                <span>🔍 Nhật Ký Truy Vết Học Viên (1 Dòng)</span>
+              </h2>
+              <p class="text-xs text-slate-500">Tra cứu nhanh toàn bộ đơn hàng, quyền học LMS, trạng thái Google Drive và lịch sử cấp quyền của học viên bằng địa chỉ Gmail.</p>
+            </div>
+            
+            <div class="flex flex-col sm:flex-row gap-3">
+              <input 
+                type="email" 
+                id="studentTraceEmailInput" 
+                placeholder="Nhập Gmail học viên cần tra cứu..." 
+                class="flex-grow px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-brandGreen focus:ring-4 focus:ring-emerald-50 transition text-sm font-bold text-slate-900"
+                onkeydown="if(event.key === 'Enter') performStudentTrace()"
+              >
+              <button 
+                onclick="performStudentTrace()" 
+                class="bg-brandGreen hover:bg-brandGreenLight text-white font-extrabold px-6 py-3 rounded-2xl transition shadow-md shadow-emerald-600/10 text-sm flex items-center justify-center gap-2 shrink-0"
+              >
+                <span>🔍 Tra Cứu</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Trace Results Area (Initially empty) -->
+          <div id="studentTraceResults" class="hidden space-y-6">
+            <!-- Dynamically populated -->
+          </div>
+          
+          <div id="studentTraceEmpty" class="hidden bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-400">
+            <span class="text-3xl block mb-2">🤷‍♂️</span>
+            <p class="font-bold text-slate-650" id="studentTraceEmptyText">Không tìm thấy đơn hàng hoặc quyền học nào cho Gmail này.</p>
           </div>
         </div>
 
@@ -4253,6 +4294,383 @@
         hideLoader();
       }
     }
+
+    function setDriveHealthRange(range) {
+      currentDriveHealthRange = range;
+      loadDriveHealth();
+    }
+
+
+    // ── STUDENT TRACE CONTROLLER ──────────────────────────────────────────
+    async function performStudentTrace() {
+      const emailInput = document.getElementById("studentTraceEmailInput");
+      if (!emailInput) return;
+      const email = emailInput.value.trim().toLowerCase();
+      
+      if (!email) {
+        toast("Vui lòng nhập địa chỉ Gmail học viên", "error");
+        return;
+      }
+      
+      const resultsContainer = document.getElementById("studentTraceResults");
+      const emptyContainer = document.getElementById("studentTraceEmpty");
+      
+      resultsContainer.classList.add("hidden");
+      emptyContainer.classList.add("hidden");
+      
+      showLoader("Đang truy vết thông tin học viên...");
+      try {
+        const res = await fetch(`/api/lms/admin?endpoint=student-trace&email=${encodeURIComponent(email)}`, {
+          method: "GET",
+          headers: authHeaders()
+        });
+        const d = await res.json();
+        
+        if (res.status === 401) {
+          toast("Hết hạn phiên đăng nhập", "error");
+          showLoginScreen();
+          return;
+        }
+        
+        if (!res.ok || !d.success) {
+          toast(d.error || "Lỗi truy vết học viên", "error");
+          return;
+        }
+        
+        // Check if there is absolutely no data
+        if (!d.student && d.orders.length === 0 && d.enrollments.length === 0 && d.logs.length === 0) {
+          emptyContainer.classList.remove("hidden");
+          return;
+        }
+        
+        // Populate results
+        resultsContainer.innerHTML = renderTraceResultsHtml(d, email);
+        resultsContainer.classList.remove("hidden");
+      } catch (err) {
+        console.error(err);
+        toast("Lỗi kết nối máy chủ", "error");
+      } finally {
+        hideLoader();
+      }
+    }
+
+    function copyToClipboard(text) {
+      if (!text) return;
+      navigator.clipboard.writeText(text).then(() => {
+        toast("Đã copy vào clipboard!");
+      });
+    }
+
+    async function triggerTraceRetry(email, courseSlug) {
+      if (!email || !courseSlug) return;
+      if (!confirm(`Bạn có chắc chắn muốn chạy lại cấp quyền Drive cho Gmail "${email}" của khóa học "${courseSlug}"?`)) {
+        return;
+      }
+      
+      showLoader("Đang cấp lại quyền Drive...");
+      try {
+        const res = await fetch("/api/lms/admin?endpoint=drive-retry", {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify({
+            type: "single",
+            email: email,
+            courseSlug: courseSlug
+          })
+        });
+        const d = await res.json();
+        if (res.ok && d.success) {
+          toast("Đã chạy lại cấp quyền Drive thành công!");
+          // Re-trigger trace lookup to refresh UI
+          await performStudentTrace();
+        } else {
+          toast(d.error || "Gặp lỗi khi chạy lại cấp quyền Drive", "error");
+        }
+      } catch (err) {
+        console.error(err);
+        toast("Lỗi kết nối máy chủ", "error");
+      } finally {
+        hideLoader();
+      }
+    }
+
+    function renderTraceResultsHtml(d, email) {
+      const student = d.student;
+      const studentHtml = student 
+        ? `
+          <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+            <div class="flex items-center justify-between border-b pb-2">
+              <h3 class="text-sm font-bold text-slate-800">👥 Thông tin học viên</h3>
+              <span class="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded font-extrabold uppercase">${escapeHtml(student.status || 'ACTIVE')}</span>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
+              <div><span class="block text-slate-400 font-bold">Họ và tên:</span> <span class="font-extrabold text-slate-850">${escapeHtml(student.full_name || 'N/A')}</span></div>
+              <div><span class="block text-slate-400 font-bold">Email:</span> <span class="font-extrabold text-slate-850 select-all">${escapeHtml(student.email)}</span></div>
+              <div><span class="block text-slate-400 font-bold">Số điện thoại:</span> <span class="font-bold text-slate-700 font-mono">${escapeHtml(student.phone || 'N/A')}</span></div>
+              <div><span class="block text-slate-400 font-bold">Ngày tạo tài khoản:</span> <span class="font-medium text-slate-500">${student.created_at ? new Date(student.created_at).toLocaleString('vi-VN') : 'N/A'}</span></div>
+            </div>
+            ${student.note ? `<div class="text-xs pt-1"><span class="font-bold text-slate-400">Ghi chú:</span> <span class="text-slate-600 font-medium">${escapeHtml(student.note)}</span></div>` : ''}
+          </div>
+        `
+        : `
+          <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+            <div class="flex items-center gap-2 text-amber-700 text-xs font-bold bg-amber-50 border border-amber-200 p-3.5 rounded-xl">
+              <span>⚠️</span>
+              <span>Chưa tạo tài khoản Học Viên trên LMS (Bảng students chưa có dòng cho Gmail này). Có thể do học viên chưa đăng nhập lần nào.</span>
+            </div>
+          </div>
+        `;
+
+      const conclusionsHtml = d.conclusions.map(c => {
+        let alertBg = "bg-emerald-50 border-emerald-250 text-emerald-800";
+        let alertIcon = "✅";
+        const hasError = c.statusList.some(s => s.includes("lỗi") || s.includes("failed") || s.includes("chưa") || s.includes("lệch"));
+        if (hasError) {
+          alertBg = "bg-rose-50 border-rose-250 text-rose-800";
+          alertIcon = "🚨";
+        }
+
+        const actionButtons = [];
+        actionButtons.push(`<button onclick="copyToClipboard('${c.courseSlug}')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-3 py-1.5 rounded-lg border border-slate-200 transition text-[11px]">📋 Copy Slug</button>`);
+        if (c.driveFolderId) {
+          actionButtons.push(`<a href="https://drive.google.com/drive/folders/${c.driveFolderId}" target="_blank" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold px-3 py-1.5 rounded-lg border border-indigo-200 transition text-[11px] inline-flex items-center gap-1">📁 Mở Folder Drive</a>`);
+        }
+        if (c.courseSlug && c.courseSlug !== "none") {
+          actionButtons.push(`<a href="/lms.html?course=${c.courseSlug}" target="_blank" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-extrabold px-3 py-1.5 rounded-lg border border-emerald-200 transition text-[11px] inline-flex items-center gap-1">🎓 Xem Trang Học LMS</a>`);
+        }
+
+        const enrollment = d.enrollments.find(e => e.course_slug === c.courseSlug);
+        if (enrollment && ["failed", "pending_retry", "error", "quota_limited"].includes(String(c.driveStatus).toLowerCase())) {
+          actionButtons.push(`<button onclick="triggerTraceRetry('${escapeHtml(d.student?.email || email)}', '${c.courseSlug}')" class="bg-amber-500 hover:bg-amber-600 text-white font-extrabold px-3.5 py-1.5 rounded-lg transition text-[11px] shadow-sm">🔁 Cấp lại quyền Drive (Retry)</button>`);
+        }
+
+        return `
+          <div class="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm">
+            <div class="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+              <span class="font-extrabold text-slate-800 text-sm">${escapeHtml(c.courseTitle)} (${c.courseSlug.toUpperCase()})</span>
+              <span class="text-[10px] bg-slate-200 text-slate-650 px-2 py-0.5 rounded-md font-bold">Khóa Học</span>
+            </div>
+            <div class="p-5 space-y-4">
+              <div class="p-3.5 border rounded-xl flex gap-2 items-start ${alertBg} text-xs font-bold leading-normal">
+                <span class="text-sm shrink-0 leading-none">${alertIcon}</span>
+                <div>
+                  <ul class="list-disc list-inside space-y-1">
+                    ${c.statusList.map(s => `<li>${escapeHtml(s)}</li>`).join('')}
+                  </ul>
+                </div>
+              </div>
+              
+              <div class="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+                ${actionButtons.join('')}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      const ordersHtml = d.orders.length === 0
+        ? `<div class="p-4 text-center text-slate-400 text-xs">Không tìm thấy đơn hàng nào của Gmail này</div>`
+        : `
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr class="bg-slate-50 text-slate-400 border-b border-slate-100 uppercase text-[9px] font-extrabold tracking-wider">
+                  <th class="p-3">Mã đơn</th>
+                  <th class="p-3">Khóa học</th>
+                  <th class="p-3">Số tiền</th>
+                  <th class="p-3 text-center">Trạng thái</th>
+                  <th class="p-3 text-center">Sync LMS</th>
+                  <th class="p-3 text-center">Sync Portal</th>
+                  <th class="p-3 text-right">Ngày mua</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 font-medium text-slate-600">
+                ${d.orders.map(o => {
+                  let statusBadge = "bg-amber-50 text-amber-700 border border-amber-200";
+                  if (o.status === "Đã duyệt") statusBadge = "bg-emerald-50 text-emerald-700 border border-emerald-200";
+                  if (o.status === "Từ chối") statusBadge = "bg-rose-50 text-rose-700 border border-rose-200";
+
+                  return `
+                    <tr class="hover:bg-slate-50/50">
+                      <td class="p-3 font-mono text-[10px] break-all max-w-[120px]">${escapeHtml(o.id)}</td>
+                      <td class="p-3">
+                        <div class="font-bold text-slate-700">${escapeHtml(o.courseName || o.course_slug)}</div>
+                        <div class="text-[10px] text-slate-400 font-mono">slug: ${escapeHtml(o.course_slug)}</div>
+                      </td>
+                      <td class="p-3 font-bold">${escapeHtml(o.price || '0đ')}</td>
+                      <td class="p-3 text-center">
+                        <span class="inline-block px-2 py-0.5 rounded text-[9px] font-bold ${statusBadge}">
+                          ${escapeHtml(o.status || 'Chờ duyệt')}
+                        </span>
+                      </td>
+                      <td class="p-3 text-center font-bold ${o.sync_lms_status === 'SUCCESS' ? 'text-emerald-600' : 'text-rose-650'}">${escapeHtml(o.sync_lms_status || 'PENDING')}</td>
+                      <td class="p-3 text-center font-bold ${o.sync_portal_status?.startsWith('SUCCESS') ? 'text-emerald-600' : 'text-rose-650'}">${escapeHtml(o.sync_portal_status || 'PENDING')}</td>
+                      <td class="p-3 text-right text-slate-400">${o.created_at ? new Date(o.created_at).toLocaleString('vi-VN') : '-'}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+
+      const enrollmentsHtml = d.enrollments.length === 0
+        ? `<div class="p-4 text-center text-slate-400 text-xs">Chưa được cấp quyền học khóa học nào trên LMS</div>`
+        : `
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr class="bg-slate-50 text-slate-400 border-b border-slate-100 uppercase text-[9px] font-extrabold tracking-wider">
+                  <th class="p-3">Khóa học</th>
+                  <th class="p-3">Drive Status</th>
+                  <th class="p-3">Quyền học</th>
+                  <th class="p-3">Folder ID</th>
+                  <th class="p-3">Chi tiết lỗi Drive</th>
+                  <th class="p-3 text-right">Cập nhật</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 font-medium text-slate-600">
+                ${d.enrollments.map(e => {
+                  const driveStatusStr = String(e.drive_permission_status || "failed").toLowerCase();
+                  const driveBadgeClass = driveStatusStr === "success" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
+                                          driveStatusStr === "pending_retry" ? "bg-amber-50 text-amber-700 border border-amber-200" :
+                                          "bg-rose-50 text-rose-700 border border-rose-200";
+
+                  return `
+                    <tr class="hover:bg-slate-50/50">
+                      <td class="p-3">
+                        <div class="font-bold text-slate-700">${escapeHtml(e.course_slug)}</div>
+                        <div class="text-[10px] text-slate-400">ID: ${escapeHtml(e.id)}</div>
+                      </td>
+                      <td class="p-3">
+                        <span class="inline-block px-2 py-0.5 rounded text-[9px] font-bold ${driveBadgeClass}">
+                          ${driveStatusStr.toUpperCase()}
+                        </span>
+                      </td>
+                      <td class="p-3 font-bold ${["active", "approved", "completed", "da duyet"].includes(e.status) ? 'text-emerald-600' : 'text-slate-400'}">${escapeHtml(e.status || 'inactive')}</td>
+                      <td class="p-3 font-mono text-[10px] break-all max-w-[120px]">${escapeHtml(e.drive_folder_id || '-')}</td>
+                      <td class="p-3 text-rose-600 max-w-[200px] break-words font-semibold" title="${escapeHtml(e.drive_permission_error || '')}">${escapeHtml(e.drive_permission_error || '-')}</td>
+                      <td class="p-3 text-right text-slate-400">${e.updated_at ? new Date(e.updated_at).toLocaleString('vi-VN') : '-'}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+
+      const queueHtml = d.syncQueue.length === 0
+        ? `<div class="p-4 text-center text-slate-400 text-xs">Không có yêu cầu nào đang nằm trong hàng đợi đồng bộ</div>`
+        : `
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr class="bg-slate-50 text-slate-400 border-b border-slate-100 uppercase text-[9px] font-extrabold tracking-wider">
+                  <th class="p-3">Khóa học</th>
+                  <th class="p-3">Hành động</th>
+                  <th class="p-3 text-center">Số lượt thử</th>
+                  <th class="p-3">Thông điệp lỗi gần nhất</th>
+                  <th class="p-3 text-right">Cập nhật</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 font-medium text-slate-600">
+                ${d.syncQueue.map(q => `
+                  <tr class="hover:bg-slate-50/50">
+                    <td class="p-3 font-bold text-slate-700">${escapeHtml(q.course_slug)}</td>
+                    <td class="p-3 font-semibold text-indigo-650">${escapeHtml(q.action)}</td>
+                    <td class="p-3 text-center font-extrabold text-slate-800">${q.attempts || 0}</td>
+                    <td class="p-3 text-rose-600 max-w-[250px] break-words font-semibold" title="${escapeHtml(q.error_message || '')}">${escapeHtml(q.error_message || '-')}</td>
+                    <td class="p-3 text-right text-slate-400">${q.updated_at ? new Date(q.updated_at).toLocaleString('vi-VN') : '-'}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+
+      const logsHtml = d.logs.length === 0
+        ? `<div class="p-4 text-center text-slate-400 text-xs">Không tìm thấy log hoạt động Google Drive nào</div>`
+        : `
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr class="bg-slate-50 text-slate-400 border-b border-slate-100 uppercase text-[9px] font-extrabold tracking-wider">
+                  <th class="p-3">Hành động</th>
+                  <th class="p-3">Khóa học</th>
+                  <th class="p-3 text-center">Trạng thái</th>
+                  <th class="p-3">Thông điệp chi tiết</th>
+                  <th class="p-3 text-right">Thời gian</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 font-medium text-slate-600">
+                ${d.logs.map(log => {
+                  const statusStr = String(log.status || "failed").toLowerCase().trim();
+                  const badgeClass = statusStr === "success" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
+                                     statusStr === "pending_retry" ? "bg-amber-50 text-amber-700 border border-amber-200" :
+                                     "bg-rose-50 text-rose-700 border border-rose-200";
+                  const errDetail = log.error_message || log.message || "-";
+                  const adminStr = log.drive_admin_email ? ` (Admin: ${log.drive_admin_email})` : "";
+                  const actionStr = log.action === "create" ? "Cấp quyền" : "Thu hồi";
+
+                  return `
+                    <tr class="hover:bg-slate-50/50">
+                      <td class="p-3 font-semibold text-slate-700">${escapeHtml(actionStr)}</td>
+                      <td class="p-3 font-bold text-slate-800">${escapeHtml(log.course_slug)}</td>
+                      <td class="p-3 text-center">
+                        <span class="inline-block px-2 py-0.5 rounded border text-[9px] font-bold ${badgeClass}">
+                          ${statusStr.toUpperCase()}
+                        </span>
+                      </td>
+                      <td class="p-3 font-medium text-slate-550 max-w-[280px] break-words" title="${escapeHtml(errDetail)}">
+                        ${escapeHtml(errDetail)}${escapeHtml(adminStr)}
+                      </td>
+                      <td class="p-3 text-right text-slate-400">${log.time ? new Date(log.time).toLocaleString('vi-VN') : '-'}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+
+      return `
+        <!-- Student Block -->
+        ${studentHtml}
+
+        <!-- Conclusions Block -->
+        <div class="space-y-4">
+          <h3 class="text-sm font-black text-slate-850">🎯 Tự động kết luận trạng thái</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            ${conclusionsHtml}
+          </div>
+        </div>
+
+        <!-- Orders Block -->
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+          <h3 class="text-sm font-bold text-slate-800">🛍️ Đơn hàng từ Shop</h3>
+          ${ordersHtml}
+        </div>
+
+        <!-- Enrollments Block -->
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+          <h3 class="text-sm font-bold text-slate-800">🔑 Quyền học trên LMS</h3>
+          ${enrollmentsHtml}
+        </div>
+
+        <!-- Queue Block -->
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+          <h3 class="text-sm font-bold text-slate-800">⏳ Hàng đợi đồng bộ Drive</h3>
+          ${queueHtml}
+        </div>
+
+        <!-- Logs Block -->
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+          <h3 class="text-sm font-bold text-slate-800">📜 Lịch sử hoạt động Drive gần nhất</h3>
+          ${logsHtml}
+        </div>
+      `;
+    }
+
 
     function setDriveHealthRange(range) {
       currentDriveHealthRange = range;

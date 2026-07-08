@@ -15,6 +15,7 @@ import adminDrivePermissionHandler from "../../utils/lms-handlers/admin-drive-pe
 import adminDriveHealthHandler from "../../utils/lms-handlers/admin-drive-health.js";
 import adminDriveRetryHandler from "../../utils/lms-handlers/admin-drive-retry.js";
 import adminVerifyMediaHandler from "../../utils/lms-handlers/admin-verify-media.js";
+import adminStudentTraceHandler from "../../utils/lms-handlers/admin-student-trace.js";
 
 export const config = {
   api: {
@@ -77,6 +78,9 @@ export default async function handler(req, res) {
   }
   if (endpoint === "verify-media") {
     return adminVerifyMediaHandler(req, res);
+  }
+  if (endpoint === "student-trace") {
+    return adminStudentTraceHandler(req, res);
   }
 
   return res.status(404).json({ success: false, error: "LMS Admin Endpoint not found" });
