@@ -2141,6 +2141,10 @@
         const data = await response.json();
 
         if (!response.ok || !data.allowed) {
+          if (data.authError === "entry_token_required" || data.code === "entry_token_required" || data.code === "protected-session-required") {
+            showEntryTokenRequiredError(data.error);
+            return;
+          }
           if (response.status === 401 || response.status === 403) {
             clearSession();
             statusBox.innerHTML = `
@@ -2264,6 +2268,23 @@
       url.searchParams.delete("entry_token");
       if (courseSlug) url.searchParams.set("course", courseSlug);
       window.history.replaceState({}, document.title, url.toString());
+    }
+
+    function showEntryTokenRequiredError(message) {
+      const statusBox = document.getElementById("statusBox");
+      if (!statusBox) return;
+      statusBox.classList.remove("hidden");
+      statusBox.innerHTML = `
+        <div class="text-4xl mb-4">🔒</div>
+        <p class="font-extrabold text-lg sm:text-xl text-brandOrange mb-2">Cần mở lớp từ Cổng học viên</p>
+        <p class="text-brandBrown/60 text-sm max-w-sm mx-auto leading-relaxed mb-5">
+          ${escapeHtml(message || "Liên kết lớp học này cần được mở từ Cổng học viên. Vui lòng quay lại trang bài học trên yeunauan.live và bấm “Bài học gốc phục vụ giảng dạy” để vào lớp.")}
+        </p>
+        <a href="https://www.yeunauan.live/my-courses" class="inline-flex items-center justify-center rounded-full bg-brandGreen px-5 py-3 text-sm font-extrabold text-white shadow-md hover:bg-brandGreen/95 transition">
+          Về Khóa học của tôi
+        </a>
+      `;
+      showLoggedOutState();
     }
 
     function showEntryTokenError(message) {

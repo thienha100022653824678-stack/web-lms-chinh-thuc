@@ -517,3 +517,16 @@ export async function verifyLmsVerifiedSessionAccess(supabase, {
     enrollment: activeEnrollment
   };
 }
+
+export function getEntryTokenRequiredCourses() {
+  return String(process.env.LMS_ENTRY_TOKEN_REQUIRED_COURSES || "")
+    .split(",")
+    .map((slug) => String(slug || "").trim())
+    .filter(Boolean);
+}
+
+export function isEntryTokenRequiredCourse(courseSlug) {
+  const normalizedCourseSlug = String(courseSlug || "").trim();
+  if (!normalizedCourseSlug) return false;
+  return getEntryTokenRequiredCourses().includes(normalizedCourseSlug);
+}

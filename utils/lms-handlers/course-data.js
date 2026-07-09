@@ -11,7 +11,10 @@ import {
 } from "../lms.js";
 import { google } from "googleapis";
 import crypto from "crypto";
-import { verifyLmsVerifiedSessionAccess } from "../lms-session-guard.js";
+import {
+  isEntryTokenRequiredCourse,
+  verifyLmsVerifiedSessionAccess
+} from "../lms-session-guard.js";
 
 const SESSION_COOKIE = "course_session_token";
 const API_VERSION = "premium-bunny-stream-v1";
@@ -356,6 +359,16 @@ export default async function handler(req, res) {
     // If no course is specified in request, default to the first allowed course
     // If a course is specified, use it directly so the check below can return 403 if unauthorized
     const activeCourseSlug = lmsSessionAccess?.courseSlug || (courseSlug ? courseSlug : allowedCourses[0]);
+
+    if (isEntryTokenRequiredCourse(activeCourseSlug) && !lmsSessionAccess) {
+      return res.status(403).json({
+        allowed: false,
+        authError: "entry_token_required",
+        code: "entry_token_required",
+        course: activeCourseSlug,
+        error: "Liên kết lớp học này cần được mở từ Cổng học viên. Vui lòng quay lại trang bài học trên yeunauan.live và bấm “Bài học gốc phục vụ giảng dạy” để vào lớp."
+      });
+    }
 
     // Check if the student is enrolled in the target course
     if (!allowedCourses.includes(activeCourseSlug)) {

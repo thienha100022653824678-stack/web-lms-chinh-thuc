@@ -7,7 +7,10 @@ import {
   normalizeEmail
 } from "../lms.js";
 import { google } from "googleapis";
-import { verifyLmsVerifiedSessionAccess } from "../lms-session-guard.js";
+import {
+  isEntryTokenRequiredCourse,
+  verifyLmsVerifiedSessionAccess
+} from "../lms-session-guard.js";
 
 const SESSION_COOKIE = "course_session_token";
 const ACTIVE_ENROLLMENT_STATUSES = new Set([
@@ -344,6 +347,16 @@ export default async function handler(req, res) {
         success: false,
         error: "PhiÃªn há»c khÃ´ng cÃ³ quyá»n xem bÃ i há»c cá»§a khÃ³a nÃ y.",
         course: lesson.course_slug
+      });
+    }
+
+    if (isEntryTokenRequiredCourse(lesson.course_slug) && !lmsSessionAccess) {
+      return res.status(403).json({
+        success: false,
+        authError: "entry_token_required",
+        code: "entry_token_required",
+        course: lesson.course_slug,
+        error: "Liên kết lớp học này cần được mở từ Cổng học viên. Vui lòng quay lại trang bài học trên yeunauan.live và bấm “Bài học gốc phục vụ giảng dạy” để vào lớp."
       });
     }
 
