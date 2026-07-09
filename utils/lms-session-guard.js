@@ -27,6 +27,15 @@ export const DEFAULT_LMS_ENTRY_TOKEN_TTL_MINUTES = 30;
 export const DEFAULT_STUDENT_SESSION_IDLE_HOURS = 24;
 export const DEFAULT_LMS_SESSION_IDLE_HOURS = 24;
 
+const ACTIVE_ENROLLMENT_STATUSES = new Set([
+  "active",
+  "approved",
+  "approved_ready",
+  "approved_waiting_content",
+  "completed",
+  "da duyet"
+]);
+
 function positiveNumber(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
@@ -90,6 +99,25 @@ function cutoffIso(hours) {
 
 function isPast(timestamp) {
   return Boolean(timestamp) && new Date(timestamp).getTime() <= Date.now();
+}
+
+function isOlderThan(timestamp, hours) {
+  if (!timestamp) return true;
+  const time = new Date(timestamp).getTime();
+  if (!Number.isFinite(time)) return true;
+  return time < new Date(cutoffIso(hours)).getTime();
+}
+
+function normalizeEnrollmentStatus(status) {
+  return String(status || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function isActiveEnrollment(status) {
+  return ACTIVE_ENROLLMENT_STATUSES.has(normalizeEnrollmentStatus(status));
 }
 
 async function throwIfSupabaseError(result) {
@@ -408,4 +436,84 @@ export async function revokeLmsSessionsByStudentSession(
     .eq("student_session_id", studentSessionId)
     .eq("status", LMS_SESSION_STATUSES.ACTIVE)
     .select("id,status"));
+}
+
+export async function verifyLmsVerifiedSessionAccess(supabase, {
+  lmsSessionId,
+  lmsDeviceId,
+  courseSlug = null,
+  lmsIdleHours = getLmsSessionIdleHours(),
+  studentIdleHours = getStudentSessionIdleHours()
+}) {
+  if (!lmsSessionId || !lmsDeviceId) {
+    return { ok: false, reason: "missing_lms_session", session: null };
+  }
+
+  const session = await getActiveLmsVerifiedSession(supabase, lmsSessionId, {
+    lmsDeviceId,
+    idleHours: lmsIdleHours
+  });
+
+  if (!session) {
+    return { ok: false, reason: "invalid_lms_session", session: null };
+  }
+
+  const expectedCourseSlug = String(courseSlug || "").trim();
+  const sessionCourseSlug = String(session.course_slug || "").trim();
+  if (expectedCourseSlug && sessionCourseSlug !== expectedCourseSlug) {
+    return { ok: false, reason: "course_mismatch", session };
+  }
+
+  const { data: studentSession, error: studentError } = await supabase
+    .from("student_active_sessions")
+    .select("*")
+    .eq("student_session_id", session.student_session_id)
+    .eq("email", normalizeEmail(session.email))
+    .eq("status", STUDENT_SESSION_STATUSES.ACTIVE)
+    .maybeSingle();
+
+  if (studentError) throw studentError;
+  if (!studentSession) {
+    return { ok: false, reason: "student_session_inactive", session };
+  }
+
+  if (isOlderThan(studentSession.last_seen_at, studentIdleHours)) {
+    await supabase
+      .from("student_active_sessions")
+      .update({
+        status: STUDENT_SESSION_STATUSES.EXPIRED,
+        updated_at: nowIso()
+      })
+      .eq("student_session_id", session.student_session_id)
+      .eq("status", STUDENT_SESSION_STATUSES.ACTIVE);
+    return { ok: false, reason: "student_session_expired", session };
+  }
+
+  const { data: enrollments, error: enrollError } = await supabase
+    .from("student_enrollments")
+    .select("id,status")
+    .eq("email", normalizeEmail(session.email))
+    .eq("course_slug", sessionCourseSlug)
+    .limit(10);
+
+  if (enrollError) throw enrollError;
+  const activeEnrollment = (enrollments || []).find(enrollment => isActiveEnrollment(enrollment.status));
+  if (!activeEnrollment) {
+    return { ok: false, reason: "enrollment_inactive", session };
+  }
+
+  await Promise.all([
+    touchLmsVerifiedSession(supabase, lmsSessionId),
+    touchStudentSession(supabase, session.student_session_id)
+  ]);
+
+  return {
+    ok: true,
+    reason: "valid",
+    email: normalizeEmail(session.email),
+    courseSlug: sessionCourseSlug,
+    session,
+    studentSession,
+    enrollment: activeEnrollment
+  };
 }

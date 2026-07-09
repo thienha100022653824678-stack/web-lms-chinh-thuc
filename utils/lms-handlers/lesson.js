@@ -7,6 +7,7 @@ import {
   normalizeEmail
 } from "../lms.js";
 import { google } from "googleapis";
+import { verifyLmsVerifiedSessionAccess } from "../lms-session-guard.js";
 
 const SESSION_COOKIE = "course_session_token";
 const ACTIVE_ENROLLMENT_STATUSES = new Set([
@@ -28,6 +29,13 @@ function normalizeEnrollmentStatus(status) {
 
 function isActiveEnrollment(status) {
   return ACTIVE_ENROLLMENT_STATUSES.has(normalizeEnrollmentStatus(status));
+}
+
+function getLmsSessionHeaders(req) {
+  return {
+    lmsSessionId: String(req.headers["x-lms-session-id"] || "").trim(),
+    lmsDeviceId: String(req.headers["x-lms-device-id"] || "").trim()
+  };
 }
 
 function normalizeMaterials(value) {
@@ -272,7 +280,7 @@ async function fetchRecipeText(recipeUrl) {
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-LMS-Session-Id, X-LMS-Device-Id");
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -291,7 +299,18 @@ export default async function handler(req, res) {
     // 1. Fetch student session from cookies
     const cookies = parseCookies(req);
     const sToken = cookies[SESSION_COOKIE];
+    const lmsHeaders = getLmsSessionHeaders(req);
+    const hasLmsSessionHeaders = Boolean(lmsHeaders.lmsSessionId && lmsHeaders.lmsDeviceId);
     let email = null;
+    let lmsSessionAccess = null;
+
+    if (hasLmsSessionHeaders) {
+      const access = await verifyLmsVerifiedSessionAccess(supabase, lmsHeaders);
+      if (access.ok) {
+        email = access.email;
+        lmsSessionAccess = access;
+      }
+    }
 
     if (sToken) {
       const decoded = verifyStudentSession(sToken);
@@ -318,6 +337,14 @@ export default async function handler(req, res) {
     if (fetchError) throw fetchError;
     if (!lesson) {
       return res.status(404).json({ success: false, error: "Không tìm thấy bài học" });
+    }
+
+    if (lmsSessionAccess && String(lesson.course_slug || "").trim() !== lmsSessionAccess.courseSlug) {
+      return res.status(403).json({
+        success: false,
+        error: "PhiÃªn há»c khÃ´ng cÃ³ quyá»n xem bÃ i há»c cá»§a khÃ³a nÃ y.",
+        course: lesson.course_slug
+      });
     }
 
     // 3. Verify student enrollment for the course that this lesson belongs to

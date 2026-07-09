@@ -11,6 +11,7 @@ import {
 } from "../lms.js";
 import { google } from "googleapis";
 import crypto from "crypto";
+import { verifyLmsVerifiedSessionAccess } from "../lms-session-guard.js";
 
 const SESSION_COOKIE = "course_session_token";
 const API_VERSION = "premium-bunny-stream-v1";
@@ -33,6 +34,13 @@ function normalizeEnrollmentStatus(status) {
 
 function isActiveEnrollment(status) {
   return ACTIVE_ENROLLMENT_STATUSES.has(normalizeEnrollmentStatus(status));
+}
+
+function getLmsSessionHeaders(req) {
+  return {
+    lmsSessionId: String(req.headers["x-lms-session-id"] || "").trim(),
+    lmsDeviceId: String(req.headers["x-lms-device-id"] || "").trim()
+  };
 }
 
 function getGoogleAuth() {
@@ -269,7 +277,7 @@ async function attachRecipeText(lesson) {
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-LMS-Session-Id, X-LMS-Device-Id");
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -285,8 +293,24 @@ export default async function handler(req, res) {
     const cookies = parseCookies(req);
     const sToken = sessionToken || cookies[SESSION_COOKIE];
 
+    const lmsHeaders = getLmsSessionHeaders(req);
+    const hasLmsSessionHeaders = Boolean(lmsHeaders.lmsSessionId && lmsHeaders.lmsDeviceId);
+
     let email = null;
     let fromSession = false;
+    let lmsSessionAccess = null;
+
+    if (hasLmsSessionHeaders) {
+      const access = await verifyLmsVerifiedSessionAccess(supabase, {
+        ...lmsHeaders,
+        courseSlug: courseSlug || null
+      });
+      if (access.ok) {
+        email = access.email;
+        fromSession = true;
+        lmsSessionAccess = access;
+      }
+    }
 
     if (sToken) {
       const decoded = verifyStudentSession(sToken);
@@ -331,7 +355,7 @@ export default async function handler(req, res) {
 
     // If no course is specified in request, default to the first allowed course
     // If a course is specified, use it directly so the check below can return 403 if unauthorized
-    const activeCourseSlug = courseSlug ? courseSlug : allowedCourses[0];
+    const activeCourseSlug = lmsSessionAccess?.courseSlug || (courseSlug ? courseSlug : allowedCourses[0]);
 
     // Check if the student is enrolled in the target course
     if (!allowedCourses.includes(activeCourseSlug)) {

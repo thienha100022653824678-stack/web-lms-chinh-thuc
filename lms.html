@@ -472,6 +472,7 @@
     let currentView = "home";
     let currentLessonIndex = 0;
     let currentCourseTitle = currentCourseSlug;
+    let entryTokenVerified = false;
 
     function sessionKey() {
       return `course_session_token_${currentCourseSlug}`;
@@ -504,6 +505,20 @@
         return deviceId;
       } catch (err) {
         return generateClientId("lmsdev");
+      }
+    }
+
+    function getSavedLmsSessionHeaders() {
+      try {
+        const lmsSessionId = localStorage.getItem(LMS_SESSION_KEY) || "";
+        const lmsDeviceId = localStorage.getItem(LMS_DEVICE_KEY) || "";
+        if (!lmsSessionId || !lmsDeviceId) return {};
+        return {
+          "X-LMS-Session-Id": lmsSessionId,
+          "X-LMS-Device-Id": lmsDeviceId
+        };
+      } catch (err) {
+        return {};
       }
     }
 
@@ -774,7 +789,7 @@
       const response = await fetch("/api/lms/portal?endpoint=course-data", {
         method: "POST",
         credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getSavedLmsSessionHeaders() },
         body: JSON.stringify({
           course: COURSE,
           sessionToken
@@ -2117,7 +2132,7 @@
         const response = await fetch("/api/lms/portal?endpoint=course-data", {
           method: "POST",
           credentials: "same-origin",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...getSavedLmsSessionHeaders() },
           body: JSON.stringify(payload),
           signal: controller.signal
         });
@@ -2306,6 +2321,7 @@
             localStorage.setItem(LMS_SESSION_KEY, data.lms_session_id);
           } catch (err) {}
         }
+        entryTokenVerified = true;
         replaceEntryTokenUrl(verifiedCourse || COURSE);
         return true;
       } catch (err) {
@@ -2316,6 +2332,10 @@
 
     async function initGoogle() {
       if (!(await verifyEntryTokenIfPresent())) return;
+      if (entryTokenVerified) {
+        await loadCourseData({});
+        return;
+      }
 
       const configPromise = getPublicConfig();
       if (await tryRestoreSession()) return;
