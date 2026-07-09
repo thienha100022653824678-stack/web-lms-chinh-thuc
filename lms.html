@@ -457,11 +457,12 @@
     })();
 
     // Configuration values derived from URL query parameters and local storage
-    const COURSE = new URLSearchParams(window.location.search).get("course") || "banh-mi";
+    const initialParams = new URLSearchParams(window.location.search);
+    let COURSE = initialParams.get("course") || "banh-mi";
+    let currentCourseSlug = COURSE;
     const MY_COURSES_URL = "https://www.yeunauan.live/my-courses";
-    const SESSION_KEY = `course_session_token_${COURSE}`;
-    const SESSION_EMAIL_KEY = `course_session_email_${COURSE}`;
-    const SESSION_EXP_KEY = `course_session_exp_${COURSE}`;
+    const LMS_DEVICE_KEY = "lms_device_id";
+    const LMS_SESSION_KEY = "lms_verified_session_id";
     const SESSION_COOKIE = "course_session_token";
     const API_VERSION = "premium-bunny-stream-v1";
     const HERO_SUBTITLE_TEXT = "Bài học thực tế, học tập bài bản, thao tác cực chuẩn cùng giảng viên.";
@@ -470,7 +471,41 @@
     let currentLessons = [];
     let currentView = "home";
     let currentLessonIndex = 0;
-    let currentCourseTitle = COURSE;
+    let currentCourseTitle = currentCourseSlug;
+
+    function sessionKey() {
+      return `course_session_token_${currentCourseSlug}`;
+    }
+
+    function sessionEmailKey() {
+      return `course_session_email_${currentCourseSlug}`;
+    }
+
+    function sessionExpKey() {
+      return `course_session_exp_${currentCourseSlug}`;
+    }
+
+    function generateClientId(prefix) {
+      const bytes = new Uint8Array(24);
+      if (window.crypto && window.crypto.getRandomValues) {
+        window.crypto.getRandomValues(bytes);
+        return `${prefix}_${Array.from(bytes).map(byte => byte.toString(16).padStart(2, "0")).join("")}`;
+      }
+      return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
+    }
+
+    function getOrCreateLmsDeviceId() {
+      try {
+        let deviceId = localStorage.getItem(LMS_DEVICE_KEY);
+        if (!deviceId) {
+          deviceId = generateClientId("lmsdev");
+          localStorage.setItem(LMS_DEVICE_KEY, deviceId);
+        }
+        return deviceId;
+      } catch (err) {
+        return generateClientId("lmsdev");
+      }
+    }
 
     // Pagination parameters for Mobile Lesson Checklist
     let currentPage = 0;
@@ -827,9 +862,9 @@
 
     function clearSession() {
       try {
-        localStorage.removeItem(SESSION_KEY);
-        localStorage.removeItem(SESSION_EMAIL_KEY);
-        localStorage.removeItem(SESSION_EXP_KEY);
+        localStorage.removeItem(sessionKey());
+        localStorage.removeItem(sessionEmailKey());
+        localStorage.removeItem(sessionExpKey());
       } catch (err) {
         console.warn("Session clean failed:", err);
       }
@@ -838,9 +873,9 @@
 
     function saveSession(data) {
       try {
-        if (data && data.sessionToken) localStorage.setItem(SESSION_KEY, data.sessionToken);
-        if (data && data.email) localStorage.setItem(SESSION_EMAIL_KEY, data.email);
-        if (data && data.sessionExpiresAt) localStorage.setItem(SESSION_EXP_KEY, String(data.sessionExpiresAt));
+        if (data && data.sessionToken) localStorage.setItem(sessionKey(), data.sessionToken);
+        if (data && data.email) localStorage.setItem(sessionEmailKey(), data.email);
+        if (data && data.sessionExpiresAt) localStorage.setItem(sessionExpKey(), String(data.sessionExpiresAt));
       } catch (err) {
         console.warn("Session saving failed:", err);
       }
@@ -851,8 +886,8 @@
       let token = null;
       let exp = 0;
       try {
-        token = localStorage.getItem(SESSION_KEY);
-        exp = Number(localStorage.getItem(SESSION_EXP_KEY) || 0);
+        token = localStorage.getItem(sessionKey());
+        exp = Number(localStorage.getItem(sessionExpKey()) || 0);
       } catch (err) {
         console.warn("Reading session from localStorage failed:", err);
         return getSessionCookie();
@@ -867,7 +902,7 @@
 
     function getSavedEmail() {
       try {
-        return localStorage.getItem(SESSION_EMAIL_KEY) || "Học viên";
+        return localStorage.getItem(sessionEmailKey()) || "Học viên";
       } catch(e) {
         return "Học viên";
       }
@@ -2205,7 +2240,83 @@
       return false;
     }
 
+    function getEntryTokenFromUrl() {
+      return new URLSearchParams(window.location.search).get("entry_token") || "";
+    }
+
+    function replaceEntryTokenUrl(courseSlug) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("entry_token");
+      if (courseSlug) url.searchParams.set("course", courseSlug);
+      window.history.replaceState({}, document.title, url.toString());
+    }
+
+    function showEntryTokenError(message) {
+      const statusBox = document.getElementById("statusBox");
+      if (!statusBox) return;
+      statusBox.classList.remove("hidden");
+      statusBox.innerHTML = `
+        <div class="text-4xl mb-4">⚠️</div>
+        <p class="font-extrabold text-lg sm:text-xl text-brandOrange mb-2">Liên kết lớp học không hợp lệ</p>
+        <p class="text-brandBrown/60 text-sm max-w-sm mx-auto leading-relaxed">
+          ${escapeHtml(message || "Liên kết lớp học không hợp lệ hoặc đã được sử dụng. Vui lòng quay lại bài trả bài và bấm lại nút Bài học gốc phục vụ giảng dạy.")}
+        </p>
+      `;
+    }
+
+    async function verifyEntryTokenIfPresent() {
+      const entryToken = getEntryTokenFromUrl();
+      if (!entryToken) return true;
+
+      const statusBox = document.getElementById("statusBox");
+      if (statusBox) {
+        statusBox.classList.remove("hidden");
+        statusBox.innerHTML = `
+          <div class="flex items-center justify-center gap-3 py-6">
+            <div class="w-6 h-6 border-4 border-brandGreen border-t-transparent rounded-full animate-spin"></div>
+            <span class="font-extrabold text-brandBrown text-base">Đang xác thực liên kết lớp học...</span>
+          </div>
+        `;
+      }
+
+      try {
+        const response = await fetch("/api/lms/portal?endpoint=verify-entry-token", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            entry_token: entryToken,
+            lms_device_id: getOrCreateLmsDeviceId()
+          })
+        });
+
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+          showEntryTokenError(data.error);
+          return false;
+        }
+
+        const verifiedCourse = String(data.course_slug || "").trim();
+        if (verifiedCourse) {
+          COURSE = verifiedCourse;
+          currentCourseSlug = verifiedCourse;
+        }
+        if (data.lms_session_id) {
+          try {
+            localStorage.setItem(LMS_SESSION_KEY, data.lms_session_id);
+          } catch (err) {}
+        }
+        replaceEntryTokenUrl(verifiedCourse || COURSE);
+        return true;
+      } catch (err) {
+        showEntryTokenError("Không xác thực được liên kết lớp học. Vui lòng quay lại bài trả bài và bấm lại nút Bài học gốc phục vụ giảng dạy.");
+        return false;
+      }
+    }
+
     async function initGoogle() {
+      if (!(await verifyEntryTokenIfPresent())) return;
+
       const configPromise = getPublicConfig();
       if (await tryRestoreSession()) return;
 
