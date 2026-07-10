@@ -27,7 +27,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { action, slug, title, subtitle, imageUrl, active, email, courseSlug } = req.body || {};
+    const { action, slug, title, subtitle, imageUrl, expected_start_date, active, email, courseSlug } = req.body || {};
 
     if (!action) {
       return res.status(400).json({ success: false, error: "Thiếu tham số action" });
@@ -53,6 +53,9 @@ export default async function handler(req, res) {
       const nextTitle = String(title || "").trim();
       const nextSubtitle = String(subtitle || "").trim();
       const nextImageUrl = String(imageUrl || "").trim();
+      const nextExpectedStartDate = /^\d{4}-\d{2}-\d{2}$/.test(String(expected_start_date || "").trim())
+        ? String(expected_start_date).trim()
+        : null;
 
       let result;
       if (existingCourse) {
@@ -67,6 +70,9 @@ export default async function handler(req, res) {
         }
         if (nextImageUrl) {
           updatePayload.image_url = nextImageUrl;
+        }
+        if (expected_start_date !== undefined) {
+          updatePayload.expected_start_date = nextExpectedStartDate;
         }
 
         const { error: updateErr } = await supabase
@@ -85,6 +91,7 @@ export default async function handler(req, res) {
             title: nextTitle,
             subtitle: nextSubtitle || null,
             image_url: nextImageUrl || null,
+            expected_start_date: nextExpectedStartDate,
             active: active !== undefined ? active : true,
             sort_order: 999 // Default to end of list
           })
