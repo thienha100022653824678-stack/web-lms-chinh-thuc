@@ -449,13 +449,34 @@ export async function verifyLmsVerifiedSessionAccess(supabase, {
     return { ok: false, reason: "missing_lms_session", session: null };
   }
 
-  const session = await getActiveLmsVerifiedSession(supabase, lmsSessionId, {
-    lmsDeviceId,
-    idleHours: lmsIdleHours
-  });
+  const session = await throwIfSupabaseError(await supabase
+    .from("lms_verified_sessions")
+    .select("*")
+    .eq("lms_session_id", lmsSessionId)
+    .maybeSingle());
 
   if (!session) {
     return { ok: false, reason: "invalid_lms_session", session: null };
+  }
+
+  if (session.lms_device_id !== lmsDeviceId) {
+    return { ok: false, reason: "device_mismatch", session };
+  }
+
+  if (session.status !== LMS_SESSION_STATUSES.ACTIVE) {
+    return { ok: false, reason: `lms_session_${session.status}`, session };
+  }
+
+  if (isOlderThan(session.last_seen_at, lmsIdleHours)) {
+    await supabase
+      .from("lms_verified_sessions")
+      .update({
+        status: LMS_SESSION_STATUSES.EXPIRED,
+        updated_at: nowIso()
+      })
+      .eq("id", session.id)
+      .eq("status", LMS_SESSION_STATUSES.ACTIVE);
+    return { ok: false, reason: "lms_session_expired", session };
   }
 
   const expectedCourseSlug = String(courseSlug || "").trim();
@@ -469,12 +490,14 @@ export async function verifyLmsVerifiedSessionAccess(supabase, {
     .select("*")
     .eq("student_session_id", session.student_session_id)
     .eq("email", normalizeEmail(session.email))
-    .eq("status", STUDENT_SESSION_STATUSES.ACTIVE)
     .maybeSingle();
 
   if (studentError) throw studentError;
   if (!studentSession) {
     return { ok: false, reason: "student_session_inactive", session };
+  }
+  if (studentSession.status !== STUDENT_SESSION_STATUSES.ACTIVE) {
+    return { ok: false, reason: `student_session_${studentSession.status}`, session };
   }
 
   if (isOlderThan(studentSession.last_seen_at, studentIdleHours)) {

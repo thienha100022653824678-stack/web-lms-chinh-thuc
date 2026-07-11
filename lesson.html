@@ -429,6 +429,9 @@
     let courseLessonsList = [];
     let studentEmail = "";
     const MY_COURSES_URL = "https://www.yeunauan.live/my-courses";
+    const LMS_DEVICE_KEY = "lms_device_id";
+    const LMS_SESSION_KEY = "lms_verified_session_id";
+    const LMS_SESSION_ALIAS_KEY = "lms_session_id";
 
     // ── Helper functions ───────────────────────────────────────────────────
     function escapeHtml(text) {
@@ -442,6 +445,20 @@
 
     function goMyCourses() {
       window.location.href = MY_COURSES_URL;
+    }
+
+    function getSavedLmsSessionHeaders() {
+      try {
+        const lmsSessionId = localStorage.getItem(LMS_SESSION_KEY) || localStorage.getItem(LMS_SESSION_ALIAS_KEY) || "";
+        const lmsDeviceId = localStorage.getItem(LMS_DEVICE_KEY) || "";
+        if (!lmsSessionId || !lmsDeviceId) return {};
+        return {
+          "X-LMS-Session-Id": lmsSessionId,
+          "X-LMS-Device-Id": lmsDeviceId
+        };
+      } catch (err) {
+        return {};
+      }
     }
 
     function resolveCourseHomeTitle(courseInfo, courseSlug) {
@@ -1136,7 +1153,8 @@
       try {
         const response = await fetch(`/api/lms/portal?endpoint=lesson&id=${LESSON_ID}`, {
           method: "GET",
-          credentials: "same-origin"
+          credentials: "same-origin",
+          headers: getSavedLmsSessionHeaders()
         });
 
         const data = await response.json();
@@ -1287,7 +1305,7 @@
       try {
         const response = await fetch("/api/lms/portal?endpoint=course-data", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...getSavedLmsSessionHeaders() },
           body: JSON.stringify({ course: courseSlug })
         });
 

@@ -317,12 +317,15 @@ export default async function handler(req, res) {
     const hasLmsSessionHeaders = Boolean(lmsHeaders.lmsSessionId && lmsHeaders.lmsDeviceId);
     let email = null;
     let lmsSessionAccess = null;
+    let lmsSessionFailureReason = "";
 
     if (hasLmsSessionHeaders) {
       const access = await verifyLmsVerifiedSessionAccess(supabase, lmsHeaders);
       if (access.ok) {
         email = access.email;
         lmsSessionAccess = access;
+      } else {
+        lmsSessionFailureReason = access.reason || "invalid_lms_session";
       }
     }
 
@@ -362,10 +365,13 @@ export default async function handler(req, res) {
     }
 
     if (isEntryTokenRequiredCourse(lesson.course_slug) && !lmsSessionAccess) {
+      const code = hasLmsSessionHeaders
+        ? (lmsSessionFailureReason || "protected_session_invalid")
+        : "entry_token_required";
       return res.status(403).json({
         success: false,
-        authError: "entry_token_required",
-        code: "entry_token_required",
+        authError: code,
+        code,
         course: lesson.course_slug,
         error: "Liên kết lớp học này cần được mở từ Cổng học viên. Vui lòng quay lại trang bài học trên yeunauan.live và bấm “Bài học gốc phục vụ giảng dạy” để vào lớp."
       });

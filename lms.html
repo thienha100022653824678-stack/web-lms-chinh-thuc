@@ -463,6 +463,7 @@
     const MY_COURSES_URL = "https://www.yeunauan.live/my-courses";
     const LMS_DEVICE_KEY = "lms_device_id";
     const LMS_SESSION_KEY = "lms_verified_session_id";
+    const LMS_SESSION_ALIAS_KEY = "lms_session_id";
     const SESSION_COOKIE = "course_session_token";
     const API_VERSION = "premium-bunny-stream-v1";
     const HERO_SUBTITLE_TEXT = "Bài học thực tế, học tập bài bản, thao tác cực chuẩn cùng giảng viên.";
@@ -510,7 +511,7 @@
 
     function getSavedLmsSessionHeaders() {
       try {
-        const lmsSessionId = localStorage.getItem(LMS_SESSION_KEY) || "";
+        const lmsSessionId = localStorage.getItem(LMS_SESSION_KEY) || localStorage.getItem(LMS_SESSION_ALIAS_KEY) || "";
         const lmsDeviceId = localStorage.getItem(LMS_DEVICE_KEY) || "";
         if (!lmsSessionId || !lmsDeviceId) return {};
         return {
@@ -2216,7 +2217,7 @@
         const data = await response.json();
 
         if (!response.ok || !data.allowed) {
-          if (data.authError === "entry_token_required" || data.code === "entry_token_required" || data.code === "protected-session-required") {
+          if (isProtectedAccessError(data)) {
             showEntryTokenRequiredError(data.error);
             return;
           }
@@ -2335,12 +2336,22 @@
     }
 
     function getEntryTokenFromUrl() {
+      const hash = String(window.location.hash || "").replace(/^#/, "");
+      const hashToken = new URLSearchParams(hash).get("entry_token");
+      if (hashToken) return hashToken;
       return new URLSearchParams(window.location.search).get("entry_token") || "";
     }
 
     function replaceEntryTokenUrl(courseSlug) {
       const url = new URL(window.location.href);
       url.searchParams.delete("entry_token");
+      if (url.hash) {
+        const hashText = url.hash.replace(/^#/, "");
+        const hashParams = new URLSearchParams(hashText);
+        hashParams.delete("entry_token");
+        const nextHash = hashParams.toString();
+        url.hash = nextHash ? `#${nextHash}` : "";
+      }
       if (courseSlug) url.searchParams.set("course", courseSlug);
       window.history.replaceState({}, document.title, url.toString());
     }
@@ -2373,6 +2384,17 @@
           ${escapeHtml(message || "Liên kết lớp học không hợp lệ hoặc đã được sử dụng. Vui lòng quay lại bài trả bài và bấm lại nút Bài học gốc phục vụ giảng dạy.")}
         </p>
       `;
+    }
+
+    function isProtectedAccessError(data) {
+      const code = String(data?.authError || data?.code || "");
+      return code === "entry_token_required" ||
+        code === "protected-session-required" ||
+        code === "protected_session_invalid" ||
+        code === "device_mismatch" ||
+        code === "invalid_lms_session" ||
+        code.startsWith("lms_session_") ||
+        code.startsWith("student_session_");
     }
 
     async function verifyEntryTokenIfPresent() {
@@ -2415,6 +2437,7 @@
         if (data.lms_session_id) {
           try {
             localStorage.setItem(LMS_SESSION_KEY, data.lms_session_id);
+            localStorage.setItem(LMS_SESSION_ALIAS_KEY, data.lms_session_id);
           } catch (err) {}
         }
         entryTokenVerified = true;
