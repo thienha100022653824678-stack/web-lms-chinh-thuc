@@ -15,6 +15,7 @@ import {
   isEntryTokenRequiredCourse,
   verifyLmsVerifiedSessionAccess
 } from "../lms-session-guard.js";
+import { resolveMainMediaInfo } from "../lms-media.js";
 
 const SESSION_COOKIE = "course_session_token";
 const API_VERSION = "premium-bunny-stream-v1";
@@ -68,6 +69,16 @@ async function getDriveClient() {
 async function getDocsClient() {
   const auth = getGoogleAuth();
   return google.docs({ version: "v1", auth });
+}
+
+async function getDriveFileMetadata(fileId) {
+  const drive = await getDriveClient();
+  const metadata = await drive.files.get({
+    fileId,
+    fields: "id,name,mimeType,shortcutDetails",
+    supportsAllDrives: true
+  });
+  return metadata.data || {};
 }
 
 function getGoogleDocId(url) {
@@ -428,9 +439,16 @@ export default async function handler(req, res) {
     const hasSection = (lessonsRows || []).some(l => Boolean(l.is_section));
     let sectionLessonCounter = 0;
     let nonSectionGlobalCounter = 0;
+    const driveMetadataCache = new Map();
+    const getCachedDriveFileMetadata = async (fileId) => {
+      if (driveMetadataCache.has(fileId)) return driveMetadataCache.get(fileId);
+      const metadata = await getDriveFileMetadata(fileId);
+      driveMetadataCache.set(fileId, metadata);
+      return metadata;
+    };
 
     // Map columns from Supabase schema and compute unified displayLesson
-    let lessons = (lessonsRows || []).map((l, idx) => {
+    let lessons = await Promise.all((lessonsRows || []).map(async (l, idx) => {
       const securedVideo = signBunnyEmbedUrl(l.video_url || "");
       const securedMedia = signMediaUrls(l.media_urls || "");
       const isSec = Boolean(l.is_section);
@@ -443,6 +461,8 @@ export default async function handler(req, res) {
         nonSectionGlobalCounter++;
         displayLesson = hasSection ? sectionLessonCounter : nonSectionGlobalCounter;
       }
+
+      const mainMediaInfo = isSec ? { mainMediaType: "none", mainMediaMimeType: "", mainMediaName: "" } : await resolveMainMediaInfo(l.video_url || "", getCachedDriveFileMetadata);
 
       return {
         id: l.id,
@@ -457,12 +477,13 @@ export default async function handler(req, res) {
         videoUrl: l.video_url || "",
         recipeUrl: l.recipe_url || "",
         mediaUrls: securedMedia,
+        ...mainMediaInfo,
         isSection: isSec,
         views: l.views || 0,
         status: l.status || "active",
         ...securedVideo
       };
-    });
+    }));
 
     // Fetch Google Docs recipe contents
     lessons = await Promise.all(lessons.map(attachRecipeText));

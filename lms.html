@@ -569,6 +569,49 @@
       return url;
     }
 
+    function inferMainMediaTypeFromUrl(input) {
+      const text = extractIframeSrc(String(input || "")).replace(/&amp;/g, "&").trim();
+      const match = text.match(/\.([a-z0-9]{2,5})(?:[?#].*)?$/i);
+      const ext = match ? match[1].toLowerCase() : "";
+      if (["jpg", "jpeg", "png", "webp", "gif"].includes(ext)) return "image";
+      if (["mp4", "webm", "mov", "m4v"].includes(ext)) return "video";
+      return "unknown";
+    }
+
+    function getMainMediaType(lesson) {
+      const serverType = String(lesson?.mainMediaType || "").toLowerCase().trim();
+      if (serverType === "image" || serverType === "video") return serverType;
+
+      const mime = String(lesson?.mainMediaMimeType || "").toLowerCase().trim();
+      if (mime.startsWith("image/")) return "image";
+      if (mime.startsWith("video/")) return "video";
+
+      return inferMainMediaTypeFromUrl(lesson?.videoUrl || lesson?.secureVideoUrl || "");
+    }
+
+    function isMainMediaImage(lesson) {
+      return getMainMediaType(lesson) === "image";
+    }
+
+    function mainMediaImageUrl(lesson) {
+      return normalizeGoogleDriveImageUrl(lesson?.videoUrl || lesson?.secureVideoUrl || lesson?.thumbnailUrl || HERO_PLACEHOLDER_IMAGE) || HERO_PLACEHOLDER_IMAGE;
+    }
+
+    function getMainImageHtml(lesson) {
+      const src = escapeHtml(mainMediaImageUrl(lesson));
+      const title = escapeHtml(lesson?.title || "Hình ảnh bài học");
+      return `
+        <div class="relative w-full h-full flex items-center justify-center bg-brandCream">
+          <img
+            src="${src}"
+            alt="${title}"
+            class="w-full h-full object-contain bg-brandCream"
+            loading="lazy"
+          />
+        </div>
+      `;
+    }
+
     function openDriveVideo(url) {
       const previewUrl = normalizeGoogleDrivePreviewUrl(url) || url;
       window.open(previewUrl, "_blank", "noopener,noreferrer");
@@ -651,6 +694,10 @@
     function lessonVideoUrl(lesson) {
       const secure = lesson?.secureVideoUrl || "";
       const raw = lesson?.videoUrl || "";
+
+      if (isMainMediaImage(lesson)) {
+        return "";
+      }
 
       // Bunny: dùng secureVideoUrl
       if (lesson?.videoProvider === "bunny_embed") {
@@ -1721,12 +1768,15 @@
         const item = document.createElement("div");
         item.className = "bg-white border border-brandBrown/5 rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition duration-200 grid gap-4 sm:grid-cols-[180px_1fr] md:grid-cols-[240px_1fr_200px] items-center";
 
-        const thumb = normalizeGoogleDriveImageUrl(l.thumbnailUrl || HERO_PLACEHOLDER_IMAGE);
+        const lessonHasMainImage = isMainMediaImage(l);
+        const thumb = lessonHasMainImage
+          ? mainMediaImageUrl(l)
+          : normalizeGoogleDriveImageUrl(l.thumbnailUrl || HERO_PLACEHOLDER_IMAGE);
 
         item.innerHTML = `
           <!-- Thumbnail -->
           <div class="relative aspect-video rounded-xl overflow-hidden shadow-inner border border-brandBrown/5 cursor-pointer bg-brandGray flex-shrink-0" onclick="window.location.href='/lesson.html?id=${l.id}'">
-            <img class="w-full h-full object-cover transition transform hover:scale-105" src="${thumb}" alt="Lesson Thumbnail">
+            <img class="w-full h-full ${lessonHasMainImage ? "object-contain bg-brandCream" : "object-cover"} transition transform hover:scale-105" src="${thumb}" alt="Lesson Thumbnail">
             <span class="absolute inset-0 m-auto w-12 h-12 rounded-full bg-brandGreen/90 text-white flex items-center justify-center shadow-lg text-lg">▶</span>
           </div>
 
@@ -1750,6 +1800,11 @@
             </button>
           </div>
         `;
+
+        if (lessonHasMainImage) {
+          const playBadge = item.querySelector(".absolute.inset-0.m-auto");
+          if (playBadge) playBadge.remove();
+        }
 
         currentContainer.appendChild(item);
       });
@@ -1807,6 +1862,11 @@
     async function openLessonVideo(index) {
       const lesson = currentLessons[index];
       if (!lesson) return;
+
+      if (isMainMediaImage(lesson)) {
+        openLessonDetail(index);
+        return;
+      }
 
       const videoUrl = lessonVideoUrl(lesson);
       // Allow Google Drive and YouTube to proceed even without secureVideoUrl
@@ -1959,7 +2019,13 @@
       destroyWatermark();
       const videoBox = document.getElementById("mobileVideoBox");
       const isDrive = l.videoProvider === "google_drive_preview" || isGoogleDriveVideoUrl(l.videoUrl);
-      if (isDrive) {
+      if (isMainMediaImage(l)) {
+        videoBox.innerHTML = `
+          <div id="mobileVideoWrapper" class="relative w-full h-full flex-grow flex items-center justify-center bg-brandCream">
+            ${getMainImageHtml(l)}
+          </div>
+        `;
+      } else if (isDrive) {
         const previewUrl = normalizeGoogleDrivePreviewUrl(l.videoUrl || l.secureVideoUrl);
         const fileId = getGoogleDriveFileId(l.videoUrl || l.secureVideoUrl);
         const returnUrl = window.location.origin + window.location.pathname + '?course=' + encodeURIComponent(COURSE) + '&lesson=' + currentLessonIndex;
@@ -2008,6 +2074,15 @@
       const lessonIndex = currentLessonIndex;
       const lesson = currentLessons[lessonIndex];
       if (!lesson) return;
+
+      if (isMainMediaImage(lesson)) {
+        const wrapper = document.getElementById("mobileVideoWrapper");
+        if (wrapper) {
+          wrapper.innerHTML = getMainImageHtml(lesson);
+          clearWatermarkFrom(wrapper);
+        }
+        return;
+      }
 
       const initialVideoUrl = lessonVideoUrl(lesson);
       // Allow Google Drive and YouTube to proceed

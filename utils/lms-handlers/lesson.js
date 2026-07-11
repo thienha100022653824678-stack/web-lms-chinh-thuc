@@ -11,6 +11,7 @@ import {
   isEntryTokenRequiredCourse,
   verifyLmsVerifiedSessionAccess
 } from "../lms-session-guard.js";
+import { resolveMainMediaInfo } from "../lms-media.js";
 
 const SESSION_COOKIE = "course_session_token";
 const ACTIVE_ENROLLMENT_STATUSES = new Set([
@@ -84,6 +85,16 @@ async function getDriveClient() {
 async function getDocsClient() {
   const auth = getGoogleAuth();
   return google.docs({ version: "v1", auth });
+}
+
+async function getDriveFileMetadata(fileId) {
+  const drive = await getDriveClient();
+  const metadata = await drive.files.get({
+    fileId,
+    fields: "id,name,mimeType,shortcutDetails",
+    supportsAllDrives: true
+  });
+  return metadata.data || {};
 }
 
 function getGoogleDocId(url) {
@@ -409,6 +420,9 @@ export default async function handler(req, res) {
     // 5. Secure Video URL & Media URLs
     const securedVideo = signBunnyEmbedUrl(lesson.video_url || "");
     const securedMedia = signMediaUrls(lesson.media_urls || "");
+    const mainMediaInfo = Boolean(lesson.is_section)
+      ? { mainMediaType: "none", mainMediaMimeType: "", mainMediaName: "" }
+      : await resolveMainMediaInfo(lesson.video_url || "", getDriveFileMetadata);
 
     // 6. Fetch recipe text
     const recipeText = await fetchRecipeText(lesson.recipe_url);
@@ -427,6 +441,7 @@ export default async function handler(req, res) {
       videoUrl: lesson.video_url || "",
       recipeUrl: lesson.recipe_url || "",
       mediaUrls: securedMedia,
+      ...mainMediaInfo,
       materials: Boolean(lesson.is_section) ? [] : normalizeMaterials(lesson.materials),
       isSection: Boolean(lesson.is_section),
       views: lesson.views || 0,

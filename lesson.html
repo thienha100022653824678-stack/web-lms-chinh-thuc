@@ -657,6 +657,49 @@
       return url;
     }
 
+    function inferMainMediaTypeFromUrl(input) {
+      const text = extractIframeSrc(String(input || "")).replace(/&amp;/g, "&").trim();
+      const match = text.match(/\.([a-z0-9]{2,5})(?:[?#].*)?$/i);
+      const ext = match ? match[1].toLowerCase() : "";
+      if (["jpg", "jpeg", "png", "webp", "gif"].includes(ext)) return "image";
+      if (["mp4", "webm", "mov", "m4v"].includes(ext)) return "video";
+      return "unknown";
+    }
+
+    function getMainMediaType(lesson) {
+      const serverType = String(lesson?.mainMediaType || "").toLowerCase().trim();
+      if (serverType === "image" || serverType === "video") return serverType;
+
+      const mime = String(lesson?.mainMediaMimeType || "").toLowerCase().trim();
+      if (mime.startsWith("image/")) return "image";
+      if (mime.startsWith("video/")) return "video";
+
+      return inferMainMediaTypeFromUrl(lesson?.videoUrl || lesson?.secureVideoUrl || "");
+    }
+
+    function isMainMediaImage(lesson) {
+      return getMainMediaType(lesson) === "image";
+    }
+
+    function mainMediaImageUrl(lesson) {
+      return normalizeGoogleDriveImageUrl(lesson?.videoUrl || lesson?.secureVideoUrl || lesson?.thumbnailUrl || HERO_PLACEHOLDER_IMAGE) || HERO_PLACEHOLDER_IMAGE;
+    }
+
+    function getMainImageHtml(lesson) {
+      const src = escapeHtml(mainMediaImageUrl(lesson));
+      const title = escapeHtml(lesson?.title || "Hinh anh bai hoc");
+      return `
+        <div class="relative w-full h-full flex items-center justify-center bg-brandCream">
+          <img
+            src="${src}"
+            alt="${title}"
+            class="w-full h-full object-contain bg-brandCream"
+            loading="lazy"
+          />
+        </div>
+      `;
+    }
+
     function getYouTubeVideoId(input) {
       let text = extractIframeSrc(input).replace(/&amp;/g, "&").trim();
       if (!text) return "";
@@ -722,6 +765,10 @@
     function lessonVideoUrl(lesson) {
       const secure = lesson?.secureVideoUrl || "";
       const raw = lesson?.videoUrl || "";
+
+      if (isMainMediaImage(lesson)) {
+        return "";
+      }
 
       if (lesson?.videoProvider === "bunny_embed") {
         return secure;
@@ -1150,9 +1197,17 @@
 
         // Video Player Box: Auto-hide if no video is available
         const videoBox = document.getElementById("videoBox");
+        const hasMainImage = isMainMediaImage(currentLesson);
         const hasVideo = Boolean(lessonVideoUrl(currentLesson));
         if (videoBox) {
-          if (hasVideo) {
+          if (hasMainImage) {
+            videoBox.classList.remove("hidden");
+            const videoWrapper = document.getElementById("videoWrapper");
+            if (videoWrapper) {
+              videoWrapper.innerHTML = getMainImageHtml(currentLesson);
+              clearWatermarkFrom(videoWrapper);
+            }
+          } else if (hasVideo) {
             videoBox.classList.remove("hidden");
             const videoWrapper = document.getElementById("videoWrapper");
             const videoThumb = document.getElementById("videoThumb");

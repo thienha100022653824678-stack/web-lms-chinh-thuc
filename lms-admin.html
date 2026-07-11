@@ -322,17 +322,17 @@
                 </div>
 
                  <div>
-                  <label class="block text-xs font-bold text-slate-500 mb-1">Video bài giảng chính (Google Drive)</label>
+                  <label class="block text-xs font-bold text-slate-500 mb-1">Video/Hình ảnh bài giảng chính (Google Drive)</label>
                   <div class="flex gap-2">
-                    <input id="fVideoUrl" type="text" placeholder="Dán link chia sẻ hoặc ID video Google Drive..." class="flex-grow border border-slate-200 rounded-xl px-3 py-2 text-sm"/>
+                    <input id="fVideoUrl" type="text" placeholder="Dán link chia sẻ hoặc ID file video/hình ảnh Google Drive..." class="flex-grow border border-slate-200 rounded-xl px-3 py-2 text-sm"/>
                     <button onclick="testMainVideoUrl()" class="bg-slate-200 hover:bg-slate-350 text-slate-700 text-xs font-bold px-4 py-2 rounded-xl transition shrink-0">Kiểm tra</button>
                   </div>
                   <!-- Main video drag/drop upload zone -->
                   <div id="mainVideoUploadZone" class="mt-2 border-2 border-dashed border-slate-200 rounded-xl p-3 bg-slate-50/50 hover:bg-slate-50 hover:border-brandGreen transition cursor-pointer flex flex-col items-center justify-center text-center gap-1.5" onclick="triggerMainVideoUpload()">
-                    <span class="text-xs text-slate-500 font-medium">📥 Kéo thả video vào đây hoặc bấm để chọn file</span>
-                    <span class="text-[10px] text-slate-400">Tối đa 500 MB. Định dạng hỗ trợ: .mp4, .mov, .avi, .mkv...</span>
+                    <span class="text-xs text-slate-500 font-medium">📥 Kéo thả video hoặc hình ảnh vào đây, hoặc bấm để chọn file</span>
+                    <span class="text-[10px] text-slate-400">Tối đa 500 MB. Hỗ trợ: .mp4, .webm, .mov, .m4v, .jpg, .jpeg, .png, .webp, .gif</span>
                   </div>
-                  <input type="file" id="mainVideoFileInput" accept="video/*" class="hidden" onchange="handleVideoUpload(this, 'main_video')"/>
+                  <input type="file" id="mainVideoFileInput" accept="video/*,image/*" class="hidden" onchange="handleVideoUpload(this, 'main_video')"/>
                   
                   <!-- Progress bar / Status -->
                   <div id="mainVideoUploadProgressWrapper" class="hidden mt-2 space-y-1">
@@ -2869,6 +2869,37 @@
       }, false);
     }
 
+    function resolveUploadMime(file) {
+      const mime = String(file?.type || "").toLowerCase();
+      if (mime.startsWith("image/")) return mime;
+      if (mime.startsWith("video/")) {
+        const unacceptedMimes = [
+          "video/x-matroska",
+          "video/x-msvideo",
+          "video/x-ms-wmv",
+          "video/x-flv",
+          "video/x-ms-vob",
+          "video/x-generic"
+        ];
+        return unacceptedMimes.includes(mime) ? "video/mp4" : mime;
+      }
+
+      const ext = String(file?.name || "").split(".").pop().toLowerCase();
+      const mimeByExt = {
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        png: "image/png",
+        webp: "image/webp",
+        gif: "image/gif",
+        mp4: "video/mp4",
+        webm: "video/webm",
+        mov: "video/quicktime",
+        m4v: "video/x-m4v"
+      };
+
+      return mimeByExt[ext] || "video/mp4";
+    }
+
     async function uploadVideoFileToDrive(file, type, onProgress = () => {}) {
       const courseEl = document.getElementById("fCourse");
       const course_slug = courseEl ? courseEl.value.trim() : "";
@@ -2911,18 +2942,7 @@
         throw new Error(folderData.error || "Khong the khoi tao thu muc upload");
       }
 
-      let uploadMime = file.type || "";
-      const unacceptedMimes = [
-        "video/x-matroska",
-        "video/x-msvideo",
-        "video/x-ms-wmv",
-        "video/x-flv",
-        "video/x-ms-vob",
-        "video/x-generic"
-      ];
-      if (!uploadMime || unacceptedMimes.includes(uploadMime)) {
-        uploadMime = "video/mp4";
-      }
+      const uploadMime = resolveUploadMime(file);
 
       onProgress({ percent: 0, status: "Khoi tao phien upload Google Drive..." });
       const sessionUrl = await new Promise((resolve, reject) => {
@@ -3060,19 +3080,8 @@
         const folderId = folderData.folderId;
         if (statusText) statusText.innerText = "Khởi tạo phiên tải lên Google Drive...";
 
-        // Normalize non-standard MIME types that Google Drive API rejects
-        let uploadMime = file.type || "";
-        const unacceptedMimes = [
-          "video/x-matroska",
-          "video/x-msvideo",
-          "video/x-ms-wmv",
-          "video/x-flv",
-          "video/x-ms-vob",
-          "video/x-generic"
-        ];
-        if (!uploadMime || unacceptedMimes.includes(uploadMime)) {
-          uploadMime = "video/mp4";
-        }
+        // Normalize non-standard MIME types that Google Drive API rejects, while preserving images.
+        const uploadMime = resolveUploadMime(file);
 
         // Step 2: Initiate Resumable Upload on Google Drive API
         const initXhr = new XMLHttpRequest();
