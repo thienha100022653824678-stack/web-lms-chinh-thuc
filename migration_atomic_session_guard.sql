@@ -57,6 +57,28 @@ CREATE TABLE IF NOT EXISTS student_device_change_logs (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- Keep this migration safe for databases where student_device_change_logs
+-- was created by an earlier draft before every column existed.
+ALTER TABLE student_device_change_logs
+  ADD COLUMN IF NOT EXISTS action text,
+  ADD COLUMN IF NOT EXISTS old_device_hash text,
+  ADD COLUMN IF NOT EXISTS new_device_hash text,
+  ADD COLUMN IF NOT EXISTS old_device_label text,
+  ADD COLUMN IF NOT EXISTS new_device_label text,
+  ADD COLUMN IF NOT EXISTS old_student_session_id text,
+  ADD COLUMN IF NOT EXISTS new_student_session_id text,
+  ADD COLUMN IF NOT EXISTS user_agent text,
+  ADD COLUMN IF NOT EXISTS ip_hash text,
+  ADD COLUMN IF NOT EXISTS reason text,
+  ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
+
+UPDATE student_device_change_logs
+SET action = coalesce(action, 'unknown')
+WHERE action IS NULL;
+
+ALTER TABLE student_device_change_logs
+  ALTER COLUMN action SET NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_student_device_change_logs_email_created
   ON student_device_change_logs (lower(email), created_at DESC);
 
@@ -188,7 +210,7 @@ BEGIN
       RETURN jsonb_build_object(
         'ok', false,
         'action', 'blocked',
-        'reason', 'existing_active_session',
+        'reason', 'active_session_on_another_device',
         'student_session_id', v_existing.student_session_id,
         'portal_device_id', v_existing.portal_device_id,
         'last_seen_at', v_existing.last_seen_at
