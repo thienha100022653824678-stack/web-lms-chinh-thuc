@@ -1,6 +1,8 @@
 import { supabase } from "../supabase.js";
 import {
+  ACCOUNT_SHARING_EVENT_TYPES,
   createLmsVerifiedSession,
+  logStudentDeviceEvent,
   markLmsEntryTokenUsed,
   normalizeEmail,
   touchStudentSession,
@@ -47,6 +49,12 @@ function jsonError(res, status, error, code) {
   return res.status(status).json({ ok: false, error, code });
 }
 
+function logDeviceEventAsync(payload) {
+  void logStudentDeviceEvent(supabase, payload).catch(error => {
+    console.warn("[account-sharing] LMS event skipped:", error.message);
+  });
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -74,6 +82,22 @@ export default async function handler(req, res) {
 
     const tokenResult = await verifyLmsEntryToken(supabase, entryToken);
     if (!tokenResult.ok || !tokenResult.entryToken) {
+      if (tokenResult.entryToken?.email) {
+        logDeviceEventAsync({
+          email: tokenResult.entryToken.email,
+          eventType: ACCOUNT_SHARING_EVENT_TYPES.ENTRY_TOKEN_REJECTED,
+          courseSlug: tokenResult.entryToken.course_slug,
+          postId: tokenResult.entryToken.post_id,
+          lmsDeviceId,
+          userAgent: req.headers["user-agent"] || null,
+          ip: getClientIp(req),
+          reason: tokenResult.reason || "invalid_entry_token",
+          source: "lms",
+          metadata: {
+            tokenStatus: tokenResult.entryToken.status || null
+          }
+        });
+      }
       return jsonError(
         res,
         401,
@@ -142,6 +166,33 @@ export default async function handler(req, res) {
 
     await markLmsEntryTokenUsed(supabase, entry.id);
     await touchStudentSession(supabase, studentSessionId);
+    logDeviceEventAsync({
+      email,
+      eventType: ACCOUNT_SHARING_EVENT_TYPES.ENTRY_TOKEN_USED,
+      courseSlug,
+      postId: entry.post_id,
+      newStudentSessionId: studentSessionId,
+      lmsDeviceId,
+      lmsSessionId: lmsSession.lms_session_id,
+      userAgent: req.headers["user-agent"] || null,
+      ip: getClientIp(req),
+      source: "lms",
+      metadata: {
+        entryTokenStatus: "used"
+      }
+    });
+    logDeviceEventAsync({
+      email,
+      eventType: ACCOUNT_SHARING_EVENT_TYPES.LMS_SESSION_CREATED,
+      courseSlug,
+      postId: entry.post_id,
+      newStudentSessionId: studentSessionId,
+      lmsDeviceId,
+      lmsSessionId: lmsSession.lms_session_id,
+      userAgent: req.headers["user-agent"] || null,
+      ip: getClientIp(req),
+      source: "lms"
+    });
 
     return res.status(200).json({
       ok: true,

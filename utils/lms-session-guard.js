@@ -85,6 +85,156 @@ export function hashToken(rawToken) {
   return crypto.createHash("sha256").update(rawToken).digest("hex");
 }
 
+export function hashOptionalValue(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return null;
+  return crypto.createHash("sha256").update(normalized).digest("hex");
+}
+
+export const ACCOUNT_SHARING_EVENT_TYPES = Object.freeze({
+  PORTAL_SESSION_CREATED: "portal_session_created",
+  PORTAL_SESSION_REUSED: "portal_session_reused",
+  LOGIN_BLOCKED_OTHER_DEVICE: "login_blocked_other_device",
+  ENTRY_TOKEN_CREATED: "entry_token_created",
+  ENTRY_TOKEN_USED: "entry_token_used",
+  ENTRY_TOKEN_REJECTED: "entry_token_rejected",
+  LMS_SESSION_CREATED: "lms_session_created",
+  LMS_SESSION_REJECTED: "lms_session_rejected",
+  LOGOUT: "logout",
+  ADMIN_RESET: "admin_reset",
+  ADMIN_NOTE: "admin_note",
+  ADMIN_MARK_REVIEWED: "admin_mark_reviewed",
+  ADMIN_MARK_SUSPECTED: "admin_mark_suspected"
+});
+
+const ACCOUNT_SHARING_RISK_POINTS = Object.freeze({
+  [ACCOUNT_SHARING_EVENT_TYPES.LOGIN_BLOCKED_OTHER_DEVICE]: 25,
+  [ACCOUNT_SHARING_EVENT_TYPES.ENTRY_TOKEN_REJECTED]: 10,
+  [ACCOUNT_SHARING_EVENT_TYPES.LMS_SESSION_REJECTED]: 10,
+  [ACCOUNT_SHARING_EVENT_TYPES.PORTAL_SESSION_CREATED]: 3,
+  [ACCOUNT_SHARING_EVENT_TYPES.ENTRY_TOKEN_CREATED]: 1,
+  [ACCOUNT_SHARING_EVENT_TYPES.ENTRY_TOKEN_USED]: 1,
+  [ACCOUNT_SHARING_EVENT_TYPES.LOGOUT]: 4,
+  [ACCOUNT_SHARING_EVENT_TYPES.ADMIN_RESET]: 0,
+  [ACCOUNT_SHARING_EVENT_TYPES.ADMIN_NOTE]: 0,
+  [ACCOUNT_SHARING_EVENT_TYPES.ADMIN_MARK_REVIEWED]: 0,
+  [ACCOUNT_SHARING_EVENT_TYPES.ADMIN_MARK_SUSPECTED]: 0
+});
+
+export function getAccountSharingRiskPoints(eventType) {
+  return ACCOUNT_SHARING_RISK_POINTS[eventType] || 0;
+}
+
+export function getAccountSharingRiskLevel(score) {
+  const value = Number(score) || 0;
+  if (value >= 80) return "high";
+  if (value >= 45) return "suspicious";
+  if (value >= 20) return "watch";
+  return "normal";
+}
+
+export async function logStudentDeviceEvent(supabase, {
+  email,
+  eventType,
+  action = null,
+  courseSlug = null,
+  postId = null,
+  oldDeviceHash = null,
+  newDeviceHash = null,
+  oldDeviceLabel = null,
+  newDeviceLabel = null,
+  oldStudentSessionId = null,
+  newStudentSessionId = null,
+  lmsDeviceId = null,
+  lmsSessionId = null,
+  userAgent = null,
+  ip = null,
+  ipHash = null,
+  reason = null,
+  source = "lms",
+  riskPoints = null,
+  metadata = {},
+  adminEmail = null,
+  idempotencyKey = null
+}) {
+  const normalizedEmail = normalizeEmail(email);
+  const normalizedEventType = String(eventType || "").trim();
+  if (!normalizedEmail || !normalizedEventType) {
+    return { ok: false, reason: "missing_required_fields" };
+  }
+
+  const insertPayload = {
+    email: normalizedEmail,
+    action: String(action || normalizedEventType),
+    event_type: normalizedEventType,
+    course_slug: courseSlug || null,
+    post_id: postId || null,
+    old_device_hash: oldDeviceHash || null,
+    new_device_hash: newDeviceHash || hashOptionalValue(lmsDeviceId),
+    old_device_label: oldDeviceLabel || null,
+    new_device_label: newDeviceLabel || null,
+    old_student_session_id: oldStudentSessionId || null,
+    new_student_session_id: newStudentSessionId || null,
+    lms_device_hash: hashOptionalValue(lmsDeviceId),
+    lms_session_hash: hashOptionalValue(lmsSessionId),
+    user_agent: userAgent || null,
+    ip_hash: ipHash || hashOptionalValue(ip),
+    reason: reason || null,
+    event_source: source || "lms",
+    risk_points: Number.isFinite(Number(riskPoints))
+      ? Number(riskPoints)
+      : getAccountSharingRiskPoints(normalizedEventType),
+    metadata: metadata && typeof metadata === "object" ? metadata : {},
+    admin_email: adminEmail ? normalizeEmail(adminEmail) : null,
+    event_idempotency_key: idempotencyKey || null
+  };
+
+  const { error } = await supabase
+    .from("student_device_change_logs")
+    .insert(insertPayload);
+
+  if (error) {
+    // Best-effort telemetry only. Never block student access because a warning log failed.
+    console.warn("[account-sharing] Could not write device event:", error.message);
+    return { ok: false, reason: "insert_failed" };
+  }
+
+  return { ok: true };
+}
+
+export async function writeAdminAuditLog(supabase, {
+  adminEmail = null,
+  action,
+  targetEmail = null,
+  metadata = {},
+  ip = null,
+  ipHash = null,
+  userAgent = null
+}) {
+  const normalizedAction = String(action || "").trim();
+  if (!normalizedAction) {
+    return { ok: false, reason: "missing_action" };
+  }
+
+  const { error } = await supabase
+    .from("admin_audit_logs")
+    .insert({
+      admin_email: adminEmail ? normalizeEmail(adminEmail) : null,
+      action: normalizedAction,
+      target_email: targetEmail ? normalizeEmail(targetEmail) : null,
+      metadata: metadata && typeof metadata === "object" ? metadata : {},
+      ip_hash: ipHash || hashOptionalValue(ip),
+      user_agent: userAgent || null
+    });
+
+  if (error) {
+    console.warn("[account-sharing] Could not write admin audit:", error.message);
+    return { ok: false, reason: "insert_failed" };
+  }
+
+  return { ok: true };
+}
+
 function nowIso() {
   return new Date().toISOString();
 }

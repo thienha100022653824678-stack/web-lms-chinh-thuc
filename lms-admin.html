@@ -120,6 +120,9 @@
         <button onclick="switchTab('student-trace')" id="tabBtn-student-trace" class="tab-btn flex-grow lg:flex-none flex items-center justify-center lg:justify-start gap-2.5 py-4 lg:py-3 px-5 text-sm font-bold border-b-2 lg:border-b-0 lg:border-l-4 border-transparent text-slate-500 hover:bg-slate-50 transition">
           🔍 Tra Cứu Học Viên
         </button>
+        <button onclick="switchTab('account-sharing')" id="tabBtn-account-sharing" class="tab-btn flex-grow lg:flex-none flex items-center justify-center lg:justify-start gap-2.5 py-4 lg:py-3 px-5 text-sm font-bold border-b-2 lg:border-b-0 lg:border-l-4 border-transparent text-slate-500 hover:bg-slate-50 transition">
+          🚨 Cảnh báo chia sẻ
+        </button>
       </aside>
 
       <!-- Main Panel Workspace -->
@@ -668,7 +671,70 @@
           </div>
         </div>
 
+        <!-- ACCOUNT SHARING ALERTS -->
+        <div id="tabContent-account-sharing" class="tab-content hidden flex-grow bg-slate-50 border border-slate-200 rounded-2xl p-5 shadow-sm space-y-5">
+          <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+            <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+              <div>
+                <h2 class="text-base font-extrabold text-slate-800">🚨 Cảnh báo chia sẻ tài khoản</h2>
+                <p class="text-xs text-slate-500 mt-1">Tổng hợp Gmail có dấu hiệu đổi thiết bị hoặc bị chặn đăng nhập bất thường. Hệ thống chỉ cảnh báo, không tự khóa học viên.</p>
+              </div>
+              <div class="flex flex-col sm:flex-row gap-2">
+                <input id="accountSharingSearchInput" type="email" placeholder="Tìm Gmail..." class="px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-xs font-bold outline-none focus:border-brandGreen" onkeydown="if(event.key === 'Enter') loadAccountSharingAlerts()">
+                <select id="accountSharingStatusFilter" class="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold" onchange="loadAccountSharingAlerts()">
+                  <option value="">Tất cả trạng thái</option>
+                  <option value="new">Mới</option>
+                  <option value="monitoring">Đang theo dõi</option>
+                  <option value="reviewed">Đã kiểm tra</option>
+                  <option value="suspected_sharing">Nghi ngờ chia sẻ</option>
+                  <option value="false_positive">Cảnh báo nhầm</option>
+                  <option value="resolved">Đã xử lý</option>
+                </select>
+                <div class="flex rounded-xl bg-slate-100 p-1 text-xs font-black">
+                  <button id="accountSharingRange-24h" type="button" onclick="setAccountSharingRange('24h')" class="px-3 py-1.5 rounded-lg">24h</button>
+                  <button id="accountSharingRange-7d" type="button" onclick="setAccountSharingRange('7d')" class="px-3 py-1.5 rounded-lg bg-white shadow-sm text-brandGreen">7 ngày</button>
+                  <button id="accountSharingRange-30d" type="button" onclick="setAccountSharingRange('30d')" class="px-3 py-1.5 rounded-lg">30 ngày</button>
+                </div>
+              </div>
+            </div>
+            <div id="accountSharingSummary" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs">
+                <thead class="bg-slate-50 text-slate-500 uppercase">
+                  <tr>
+                    <th class="px-4 py-3 font-black">Gmail</th>
+                    <th class="px-4 py-3 font-black">Rủi ro</th>
+                    <th class="px-4 py-3 font-black">Thiết bị 24h/7d/30d</th>
+                    <th class="px-4 py-3 font-black">Bị chặn</th>
+                    <th class="px-4 py-3 font-black">Khóa học</th>
+                    <th class="px-4 py-3 font-black">Trạng thái</th>
+                    <th class="px-4 py-3 font-black text-right">Hành động</th>
+                  </tr>
+                </thead>
+                <tbody id="accountSharingTableBody" class="divide-y divide-slate-100"></tbody>
+              </table>
+            </div>
+            <div id="accountSharingEmpty" class="hidden p-10 text-center text-sm font-bold text-slate-400">Chưa có cảnh báo đáng chú ý trong khoảng thời gian này.</div>
+          </div>
+        </div>
+
       </div>
+    </div>
+  </div>
+
+  <div id="accountSharingDetailModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[80] hidden items-center justify-center p-4">
+    <div class="bg-white rounded-3xl w-full max-w-5xl max-h-[90vh] overflow-hidden shadow-2xl border border-slate-200 flex flex-col">
+      <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+        <div>
+          <h3 id="accountSharingDetailTitle" class="text-base font-extrabold text-slate-800">Chi tiết cảnh báo</h3>
+          <p class="text-xs text-slate-500">Timeline thiết bị, phiên học và thao tác admin.</p>
+        </div>
+        <button type="button" onclick="closeAccountSharingDetail()" class="text-slate-400 hover:text-slate-700 font-black text-xl">×</button>
+      </div>
+      <div id="accountSharingDetailBody" class="p-5 overflow-y-auto space-y-5"></div>
     </div>
   </div>
 
@@ -1136,6 +1202,9 @@
     let modalEnrollCourseAutocomplete = null;
     let lessonsCourseAutocomplete = null;
     let selectedCourseFilter = "";
+    let currentAccountSharingRange = "7d";
+    let accountSharingAlertsCache = [];
+    let currentAccountSharingDetailEmail = "";
 
     // ── Toast messaging ────────────────────────────────────────────────────
     function toast(msg, type = "success") {
@@ -1202,6 +1271,8 @@
         loadEnrollments(selectedCourseFilter, search);
       } else if (tabId === "drive-health") {
         loadDriveHealth();
+      } else if (tabId === "account-sharing") {
+        loadAccountSharingAlerts();
       }
     }
 
@@ -4307,6 +4378,371 @@
     function setDriveHealthRange(range) {
       currentDriveHealthRange = range;
       loadDriveHealth();
+    }
+
+    function accountRiskClass(level) {
+      if (level === "high") return "bg-red-50 text-red-700 border-red-200";
+      if (level === "suspicious") return "bg-orange-50 text-orange-700 border-orange-200";
+      if (level === "watch") return "bg-amber-50 text-amber-700 border-amber-200";
+      return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    }
+
+    function formatTime(value) {
+      if (!value) return "N/A";
+      try {
+        return new Date(value).toLocaleString("vi-VN");
+      } catch {
+        return "N/A";
+      }
+    }
+
+    function setAccountSharingRange(range) {
+      currentAccountSharingRange = range;
+      ["24h", "7d", "30d"].forEach((item) => {
+        const btn = document.getElementById(`accountSharingRange-${item}`);
+        if (!btn) return;
+        btn.classList.toggle("bg-white", item === range);
+        btn.classList.toggle("shadow-sm", item === range);
+        btn.classList.toggle("text-brandGreen", item === range);
+      });
+      loadAccountSharingAlerts();
+    }
+
+    async function loadAccountSharingAlerts() {
+      const tableBody = document.getElementById("accountSharingTableBody");
+      const empty = document.getElementById("accountSharingEmpty");
+      const summary = document.getElementById("accountSharingSummary");
+      if (!tableBody || !empty || !summary) return;
+
+      const q = document.getElementById("accountSharingSearchInput")?.value.trim() || "";
+      const status = document.getElementById("accountSharingStatusFilter")?.value || "";
+      tableBody.innerHTML = `<tr><td colspan="7" class="px-4 py-8 text-center text-slate-400 font-bold">Đang tải cảnh báo...</td></tr>`;
+      empty.classList.add("hidden");
+
+      try {
+        const params = new URLSearchParams({
+          endpoint: "account-sharing-alerts",
+          range: currentAccountSharingRange
+        });
+        if (q) params.set("q", q);
+        if (status) params.set("status", status);
+
+        const res = await fetch(`/api/lms/admin?${params.toString()}`, {
+          method: "GET",
+          headers: authHeaders()
+        });
+        const data = await res.json();
+        if (res.status === 401) {
+          toast("Hết hạn phiên admin", "error");
+          showLoginScreen();
+          return;
+        }
+        if (!res.ok || !data.success) {
+          toast(data.error || "Không tải được cảnh báo chia sẻ tài khoản", "error");
+          tableBody.innerHTML = "";
+          return;
+        }
+
+        accountSharingAlertsCache = data.alerts || [];
+        renderAccountSharingSummary(data.totals || {});
+        renderAccountSharingAlerts(accountSharingAlertsCache);
+      } catch (error) {
+        console.error(error);
+        toast("Lỗi kết nối khi tải cảnh báo chia sẻ", "error");
+        tableBody.innerHTML = "";
+      }
+    }
+
+    function renderAccountSharingSummary(totals) {
+      const summary = document.getElementById("accountSharingSummary");
+      if (!summary) return;
+      const items = [
+        ["Gmail có tín hiệu", totals.emails || 0, "bg-slate-50 text-slate-700"],
+        ["Nguy cơ cao", totals.high || 0, "bg-red-50 text-red-700"],
+        ["Đáng ngờ", totals.suspicious || 0, "bg-orange-50 text-orange-700"],
+        ["Cần theo dõi", totals.watch || 0, "bg-amber-50 text-amber-700"]
+      ];
+      summary.innerHTML = items.map(([label, value, cls]) => `
+        <div class="${cls} border border-current/10 rounded-2xl p-4">
+          <div class="text-2xl font-black">${value}</div>
+          <div class="text-[11px] font-bold uppercase tracking-wide opacity-80">${label}</div>
+        </div>
+      `).join("");
+    }
+
+    function renderAccountSharingAlerts(alerts) {
+      const tableBody = document.getElementById("accountSharingTableBody");
+      const empty = document.getElementById("accountSharingEmpty");
+      if (!tableBody || !empty) return;
+      if (!alerts.length) {
+        tableBody.innerHTML = "";
+        empty.classList.remove("hidden");
+        return;
+      }
+      empty.classList.add("hidden");
+      tableBody.innerHTML = alerts.map((alert) => `
+        <tr class="hover:bg-slate-50">
+          <td class="px-4 py-3">
+            <div class="font-black text-slate-800">${escapeHtml(alert.email)}</div>
+            <div class="text-[10px] text-slate-400">Gần nhất: ${escapeHtml(formatTime(alert.lastEventAt))}</div>
+          </td>
+          <td class="px-4 py-3">
+            <span class="inline-flex items-center rounded-lg border px-2 py-1 font-black ${accountRiskClass(alert.riskLevel)}">${escapeHtml(alert.riskLabel)} · ${Number(alert.riskScore || 0)}</span>
+          </td>
+          <td class="px-4 py-3 font-bold text-slate-700">${Number(alert.devices24h || 0)} / ${Number(alert.devices7d || 0)} / ${Number(alert.devices30d || 0)}</td>
+          <td class="px-4 py-3 font-bold ${Number(alert.blockedCount || 0) > 0 ? "text-red-600" : "text-slate-500"}">${Number(alert.blockedCount || 0)}</td>
+          <td class="px-4 py-3 text-slate-600">${(alert.courseSlugs || []).map(slug => `<span class="inline-block bg-slate-100 rounded px-1.5 py-0.5 mr-1 mb-1 font-bold">${escapeHtml(slug)}</span>`).join("") || "N/A"}</td>
+          <td class="px-4 py-3"><span class="inline-flex rounded-lg bg-slate-100 text-slate-700 px-2 py-1 font-bold">${escapeHtml(alert.reviewStatusLabel || "Mới")}</span></td>
+          <td class="px-4 py-3 text-right">
+            <button type="button" onclick="openAccountSharingDetail('${escapeHtml(alert.email)}')" class="bg-brandGreen hover:bg-brandGreenLight text-white font-black px-3 py-2 rounded-xl">Chi tiết</button>
+          </td>
+        </tr>
+      `).join("");
+    }
+
+    async function openAccountSharingDetail(email) {
+      currentAccountSharingDetailEmail = email;
+      const modal = document.getElementById("accountSharingDetailModal");
+      const body = document.getElementById("accountSharingDetailBody");
+      const title = document.getElementById("accountSharingDetailTitle");
+      if (!modal || !body || !title) return;
+      title.textContent = `Chi tiết cảnh báo: ${email}`;
+      body.innerHTML = `<div class="p-8 text-center text-slate-400 font-bold">Đang tải timeline...</div>`;
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+
+      try {
+        const params = new URLSearchParams({
+          endpoint: "account-sharing-alerts",
+          mode: "detail",
+          email
+        });
+        const res = await fetch(`/api/lms/admin?${params.toString()}`, {
+          method: "GET",
+          headers: authHeaders()
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          body.innerHTML = `<div class="p-8 text-center text-red-500 font-bold">${escapeHtml(data.error || "Không tải được chi tiết")}</div>`;
+          return;
+        }
+        body.innerHTML = renderAccountSharingDetail(data);
+      } catch (error) {
+        console.error(error);
+        body.innerHTML = `<div class="p-8 text-center text-red-500 font-bold">Lỗi kết nối máy chủ</div>`;
+      }
+    }
+
+    function closeAccountSharingDetail() {
+      const modal = document.getElementById("accountSharingDetailModal");
+      if (!modal) return;
+      modal.classList.add("hidden");
+      modal.classList.remove("flex");
+    }
+
+    function renderAccountSharingDetail(data) {
+      const summary = data.summary || {};
+      const events = data.events || [];
+      const studentSessions = data.studentSessions || [];
+      const lmsSessions = data.lmsSessions || [];
+      const notes = data.notes || [];
+      const audits = data.audits || [];
+      const email = data.email || currentAccountSharingDetailEmail;
+
+      const sessionCards = studentSessions.slice(0, 4).map(session => `
+        <div class="rounded-2xl border border-slate-200 bg-white p-3">
+          <div class="flex items-center justify-between gap-2">
+            <span class="font-black text-slate-800">${escapeHtml(session.device_label || "Thiết bị Portal")}</span>
+            <span class="rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-600">${escapeHtml(session.status || "N/A")}</span>
+          </div>
+          <div class="mt-2 text-[11px] text-slate-500">Lần cuối: ${escapeHtml(formatTime(session.last_seen_at))}</div>
+          <div class="text-[11px] text-slate-400">Đăng nhập: ${escapeHtml(formatTime(session.login_at))}</div>
+        </div>
+      `).join("");
+
+      const lmsCards = lmsSessions.slice(0, 4).map(session => `
+        <div class="rounded-2xl border border-slate-200 bg-white p-3">
+          <div class="flex items-center justify-between gap-2">
+            <span class="font-black text-slate-800">${escapeHtml(session.course_slug || "Khóa học")}</span>
+            <span class="rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-600">${escapeHtml(session.status || "N/A")}</span>
+          </div>
+          <div class="mt-2 text-[11px] text-slate-500">Lần cuối: ${escapeHtml(formatTime(session.last_seen_at))}</div>
+          <div class="text-[11px] text-slate-400">Xác thực: ${escapeHtml(formatTime(session.verified_at))}</div>
+        </div>
+      `).join("");
+
+      const timeline = events.map(event => {
+        const label = event.event_type || event.action || "event";
+        const course = event.course_slug ? ` · ${escapeHtml(event.course_slug)}` : "";
+        const oldDevice = event.old_device_label ? `<span class="rounded bg-slate-100 px-1.5 py-0.5">${escapeHtml(event.old_device_label)}</span>` : "";
+        const newDevice = event.new_device_label ? `<span class="rounded bg-slate-100 px-1.5 py-0.5">${escapeHtml(event.new_device_label)}</span>` : "";
+        const deviceText = [oldDevice, newDevice].filter(Boolean).join(" → ");
+        return `
+          <div class="relative pl-6 pb-4">
+            <div class="absolute left-0 top-1 h-3 w-3 rounded-full bg-brandGreen"></div>
+            <div class="rounded-2xl border border-slate-200 bg-white p-3">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="font-black text-slate-800">${escapeHtml(label)}${course}</div>
+                <div class="text-[11px] font-bold text-slate-400">${escapeHtml(formatTime(event.created_at))}</div>
+              </div>
+              ${deviceText ? `<div class="mt-2 flex flex-wrap items-center gap-1 text-[11px] text-slate-500">${deviceText}</div>` : ""}
+              ${event.reason ? `<div class="mt-2 text-[11px] font-bold text-orange-600">Lý do: ${escapeHtml(event.reason)}</div>` : ""}
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      const noteItems = notes.map(note => `
+        <div class="rounded-2xl border border-amber-100 bg-amber-50 p-3">
+          <div class="text-[11px] font-bold text-amber-700">${escapeHtml(note.admin_email || "Admin")} · ${escapeHtml(formatTime(note.created_at))}</div>
+          <div class="mt-1 whitespace-pre-wrap text-sm text-slate-700">${escapeHtml(note.note || "")}</div>
+        </div>
+      `).join("");
+
+      const auditItems = audits.map(audit => `
+        <div class="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-xs">
+          <span class="font-bold text-slate-700">${escapeHtml(audit.action || "admin_action")}</span>
+          <span class="text-slate-400">${escapeHtml(formatTime(audit.created_at))}</span>
+        </div>
+      `).join("");
+
+      return `
+        <div class="grid gap-4 lg:grid-cols-[1fr_320px]">
+          <div class="space-y-4">
+            <div class="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+              <div class="grid gap-3 sm:grid-cols-4">
+                <div>
+                  <div class="text-[10px] font-black uppercase text-slate-400">Rủi ro</div>
+                  <div class="mt-1 inline-flex rounded-xl border px-3 py-2 font-black ${accountRiskClass(summary.riskLevel)}">${escapeHtml(summary.riskLabel || "Bình thường")} · ${Number(summary.riskScore || 0)}</div>
+                </div>
+                <div>
+                  <div class="text-[10px] font-black uppercase text-slate-400">Thiết bị 24h/7d/30d</div>
+                  <div class="mt-2 font-black text-slate-800">${Number(summary.devices24h || 0)} / ${Number(summary.devices7d || 0)} / ${Number(summary.devices30d || 0)}</div>
+                </div>
+                <div>
+                  <div class="text-[10px] font-black uppercase text-slate-400">Bị chặn</div>
+                  <div class="mt-2 font-black text-red-600">${Number(summary.blockedCount || 0)}</div>
+                </div>
+                <div>
+                  <div class="text-[10px] font-black uppercase text-slate-400">Trạng thái xử lý</div>
+                  <div class="mt-2 font-black text-slate-800">${escapeHtml(summary.reviewStatusLabel || "Mới")}</div>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h3 class="mb-3 font-black text-slate-800">Timeline hoạt động</h3>
+              <div class="max-h-[520px] overflow-y-auto rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                ${timeline || `<div class="p-6 text-center font-bold text-slate-400">Chưa có sự kiện.</div>`}
+              </div>
+            </div>
+          </div>
+
+          <div class="space-y-4">
+            <div class="rounded-3xl border border-slate-200 bg-white p-4">
+              <h3 class="font-black text-slate-800">Thao tác admin</h3>
+              <div class="mt-3 grid gap-2">
+                <button type="button" onclick="accountSharingAction('reset_session')" class="rounded-xl bg-red-50 px-3 py-2 text-left font-black text-red-600 hover:bg-red-100">Reset/logout phiên cũ</button>
+                <button type="button" onclick="accountSharingAction('mark_monitoring')" class="rounded-xl bg-amber-50 px-3 py-2 text-left font-black text-amber-700 hover:bg-amber-100">Đánh dấu cần theo dõi</button>
+                <button type="button" onclick="accountSharingAction('mark_reviewed')" class="rounded-xl bg-emerald-50 px-3 py-2 text-left font-black text-emerald-700 hover:bg-emerald-100">Đánh dấu đã kiểm tra</button>
+                <button type="button" onclick="accountSharingAction('mark_suspected')" class="rounded-xl bg-orange-50 px-3 py-2 text-left font-black text-orange-700 hover:bg-orange-100">Đánh dấu nghi ngờ chia sẻ</button>
+                <button type="button" onclick="accountSharingAction('mark_false_positive')" class="rounded-xl bg-slate-50 px-3 py-2 text-left font-black text-slate-600 hover:bg-slate-100">Đánh dấu cảnh báo nhầm</button>
+              </div>
+            </div>
+
+            <div class="rounded-3xl border border-slate-200 bg-white p-4">
+              <h3 class="font-black text-slate-800">Ghi chú</h3>
+              <textarea id="accountSharingNoteInput" rows="3" maxlength="1000" class="mt-3 w-full rounded-2xl border border-slate-200 p-3 text-sm outline-none focus:border-brandGreen" placeholder="Thêm ghi chú nội bộ cho Gmail này..."></textarea>
+              <button type="button" onclick="addAccountSharingNote()" class="mt-2 w-full rounded-xl bg-brandGreen px-3 py-2 font-black text-white hover:bg-brandGreenLight">Lưu ghi chú</button>
+              <div class="mt-3 space-y-2">${noteItems || `<div class="text-sm font-bold text-slate-400">Chưa có ghi chú.</div>`}</div>
+            </div>
+
+            <div class="rounded-3xl border border-slate-200 bg-white p-4">
+              <h3 class="font-black text-slate-800">Phiên Portal active/gần đây</h3>
+              <div class="mt-3 space-y-2">${sessionCards || `<div class="text-sm font-bold text-slate-400">Không có phiên Portal.</div>`}</div>
+            </div>
+
+            <div class="rounded-3xl border border-slate-200 bg-white p-4">
+              <h3 class="font-black text-slate-800">Phiên LMS gần đây</h3>
+              <div class="mt-3 space-y-2">${lmsCards || `<div class="text-sm font-bold text-slate-400">Không có phiên LMS.</div>`}</div>
+            </div>
+
+            <div class="rounded-3xl border border-slate-200 bg-white p-4">
+              <h3 class="font-black text-slate-800">Audit admin</h3>
+              <div class="mt-3 space-y-2">${auditItems || `<div class="text-sm font-bold text-slate-400">Chưa có thao tác admin.</div>`}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function accountSharingAction(action) {
+      if (!currentAccountSharingDetailEmail) return;
+      if (action === "reset_session" && !confirm("Reset/logout phiên đang active của Gmail này?")) return;
+      try {
+        showLoader("Đang cập nhật cảnh báo...");
+        const res = await fetch("/api/lms/admin?endpoint=account-sharing-alerts", {
+          method: "POST",
+          headers: {
+            ...authHeaders(),
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            email: currentAccountSharingDetailEmail,
+            action
+          })
+        });
+        const data = await res.json();
+        hideLoader();
+        if (!res.ok || !data.success) {
+          toast(data.error || "Không cập nhật được cảnh báo", "error");
+          return;
+        }
+        toast("Đã cập nhật cảnh báo", "success");
+        await openAccountSharingDetail(currentAccountSharingDetailEmail);
+        await loadAccountSharingAlerts();
+      } catch (error) {
+        hideLoader();
+        console.error(error);
+        toast("Lỗi kết nối máy chủ", "error");
+      }
+    }
+
+    async function addAccountSharingNote() {
+      const input = document.getElementById("accountSharingNoteInput");
+      const note = input?.value?.trim() || "";
+      if (!currentAccountSharingDetailEmail || !note) {
+        toast("Vui lòng nhập ghi chú", "error");
+        return;
+      }
+      try {
+        showLoader("Đang lưu ghi chú...");
+        const res = await fetch("/api/lms/admin?endpoint=account-sharing-alerts", {
+          method: "POST",
+          headers: {
+            ...authHeaders(),
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            email: currentAccountSharingDetailEmail,
+            action: "add_note",
+            note
+          })
+        });
+        const data = await res.json();
+        hideLoader();
+        if (!res.ok || !data.success) {
+          toast(data.error || "Không lưu được ghi chú", "error");
+          return;
+        }
+        toast("Đã lưu ghi chú", "success");
+        await openAccountSharingDetail(currentAccountSharingDetailEmail);
+        await loadAccountSharingAlerts();
+      } catch (error) {
+        hideLoader();
+        console.error(error);
+        toast("Lỗi kết nối máy chủ", "error");
+      }
     }
 
 

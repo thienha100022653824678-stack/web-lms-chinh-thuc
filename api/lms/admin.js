@@ -16,6 +16,7 @@ import adminDriveHealthHandler from "../../utils/lms-handlers/admin-drive-health
 import adminDriveRetryHandler from "../../utils/lms-handlers/admin-drive-retry.js";
 import adminVerifyMediaHandler from "../../utils/lms-handlers/admin-verify-media.js";
 import adminStudentTraceHandler from "../../utils/lms-handlers/admin-student-trace.js";
+import adminAccountSharingAlertsHandler from "../../utils/lms-handlers/admin-account-sharing-alerts.js";
 
 export const config = {
   api: {
@@ -81,6 +82,9 @@ export default async function handler(req, res) {
   }
   if (endpoint === "student-trace") {
     return adminStudentTraceHandler(req, res);
+  }
+  if (endpoint === "account-sharing-alerts") {
+    return adminAccountSharingAlertsHandler(req, res);
   }
 
   return res.status(404).json({ success: false, error: "LMS Admin Endpoint not found" });
