@@ -117,6 +117,25 @@ Expected after applying committed V2 migrations:
 Do not enable `V2_DELIVERY_HANDLERS_ENABLED` until diagnostics and reconciliation
 are both understood.
 
+### Readiness
+
+```http
+GET /api/v2/readiness
+```
+
+Expected behavior:
+
+- Requires the same worker secret header as other V2 internal endpoints.
+- Read-only: does not enqueue, claim, deliver, update, or mutate rows.
+- Aggregates diagnostics, outbox health, feature flags, and read-only reconciliation summary.
+- Does not return reconciliation samples, raw emails, tokens, or secret values.
+- Returns a readiness level:
+  - `blocked`
+  - `needs_review`
+  - `ready_for_dry_run`
+  - `ready_for_guarded_delivery`
+- Use this endpoint as the operator-facing gate before enabling V2 worker dry-run or any guarded delivery trial.
+
 ### Outbox Inspector
 
 ```http
@@ -222,6 +241,7 @@ Expected behavior:
 Do not cut over to V2 until all are true:
 
 - V1 regression tests pass on Shop, Portal, LMS.
+- `/api/v2/readiness` is not `blocked`.
 - Reconciliation has no unresolved high-risk identity mismatches.
 - Outbox shadow mode has run without breaking V1 sync.
 - Worker dry-run output matches expected targets.

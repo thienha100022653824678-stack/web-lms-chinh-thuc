@@ -73,6 +73,11 @@ explicitly asks to switch traffic to V2.
   - Builds the Portal `/api/sync` payload for one `sync_outbox` event without sending it.
   - Masks email values and redacts secret-like keys in the preview response.
   - Lets operators compare V2 projection payloads against the V1 Portal sync contract before enabling live projection.
+- Current V2 readiness slice
+  - Adds internal read-only endpoint `/api/v2/readiness`.
+  - Aggregates diagnostics, outbox health, flag posture, and reconciliation summary into operator gates.
+  - Returns readiness levels without returning raw reconciliation samples or secret values.
+  - Does not mutate rows and does not enable any V2 delivery behavior.
 
 ## Not Applied Automatically
 
@@ -88,6 +93,7 @@ Supabase B session.
 ## In Progress / Next
 
 - Enable and observe Portal projection dry-run after diagnostics are clean.
+- Use `/api/v2/readiness` as the top-level gate before enabling worker dry-run or guarded delivery.
 - Use `/api/v2/outbox` to inspect shadow outbox rows and delivery plans before enabling live V2 handlers.
 - Use `/api/v2/portal-projection-preview` on sampled course/enrollment events before disabling Portal projection dry-run.
 - Enable live Portal projection only after payload samples match V1 `/api/sync` behavior.
