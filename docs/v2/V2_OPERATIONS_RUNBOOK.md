@@ -117,6 +117,57 @@ Expected after applying committed V2 migrations:
 Do not enable `V2_DELIVERY_HANDLERS_ENABLED` until diagnostics and reconciliation
 are both understood.
 
+### Outbox Inspector
+
+```http
+GET /api/v2/outbox?resource=outbox&limit=20
+```
+
+Supported resources:
+
+- `outbox`
+- `deliveries`
+- `dead_letters`
+
+Common filters:
+
+```text
+status=pending
+cursor=<nextCursor from previous response>
+limit=20
+```
+
+Outbox filters:
+
+```text
+sourceSystem=lms
+aggregateType=course
+eventType=course.publish_status_changed
+```
+
+Delivery filters:
+
+```text
+resource=deliveries
+target=portal_projection
+outboxId=<sync_outbox id>
+```
+
+Dead-letter filters:
+
+```text
+resource=dead_letters
+status=open
+outboxId=<sync_outbox id>
+```
+
+Expected behavior:
+
+- Requires the same worker secret header as other V2 internal endpoints.
+- Read-only: does not claim, retry, deliver, or mutate rows.
+- Sanitizes payloads and response summaries so emails are masked and secret-like keys are redacted.
+- Use this endpoint before enabling live delivery to inspect shadow events, pending delivery plans, and dead letters.
+
 ### Reconciliation
 
 ```http
