@@ -49,10 +49,12 @@ function jsonError(res, status, error, code) {
   return res.status(status).json({ ok: false, error, code });
 }
 
-function logDeviceEventAsync(payload) {
-  void logStudentDeviceEvent(supabase, payload).catch(error => {
+async function logDeviceEventSafe(payload) {
+  try {
+    await logStudentDeviceEvent(supabase, payload);
+  } catch (error) {
     console.warn("[account-sharing] LMS event skipped:", error.message);
-  });
+  }
 }
 
 export default async function handler(req, res) {
@@ -83,7 +85,7 @@ export default async function handler(req, res) {
     const tokenResult = await verifyLmsEntryToken(supabase, entryToken);
     if (!tokenResult.ok || !tokenResult.entryToken) {
       if (tokenResult.entryToken?.email) {
-        logDeviceEventAsync({
+        await logDeviceEventSafe({
           email: tokenResult.entryToken.email,
           eventType: ACCOUNT_SHARING_EVENT_TYPES.ENTRY_TOKEN_REJECTED,
           courseSlug: tokenResult.entryToken.course_slug,
@@ -92,7 +94,12 @@ export default async function handler(req, res) {
           userAgent: req.headers["user-agent"] || null,
           ip: getClientIp(req),
           reason: tokenResult.reason || "invalid_entry_token",
+          reasonCode: tokenResult.reason || "invalid_entry_token",
+          result: "rejected",
           source: "lms",
+          correlationId: tokenResult.entryToken.id,
+          flowId: tokenResult.entryToken.id,
+          idempotencyKey: `entry_token_rejected:${tokenResult.entryToken.id}:${tokenResult.reason || "invalid"}`,
           metadata: {
             tokenStatus: tokenResult.entryToken.status || null
           }
@@ -166,7 +173,7 @@ export default async function handler(req, res) {
 
     await markLmsEntryTokenUsed(supabase, entry.id);
     await touchStudentSession(supabase, studentSessionId);
-    logDeviceEventAsync({
+    await logDeviceEventSafe({
       email,
       eventType: ACCOUNT_SHARING_EVENT_TYPES.ENTRY_TOKEN_USED,
       courseSlug,
@@ -177,11 +184,15 @@ export default async function handler(req, res) {
       userAgent: req.headers["user-agent"] || null,
       ip: getClientIp(req),
       source: "lms",
+      result: "success",
+      correlationId: entry.id,
+      flowId: entry.id,
+      idempotencyKey: `entry_token_used:${entry.id}`,
       metadata: {
         entryTokenStatus: "used"
       }
     });
-    logDeviceEventAsync({
+    await logDeviceEventSafe({
       email,
       eventType: ACCOUNT_SHARING_EVENT_TYPES.LMS_SESSION_CREATED,
       courseSlug,
@@ -191,7 +202,11 @@ export default async function handler(req, res) {
       lmsSessionId: lmsSession.lms_session_id,
       userAgent: req.headers["user-agent"] || null,
       ip: getClientIp(req),
-      source: "lms"
+      source: "lms",
+      result: "success",
+      correlationId: entry.id,
+      flowId: entry.id,
+      idempotencyKey: `lms_session_created:${lmsSession.id || lmsSession.lms_session_id}`
     });
 
     return res.status(200).json({

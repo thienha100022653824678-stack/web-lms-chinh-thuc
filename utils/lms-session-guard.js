@@ -26,6 +26,10 @@ export const LMS_SESSION_STATUSES = Object.freeze({
 export const DEFAULT_LMS_ENTRY_TOKEN_TTL_MINUTES = 30;
 export const DEFAULT_STUDENT_SESSION_IDLE_HOURS = 24;
 export const DEFAULT_LMS_SESSION_IDLE_HOURS = 24;
+export const ACCOUNT_SHARING_SCHEMA_VERSION = "v2";
+export const ACCOUNT_SHARING_RISK_RULE_VERSION = "risk_v2_p0";
+
+let missingAccountEventHashSecretWarned = false;
 
 const ACTIVE_ENROLLMENT_STATUSES = new Set([
   "active",
@@ -88,7 +92,34 @@ export function hashToken(rawToken) {
 export function hashOptionalValue(value) {
   const normalized = String(value || "").trim();
   if (!normalized) return null;
-  return crypto.createHash("sha256").update(normalized).digest("hex");
+  const secret = String(
+    process.env.ACCOUNT_EVENT_HASH_SECRET ||
+    process.env.SESSION_GUARD_HASH_SECRET ||
+    ""
+  ).trim();
+  if (!secret) {
+    warnMissingAccountEventHashSecret();
+    return crypto.createHash("sha256").update(normalized).digest("hex");
+  }
+  return crypto.createHmac("sha256", secret).update(normalized).digest("hex");
+}
+
+export function warnMissingAccountEventHashSecret() {
+  if (missingAccountEventHashSecretWarned) return;
+  if (process.env.VERCEL_ENV === "production" || process.env.NODE_ENV === "production") {
+    console.warn("[account-sharing] ACCOUNT_EVENT_HASH_SECRET is not configured; falling back to legacy SHA-256 event hashes.");
+    missingAccountEventHashSecretWarned = true;
+  }
+}
+
+export function getAccountEventHashVersion() {
+  return String(
+    process.env.ACCOUNT_EVENT_HASH_SECRET ||
+    process.env.SESSION_GUARD_HASH_SECRET ||
+    ""
+  ).trim()
+    ? "hmac_sha256_v2"
+    : "sha256_v1";
 }
 
 export const ACCOUNT_SHARING_EVENT_TYPES = Object.freeze({
@@ -111,9 +142,11 @@ const ACCOUNT_SHARING_RISK_POINTS = Object.freeze({
   [ACCOUNT_SHARING_EVENT_TYPES.LOGIN_BLOCKED_OTHER_DEVICE]: 25,
   [ACCOUNT_SHARING_EVENT_TYPES.ENTRY_TOKEN_REJECTED]: 10,
   [ACCOUNT_SHARING_EVENT_TYPES.LMS_SESSION_REJECTED]: 10,
-  [ACCOUNT_SHARING_EVENT_TYPES.PORTAL_SESSION_CREATED]: 3,
-  [ACCOUNT_SHARING_EVENT_TYPES.ENTRY_TOKEN_CREATED]: 1,
-  [ACCOUNT_SHARING_EVENT_TYPES.ENTRY_TOKEN_USED]: 1,
+  [ACCOUNT_SHARING_EVENT_TYPES.PORTAL_SESSION_CREATED]: 0,
+  [ACCOUNT_SHARING_EVENT_TYPES.PORTAL_SESSION_REUSED]: 0,
+  [ACCOUNT_SHARING_EVENT_TYPES.ENTRY_TOKEN_CREATED]: 0,
+  [ACCOUNT_SHARING_EVENT_TYPES.ENTRY_TOKEN_USED]: 0,
+  [ACCOUNT_SHARING_EVENT_TYPES.LMS_SESSION_CREATED]: 0,
   [ACCOUNT_SHARING_EVENT_TYPES.LOGOUT]: 4,
   [ACCOUNT_SHARING_EVENT_TYPES.ADMIN_RESET]: 0,
   [ACCOUNT_SHARING_EVENT_TYPES.ADMIN_NOTE]: 0,
@@ -131,6 +164,27 @@ export function getAccountSharingRiskLevel(score) {
   if (value >= 45) return "suspicious";
   if (value >= 20) return "watch";
   return "normal";
+}
+
+function sanitizeEventMetadata(metadata) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return {};
+  }
+  const output = {};
+  for (const [key, value] of Object.entries(metadata).slice(0, 20)) {
+    const cleanKey = String(key || "").slice(0, 80);
+    if (!cleanKey) continue;
+    if (value === null || typeof value === "boolean" || typeof value === "number") {
+      output[cleanKey] = value;
+    } else if (typeof value === "string") {
+      output[cleanKey] = value.slice(0, 500);
+    }
+  }
+  return output;
+}
+
+function isMissingTelemetryColumn(error) {
+  return /column .* does not exist|relation .* does not exist|schema cache|PGRST204/i.test(String(error?.message || ""));
 }
 
 export async function logStudentDeviceEvent(supabase, {
@@ -155,13 +209,21 @@ export async function logStudentDeviceEvent(supabase, {
   riskPoints = null,
   metadata = {},
   adminEmail = null,
-  idempotencyKey = null
+  idempotencyKey = null,
+  correlationId = null,
+  requestId = null,
+  flowId = null,
+  result = null,
+  reasonCode = null
 }) {
   const normalizedEmail = normalizeEmail(email);
   const normalizedEventType = String(eventType || "").trim();
   if (!normalizedEmail || !normalizedEventType) {
     return { ok: false, reason: "missing_required_fields" };
   }
+
+  const safeReason = reason || reasonCode || "unspecified";
+  const safeReasonCode = reasonCode || reason || "unspecified";
 
   const insertPayload = {
     email: normalizedEmail,
@@ -179,21 +241,45 @@ export async function logStudentDeviceEvent(supabase, {
     lms_session_hash: hashOptionalValue(lmsSessionId),
     user_agent: userAgent || null,
     ip_hash: ipHash || hashOptionalValue(ip),
-    reason: reason || null,
+    reason: safeReason,
     event_source: source || "lms",
     risk_points: Number.isFinite(Number(riskPoints))
       ? Number(riskPoints)
       : getAccountSharingRiskPoints(normalizedEventType),
-    metadata: metadata && typeof metadata === "object" ? metadata : {},
+    metadata: sanitizeEventMetadata(metadata),
     admin_email: adminEmail ? normalizeEmail(adminEmail) : null,
-    event_idempotency_key: idempotencyKey || null
+    event_idempotency_key: idempotencyKey || null,
+    correlation_id: correlationId || null,
+    request_id: requestId || null,
+    flow_id: flowId || null,
+    result: result || null,
+    reason_code: safeReasonCode,
+    schema_version: ACCOUNT_SHARING_SCHEMA_VERSION,
+    hash_version: getAccountEventHashVersion()
   };
 
-  const { error } = await supabase
+  let { error } = await supabase
     .from("student_device_change_logs")
     .insert(insertPayload);
 
+  if (error && isMissingTelemetryColumn(error)) {
+    const fallbackPayload = { ...insertPayload };
+    delete fallbackPayload.correlation_id;
+    delete fallbackPayload.request_id;
+    delete fallbackPayload.flow_id;
+    delete fallbackPayload.result;
+    delete fallbackPayload.reason_code;
+    delete fallbackPayload.schema_version;
+    delete fallbackPayload.hash_version;
+    ({ error } = await supabase
+      .from("student_device_change_logs")
+      .insert(fallbackPayload));
+  }
+
   if (error) {
+    if (error.code === "23505" && idempotencyKey) {
+      return { ok: true, duplicate: true };
+    }
     // Best-effort telemetry only. Never block student access because a warning log failed.
     console.warn("[account-sharing] Could not write device event:", error.message);
     return { ok: false, reason: "insert_failed" };
@@ -233,6 +319,27 @@ export async function writeAdminAuditLog(supabase, {
   }
 
   return { ok: true };
+}
+
+export async function getStudentSessionControl(supabase, email) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return null;
+  const { data, error } = await supabase
+    .from("student_session_controls")
+    .select("*")
+    .eq("email", normalizedEmail)
+    .maybeSingle();
+
+  if (error && isMissingTelemetryColumn(error)) return null;
+  if (error) throw error;
+  return data || null;
+}
+
+function isRevokedBySessionControl(row, control) {
+  if (!row || !control?.sessions_revoked_before) return false;
+  const revokedBefore = new Date(control.sessions_revoked_before).getTime();
+  const createdAt = new Date(row.created_at || 0).getTime();
+  return Number.isFinite(revokedBefore) && Number.isFinite(createdAt) && createdAt <= revokedBefore;
 }
 
 function nowIso() {
@@ -362,9 +469,33 @@ export async function markStudentSessionLoggedOut(supabase, studentSessionId) {
     .maybeSingle());
 }
 
-export async function resetStudentSessionByEmail(supabase, email) {
+export async function resetStudentSessionByEmail(supabase, email, {
+  adminEmail = null,
+  reason = null
+} = {}) {
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail) throw new Error("email is required");
+  const rpcResult = await supabase.rpc("reset_student_session_guard", {
+    p_email: normalizedEmail,
+    p_admin_email: adminEmail ? normalizeEmail(adminEmail) : null,
+    p_reason: reason || "admin_reset"
+  });
+
+  if (!rpcResult.error) {
+    return {
+      ok: true,
+      studentSessions: Number(rpcResult.data?.studentSessions || 0),
+      entryTokens: Number(rpcResult.data?.entryTokens || 0),
+      lmsSessions: Number(rpcResult.data?.lmsSessions || 0),
+      revokedBefore: rpcResult.data?.revokedBefore || null,
+      usedRpc: true
+    };
+  }
+
+  if (!/function .*reset_student_session_guard|schema cache|does not exist/i.test(String(rpcResult.error.message || ""))) {
+    throw rpcResult.error;
+  }
+
   const timestamp = nowIso();
 
   const sessions = await throwIfSupabaseError(await supabase
@@ -387,7 +518,15 @@ export async function resetStudentSessionByEmail(supabase, email) {
     revokeLmsSessionsByStudentSession(supabase, studentSessionId, LMS_SESSION_STATUSES.ADMIN_RESET)
   ])));
 
-  return sessions || [];
+  return {
+    ok: true,
+    studentSessions: (sessions || []).length,
+    entryTokens: null,
+    lmsSessions: null,
+    revokedBefore: timestamp,
+    usedRpc: false,
+    sessions: sessions || []
+  };
 }
 
 export async function createLmsEntryToken(supabase, {
@@ -446,6 +585,16 @@ export async function verifyLmsEntryToken(supabase, rawToken) {
 
   if (entryToken.status !== LMS_ENTRY_TOKEN_STATUSES.ACTIVE) {
     return { ok: false, reason: "not_active", entryToken };
+  }
+
+  const control = await getStudentSessionControl(supabase, entryToken.email);
+  if (isRevokedBySessionControl(entryToken, control)) {
+    await supabase
+      .from("lms_entry_tokens")
+      .update({ status: LMS_ENTRY_TOKEN_STATUSES.REVOKED })
+      .eq("id", entryToken.id)
+      .eq("status", LMS_ENTRY_TOKEN_STATUSES.ACTIVE);
+    return { ok: false, reason: "entry_token_revoked_by_reset", entryToken };
   }
 
   if (isPast(entryToken.expires_at)) {
@@ -617,6 +766,20 @@ export async function verifyLmsVerifiedSessionAccess(supabase, {
     return { ok: false, reason: `lms_session_${session.status}`, session };
   }
 
+  const control = await getStudentSessionControl(supabase, session.email);
+  if (isRevokedBySessionControl(session, control)) {
+    await supabase
+      .from("lms_verified_sessions")
+      .update({
+        status: LMS_SESSION_STATUSES.ADMIN_RESET,
+        logout_at: nowIso(),
+        updated_at: nowIso()
+      })
+      .eq("id", session.id)
+      .eq("status", LMS_SESSION_STATUSES.ACTIVE);
+    return { ok: false, reason: "lms_session_revoked_by_reset", session };
+  }
+
   if (isOlderThan(session.last_seen_at, lmsIdleHours)) {
     await supabase
       .from("lms_verified_sessions")
@@ -648,6 +811,19 @@ export async function verifyLmsVerifiedSessionAccess(supabase, {
   }
   if (studentSession.status !== STUDENT_SESSION_STATUSES.ACTIVE) {
     return { ok: false, reason: `student_session_${studentSession.status}`, session };
+  }
+
+  if (isRevokedBySessionControl(studentSession, control)) {
+    await supabase
+      .from("student_active_sessions")
+      .update({
+        status: STUDENT_SESSION_STATUSES.ADMIN_RESET,
+        logout_at: nowIso(),
+        updated_at: nowIso()
+      })
+      .eq("student_session_id", session.student_session_id)
+      .eq("status", STUDENT_SESSION_STATUSES.ACTIVE);
+    return { ok: false, reason: "student_session_revoked_by_reset", session };
   }
 
   if (isOlderThan(studentSession.last_seen_at, studentIdleHours)) {
