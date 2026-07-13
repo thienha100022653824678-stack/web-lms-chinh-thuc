@@ -168,6 +168,20 @@ Expected behavior:
 - Sanitizes payloads and response summaries so emails are masked and secret-like keys are redacted.
 - Use this endpoint before enabling live delivery to inspect shadow events, pending delivery plans, and dead letters.
 
+### Portal Projection Preview
+
+```http
+GET /api/v2/portal-projection-preview?outboxId=<sync_outbox id>
+```
+
+Expected behavior:
+
+- Requires the same worker secret header as other V2 internal endpoints.
+- Read-only: loads the outbox event and builds the Portal `/api/sync` request body without sending it.
+- Masks email values and redacts secret-like keys before returning JSON.
+- Course events read the current Supabase B course snapshot, matching the live Portal projection handler.
+- Use this endpoint to compare V2 generated payloads with the current V1 sync contract before setting `V2_PORTAL_PROJECTION_DRY_RUN=false`.
+
 ### Reconciliation
 
 ```http

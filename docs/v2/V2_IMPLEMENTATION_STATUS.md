@@ -68,6 +68,11 @@ explicitly asks to switch traffic to V2.
   - Allows inspecting `sync_outbox`, `sync_deliveries`, and `sync_dead_letters` with cursor pagination and simple filters.
   - Masks emails and redacts secret-like payload keys before returning JSON.
   - Does not claim, retry, deliver, or mutate outbox rows.
+- Current V2 Portal projection preview slice
+  - Adds internal read-only endpoint `/api/v2/portal-projection-preview`.
+  - Builds the Portal `/api/sync` payload for one `sync_outbox` event without sending it.
+  - Masks email values and redacts secret-like keys in the preview response.
+  - Lets operators compare V2 projection payloads against the V1 Portal sync contract before enabling live projection.
 
 ## Not Applied Automatically
 
@@ -84,6 +89,7 @@ Supabase B session.
 
 - Enable and observe Portal projection dry-run after diagnostics are clean.
 - Use `/api/v2/outbox` to inspect shadow outbox rows and delivery plans before enabling live V2 handlers.
+- Use `/api/v2/portal-projection-preview` on sampled course/enrollment events before disabling Portal projection dry-run.
 - Enable live Portal projection only after payload samples match V1 `/api/sync` behavior.
 - Add read-only reconciliation runbook and expected result thresholds.
 - Add admin V2 diagnostics page guarded by admin auth.
