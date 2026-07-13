@@ -49,6 +49,14 @@ explicitly asks to switch traffic to V2.
 - `9b53969 feat(v2-reconcile): add read-only reconciliation endpoint`
   - Added internal read-only reconciliation endpoint.
   - Reports identity/outbox mapping gaps without writing database rows.
+- `1b74a1d feat(v2-sync): add guarded delivery executor`
+  - Added guarded outbox delivery execution behind `V2_DELIVERY_HANDLERS_ENABLED`.
+  - Drive delivery remains dry-run by default through `V2_DRIVE_WORKER_DRY_RUN=true`.
+  - Portal projection delivery is intentionally not implemented yet and fails safely if enabled too early.
+  - Existing V1 sync endpoints and runtime behavior are unchanged.
+- Current V2 diagnostics slice
+  - Adds internal read-only V2 diagnostics endpoint `/api/v2/diagnostics`.
+  - Reports feature flag state, required migration visibility, and outbox health without writing data.
 
 ## Not Applied Automatically
 
@@ -63,7 +71,7 @@ Supabase B session.
 
 ## In Progress / Next
 
-- Add real outbox delivery handlers after dry-run reports are stable.
+- Add real Portal projection delivery handler after dry-run reports are stable.
 - Add read-only reconciliation runbook and expected result thresholds.
 - Add admin V2 diagnostics page guarded by admin auth.
 - Add session lease V2 only after sync/reconciliation is stable.
@@ -80,5 +88,7 @@ Supabase B session.
 
 - Keep `main` / production branches on V1 until explicit cutover approval.
 - Keep V2 feature flags off by default.
+- Keep `V2_DELIVERY_HANDLERS_ENABLED=false` until staging verification is complete.
+- Keep `V2_DRIVE_WORKER_DRY_RUN=true` until Drive admin pool and folder IDs are verified for V2 worker traffic.
 - Do not commit secrets, env files, `scratch/`, or `review-dossier-session-guard/`.
 - Do not modify `/api/sync`, OAuth, session restore, Drive permission, or enrollment mapping outside a scoped V2 task.

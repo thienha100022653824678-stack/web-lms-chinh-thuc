@@ -84,6 +84,34 @@ x-sync-secret: <secret>
 
 Do not print the secret in logs, screenshots, or issue reports.
 
+### Diagnostics
+
+```http
+GET /api/v2/diagnostics
+```
+
+Expected behavior:
+
+- Returns feature flag state without returning secret values.
+- Reports whether worker secrets are configured as booleans only.
+- Checks required V2 tables and additive columns are visible to runtime.
+- Reports outbox counts, stale processing rows, pending deliveries, and dead letters.
+- Does not write database rows.
+
+Expected pre-migration state:
+
+- `ok=false`
+- `migrations.missingTables` and/or `migrations.missingColumnGroups` may be non-empty.
+
+Expected after applying committed V2 migrations:
+
+- `ok=true`
+- `migrations.missingTables=[]`
+- `migrations.missingColumnGroups=[]`
+
+Do not enable `V2_DELIVERY_HANDLERS_ENABLED` until diagnostics and reconciliation
+are both understood.
+
 ### Reconciliation
 
 ```http
