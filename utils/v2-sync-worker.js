@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 
 import { supabase } from './supabase.js';
+import { deliverV2Target, isV2DeliveryHandlersEnabled } from './v2-delivery-handlers.js';
 import { getV2Env, isV2FlagEnabled, V2_FLAGS } from './v2-flags.js';
 
 const DEFAULT_LIMIT = 10;
@@ -107,16 +108,223 @@ async function claimOutboxEvent(event, workerId) {
 }
 
 async function ensurePendingDelivery(outboxId, targetSystem) {
-  const { error } = await supabase
+  const { data: existing, error: fetchError } = await supabase
     .from('sync_deliveries')
-    .upsert({
+    .select('id,status')
+    .eq('outbox_id', outboxId)
+    .eq('target_system', targetSystem)
+    .maybeSingle();
+
+  if (fetchError) throw fetchError;
+  if (existing) return existing;
+
+  const { data, error } = await supabase
+    .from('sync_deliveries')
+    .insert({
       outbox_id: outboxId,
       target_system: targetSystem,
       status: 'pending',
       updated_at: new Date().toISOString(),
-    }, { onConflict: 'outbox_id,target_system' });
+    })
+    .select('id,status')
+    .single();
 
   if (error) throw error;
+  return data;
+}
+
+async function listDeliveriesForOutbox(outboxId) {
+  const { data, error } = await supabase
+    .from('sync_deliveries')
+    .select('id,outbox_id,target_system,status,attempt_count')
+    .eq('outbox_id', outboxId)
+    .order('created_at', { ascending: true });
+
+  if (error) throw error;
+  return data || [];
+}
+
+async function markDeliveryResult(delivery, result) {
+  const status = ['pending', 'success', 'failed', 'skipped'].includes(result.status)
+    ? result.status
+    : 'failed';
+  const now = new Date().toISOString();
+
+  const { error } = await supabase
+    .from('sync_deliveries')
+    .update({
+      status,
+      attempt_count: (delivery.attempt_count || 0) + 1,
+      response_summary: result.summary ? String(result.summary).slice(0, 500) : null,
+      error_message: status === 'failed' ? compactError(result.error || result.summary) : null,
+      delivered_at: status === 'success' || status === 'skipped' ? now : null,
+      updated_at: now,
+    })
+    .eq('id', delivery.id);
+
+  if (error) throw error;
+}
+
+async function markOutboxDelivered(eventId, workerId) {
+  const { error } = await supabase
+    .from('sync_outbox')
+    .update({
+      status: 'delivered',
+      locked_at: null,
+      locked_by: null,
+      last_error: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', eventId)
+    .eq('locked_by', workerId);
+
+  if (error) throw error;
+}
+
+async function moveOutboxToDeadLetter(event, workerId, message) {
+  const now = new Date().toISOString();
+  const { error: updateError } = await supabase
+    .from('sync_outbox')
+    .update({
+      status: 'dead_letter',
+      locked_at: null,
+      locked_by: null,
+      last_error: message,
+      attempt_count: (event.attempt_count || 0) + 1,
+      updated_at: now,
+    })
+    .eq('id', event.id)
+    .eq('locked_by', workerId);
+
+  if (updateError) throw updateError;
+
+  const { error: deadLetterError } = await supabase
+    .from('sync_dead_letters')
+    .upsert({
+      outbox_id: event.id,
+      reason: message || 'V2 delivery failed too many times.',
+      payload: event.payload || {},
+      last_error: message || null,
+      updated_at: now,
+    }, { onConflict: 'outbox_id' });
+
+  if (deadLetterError) throw deadLetterError;
+}
+
+async function scheduleOutboxRetry(event, workerId, message) {
+  const attemptCount = (event.attempt_count || 0) + 1;
+  const maxAttempts = Number(event.max_attempts || 10);
+  if (attemptCount >= maxAttempts) {
+    await moveOutboxToDeadLetter(event, workerId, message);
+    return { status: 'dead_letter', attemptCount };
+  }
+
+  const delayMinutes = Math.min(60, Math.max(1, 2 ** Math.min(attemptCount, 6)));
+  const availableAt = new Date(Date.now() + delayMinutes * 60 * 1000).toISOString();
+
+  const { error } = await supabase
+    .from('sync_outbox')
+    .update({
+      status: 'pending',
+      locked_at: null,
+      locked_by: null,
+      last_error: message,
+      attempt_count: attemptCount,
+      available_at: availableAt,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', event.id)
+    .eq('locked_by', workerId);
+
+  if (error) throw error;
+  return { status: 'retry_scheduled', attemptCount, availableAt };
+}
+
+async function executeDeliveriesForEvent(event, workerId) {
+  const targets = getDeliveryTargetsForEvent(event);
+  for (const target of targets) {
+    await ensurePendingDelivery(event.id, target);
+  }
+
+  const deliveries = await listDeliveriesForOutbox(event.id);
+  const outcomes = [];
+  const failures = [];
+  const pending = [];
+
+  for (const delivery of deliveries) {
+    if (delivery.status === 'success' || delivery.status === 'skipped') {
+      outcomes.push({
+        target: delivery.target_system,
+        status: delivery.status,
+        code: 'already_terminal',
+      });
+      continue;
+    }
+
+    try {
+      const result = await deliverV2Target({
+        supabase,
+        event,
+        target: delivery.target_system,
+      });
+      await markDeliveryResult(delivery, result);
+      outcomes.push({
+        target: delivery.target_system,
+        status: result.status,
+        code: result.code,
+      });
+      if (result.status === 'pending') {
+        pending.push({
+          target: delivery.target_system,
+          code: result.code,
+          summary: result.summary,
+        });
+      }
+    } catch (error) {
+      const message = compactError(error) || 'V2 delivery failed.';
+      await markDeliveryResult(delivery, {
+        status: 'failed',
+        summary: message,
+        error,
+      });
+      failures.push({
+        target: delivery.target_system,
+        code: error.code || 'delivery_failed',
+        error: message,
+      });
+    }
+  }
+
+  if (failures.length > 0) {
+    const retry = await scheduleOutboxRetry(event, workerId, failures.map((failure) => `${failure.target}: ${failure.error}`).join(' | '));
+    return {
+      status: retry.status,
+      outcomes,
+      failures,
+      retry,
+    };
+  }
+
+  if (pending.length > 0) {
+    await releaseClaimAsPending(
+      event.id,
+      workerId,
+      pending.map((item) => `${item.target}: ${item.summary || item.code}`).join(' | ')
+    );
+    return {
+      status: 'pending_delivery',
+      outcomes,
+      failures: [],
+      pending,
+    };
+  }
+
+  await markOutboxDelivered(event.id, workerId);
+  return {
+    status: 'delivered',
+    outcomes,
+    failures: [],
+  };
 }
 
 async function releaseClaimAsPending(eventId, workerId, message) {
@@ -178,16 +386,30 @@ export async function runV2SyncWorker({ limit = DEFAULT_LIMIT, dryRun = isV2Sync
         await ensurePendingDelivery(claimed.id, target);
       }
 
-      await releaseClaimAsPending(
-        claimed.id,
-        workerId,
-        'V2 delivery handlers are not enabled yet; deliveries were planned only.'
-      );
+      if (!isV2DeliveryHandlersEnabled()) {
+        await releaseClaimAsPending(
+          claimed.id,
+          workerId,
+          'V2 delivery handlers are disabled; deliveries were planned only.'
+        );
 
+        processed.push({
+          id: claimed.id,
+          eventType: claimed.event_type,
+          targets,
+          status: 'planned_only',
+        });
+        continue;
+      }
+
+      const deliveryResult = await executeDeliveriesForEvent(claimed, workerId);
       processed.push({
         id: claimed.id,
         eventType: claimed.event_type,
         targets,
+        status: deliveryResult.status,
+        outcomes: deliveryResult.outcomes,
+        failures: deliveryResult.failures,
       });
     } catch (error) {
       if (claimed?.id) {
@@ -209,7 +431,7 @@ export async function runV2SyncWorker({ limit = DEFAULT_LIMIT, dryRun = isV2Sync
 
   return {
     ok: errors.length === 0,
-    mode: 'plan_deliveries_only',
+    mode: isV2DeliveryHandlersEnabled() ? 'delivery_handlers' : 'plan_deliveries_only',
     workerId,
     processed: processed.length,
     planned,

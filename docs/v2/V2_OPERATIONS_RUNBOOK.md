@@ -50,6 +50,8 @@ V2_PLATFORM_ENABLED=false
 V2_OUTBOX_SHADOW_MODE=false
 V2_OUTBOX_WORKER_ENABLED=false
 V2_OUTBOX_WORKER_DRY_RUN=true
+V2_DELIVERY_HANDLERS_ENABLED=false
+V2_DRIVE_WORKER_DRY_RUN=true
 V2_RECONCILIATION_READONLY=false
 ```
 
@@ -61,7 +63,10 @@ Recommended staging order:
 4. Verify V1 sync still works and outbox rows are created.
 5. Enable `V2_OUTBOX_WORKER_ENABLED=true` with `V2_OUTBOX_WORKER_DRY_RUN=true`.
 6. Run worker dry-run and inspect planned deliveries.
-7. Implement and test delivery handlers before disabling dry-run.
+7. Keep `V2_DELIVERY_HANDLERS_ENABLED=false` until every delivery target is reviewed.
+8. Enable `V2_DELIVERY_HANDLERS_ENABLED=true` only in staging first.
+9. Keep `V2_DRIVE_WORKER_DRY_RUN=true` while validating Drive delivery plans.
+10. Disable `V2_DRIVE_WORKER_DRY_RUN` only after confirming target emails, folders, and admin pool health.
 
 ## 4. Internal Endpoints
 
@@ -106,8 +111,10 @@ Content-Type: application/json
 Expected behavior:
 
 - With dry-run: only reports planned work.
-- With dry-run off in current phase: creates pending delivery plans and releases outbox claim back to pending.
-- Does not deliver to Portal/Drive until delivery handlers are implemented.
+- With dry-run off and `V2_DELIVERY_HANDLERS_ENABLED=false`: creates pending delivery plans and releases the outbox claim back to pending.
+- With `V2_DELIVERY_HANDLERS_ENABLED=true`: executes enabled delivery handlers.
+- Drive delivery remains pending dry-run unless `V2_DRIVE_WORKER_DRY_RUN=false`.
+- Portal projection delivery is intentionally not implemented yet and will fail safely if enabled before implementation.
 
 ## 5. Cutover Gate
 
