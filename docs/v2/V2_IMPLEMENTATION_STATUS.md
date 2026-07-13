@@ -1,57 +1,84 @@
 # V2 Implementation Status
 
+This document tracks V2 work on branch `v2/platform-rebuild`.
+
+V1 production remains unchanged. Do not merge or deploy V2 until the owner
+explicitly asks to switch traffic to V2.
+
 ## Baseline
 
 - V1 stable tag: `v1-stable-20260713`
 - V2 branch: `v2/platform-rebuild`
 - Runtime source of truth: Supabase B / LMS & Checkout
 - Supabase B project ref: `aqozjkfwzmyfunqvcyjv`
+- Cutover rule: V2 is opt-in only; V1 rollback is the stable tag plus current production branches.
 
-## Đã hoàn thành
+## Completed
 
 ### Shop
 
 - `8e45899 chore: initialize V2 rollout baseline`
-  - Thêm tài liệu rollout và feature flag V2.
+  - Added V2 rollout notes and feature flags.
 - `dbba90c chore: add V2 outbox helpers`
-  - Thêm helper enqueue outbox.
+  - Added outbox enqueue helper.
 - `62880be chore: shadow-write shop sync events to V2 outbox`
-  - Shadow-write course/enrollment sync event khi `V2_OUTBOX_SHADOW_MODE` bật.
-  - Mặc định không đổi behavior V1.
+  - Shadow-writes course/enrollment sync events when `V2_OUTBOX_SHADOW_MODE` is enabled.
+  - Default V1 behavior is unchanged.
 
 ### Portal
 
 - `7134019 chore: initialize V2 rollout baseline`
-  - Thêm tài liệu rollout và feature flag V2.
-  - Lưu ý: repo Portal còn một file dirty có sẵn `src/lib/session-guard.ts`, không thuộc V2 baseline commit.
+  - Added V2 rollout notes and feature flags.
+  - Note: Portal still has a pre-existing dirty file `src/lib/session-guard.ts`; it is not part of V2 baseline.
 
 ### LMS
 
 - `0029f47 chore: initialize V2 rollout baseline`
-  - Thêm tài liệu rollout và feature flag V2.
+  - Added V2 rollout notes and feature flags.
 - `41808c6 chore: add V2 sync outbox migration`
-  - Thêm migration `migration_v2_sync_outbox.sql`.
+  - Added additive migration `migration_v2_sync_outbox.sql`.
 - `7f37cdc chore: add V2 outbox helpers`
-  - Thêm helper enqueue outbox và flag shadow mode.
+  - Added LMS outbox enqueue helpers.
+- `0fa9dd1 feat(v2-db): add identity mapping foundation`
+  - Added additive migration `migration_v2_identity_mapping.sql`.
+  - Adds canonical course/order/enrollment/lesson mapping foundation.
+- `45503a8 feat(v2-sync): add dry-run outbox worker`
+  - Added internal V2 sync worker endpoint.
+  - Default mode is dry-run / plan-only.
+  - No V1 delivery behavior is changed.
+- `9b53969 feat(v2-reconcile): add read-only reconciliation endpoint`
+  - Added internal read-only reconciliation endpoint.
+  - Reports identity/outbox mapping gaps without writing database rows.
 
-## Đang làm
+## Not Applied Automatically
 
+The following V2 migrations are committed but must not be applied to production
+without an explicit apply/test step:
+
+- `migration_v2_sync_outbox.sql`
 - `migration_v2_identity_mapping.sql`
-  - Thêm nền canonical identity/mapping.
-  - Chưa apply database.
-  - Chưa bật runtime.
 
-## Chưa làm
+They are additive, but the system should still apply and verify them in a controlled
+Supabase B session.
 
-- Worker xử lý `sync_outbox`.
-- Reconciliation dry-run.
-- Session lease V2 tách khỏi auth session.
-- Token consume atomic trong RPC.
-- Drive permission job queue.
-- Admin dashboard V2.
-- CI/test matrix đầy đủ.
+## In Progress / Next
 
-## Blocker hiện tại
+- Add real outbox delivery handlers after dry-run reports are stable.
+- Add read-only reconciliation runbook and expected result thresholds.
+- Add admin V2 diagnostics page guarded by admin auth.
+- Add session lease V2 only after sync/reconciliation is stable.
+- Add Drive permission job queue after outbox delivery is proven.
 
-- Chưa có môi trường staging tách biệt để test migration và worker V2.
-- Chưa apply các migration V2 mới lên database.
+## Still Not Done
+
+- No V2 traffic cutover.
+- No V2 production deployment.
+- No V2 database migration has been applied by this branch work.
+- No V1 endpoint has been removed or blocked.
+
+## Current Guardrails
+
+- Keep `main` / production branches on V1 until explicit cutover approval.
+- Keep V2 feature flags off by default.
+- Do not commit secrets, env files, `scratch/`, or `review-dossier-session-guard/`.
+- Do not modify `/api/sync`, OAuth, session restore, Drive permission, or enrollment mapping outside a scoped V2 task.
