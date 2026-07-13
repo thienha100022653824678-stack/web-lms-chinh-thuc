@@ -78,6 +78,19 @@ explicitly asks to switch traffic to V2.
   - Aggregates diagnostics, outbox health, flag posture, and reconciliation summary into operator gates.
   - Returns readiness levels without returning raw reconciliation samples or secret values.
   - Does not mutate rows and does not enable any V2 delivery behavior.
+- Current V2 database readiness slice
+  - Adds `docs/v2/V2_MIGRATION_INVENTORY.md`.
+  - Adds `docs/v2/V2_DATABASE_ACTUAL_STATE.md`.
+  - Adds `docs/v2/V2_SCHEMA_DRIFT_REPORT.md`.
+  - Adds `docs/v2/V2_PRE_MIGRATION_SNAPSHOT.md`.
+  - Adds `docs/v2/V2_RECONCILIATION_DRY_RUN_REPORT.md`.
+  - Adds SQL runbooks:
+    - `scripts/v2/preflight-v2.sql`
+    - `scripts/v2/postflight-v2.sql`
+    - `scripts/v2/rollback-v2.sql`
+  - Confirms Supabase B project ref `aqozjkfwzmyfunqvcyjv` from local runtime env.
+  - Finds schema drift: V2 outbox tables exist, but identity-mapping columns on `orders`, `student_enrollments`, and `lessons` are incomplete.
+  - Keeps V2 dry-run blocked until `migration_v2_identity_mapping.sql` is reviewed/applied and postflight passes.
 
 ## Not Applied Automatically
 
@@ -93,6 +106,9 @@ Supabase B session.
 ## In Progress / Next
 
 - Enable and observe Portal projection dry-run after diagnostics are clean.
+- Resolve V2 identity-mapping schema drift before reconciliation dry-run.
+- Run `scripts/v2/preflight-v2.sql` in Supabase B SQL Editor before applying missing identity migration pieces.
+- Run `scripts/v2/postflight-v2.sql` after schema completion.
 - Use `/api/v2/readiness` as the top-level gate before enabling worker dry-run or guarded delivery.
 - Use `/api/v2/outbox` to inspect shadow outbox rows and delivery plans before enabling live V2 handlers.
 - Use `/api/v2/portal-projection-preview` on sampled course/enrollment events before disabling Portal projection dry-run.
