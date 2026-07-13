@@ -57,6 +57,12 @@ explicitly asks to switch traffic to V2.
 - Current V2 diagnostics slice
   - Adds internal read-only V2 diagnostics endpoint `/api/v2/diagnostics`.
   - Reports feature flag state, required migration visibility, and outbox health without writing data.
+- Current V2 Portal projection slice
+  - Adds a guarded Portal projection delivery handler for V2 outbox events.
+  - Default behavior is disabled/skipped via `V2_PORTAL_PROJECTION_ENABLED=false`.
+  - When enabled, it remains dry-run/pending unless `V2_PORTAL_PROJECTION_DRY_RUN=false`.
+  - Course projection reads the current Supabase B course snapshot before building Portal payloads to avoid overwriting Portal with stale or slug-only values.
+  - Existing V1 `/api/sync` behavior is unchanged.
 
 ## Not Applied Automatically
 
@@ -71,7 +77,8 @@ Supabase B session.
 
 ## In Progress / Next
 
-- Add real Portal projection delivery handler after dry-run reports are stable.
+- Enable and observe Portal projection dry-run after diagnostics are clean.
+- Enable live Portal projection only after payload samples match V1 `/api/sync` behavior.
 - Add read-only reconciliation runbook and expected result thresholds.
 - Add admin V2 diagnostics page guarded by admin auth.
 - Add session lease V2 only after sync/reconciliation is stable.

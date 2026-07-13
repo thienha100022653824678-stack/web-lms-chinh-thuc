@@ -133,6 +133,8 @@ function getFlagSnapshot() {
     secretsConfigured: {
       V2_WORKER_SECRET: !!process.env.V2_WORKER_SECRET,
       INTERNAL_SYNC_SECRET: !!process.env.INTERNAL_SYNC_SECRET,
+      V2_PORTAL_PROJECTION_URL: !!process.env.V2_PORTAL_PROJECTION_URL,
+      V2_PORTAL_PROJECTION_SECRET: !!process.env.V2_PORTAL_PROJECTION_SECRET,
     },
   };
 }

@@ -1,4 +1,5 @@
 import { syncGoogleDrivePermission } from './lms.js';
+import { deliverPortalProjection } from './v2-portal-projection.js';
 import { V2_FLAGS, isV2FlagEnabled } from './v2-flags.js';
 
 function cleanText(value) {
@@ -103,10 +104,7 @@ export async function deliverV2Target({ supabase, event, target }) {
   }
 
   if (targetName === 'portal_projection') {
-    throw buildError(
-      'V2 portal projection delivery is not implemented yet.',
-      'portal_projection_not_implemented'
-    );
+    return deliverPortalProjection({ supabase, event });
   }
 
   throw buildError(`Unsupported V2 delivery target: ${targetName || '(empty)'}.`, 'unsupported_delivery_target');

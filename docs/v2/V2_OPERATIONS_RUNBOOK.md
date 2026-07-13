@@ -51,6 +51,8 @@ V2_OUTBOX_SHADOW_MODE=false
 V2_OUTBOX_WORKER_ENABLED=false
 V2_OUTBOX_WORKER_DRY_RUN=true
 V2_DELIVERY_HANDLERS_ENABLED=false
+V2_PORTAL_PROJECTION_ENABLED=false
+V2_PORTAL_PROJECTION_DRY_RUN=true
 V2_DRIVE_WORKER_DRY_RUN=true
 V2_RECONCILIATION_READONLY=false
 ```
@@ -65,8 +67,11 @@ Recommended staging order:
 6. Run worker dry-run and inspect planned deliveries.
 7. Keep `V2_DELIVERY_HANDLERS_ENABLED=false` until every delivery target is reviewed.
 8. Enable `V2_DELIVERY_HANDLERS_ENABLED=true` only in staging first.
-9. Keep `V2_DRIVE_WORKER_DRY_RUN=true` while validating Drive delivery plans.
-10. Disable `V2_DRIVE_WORKER_DRY_RUN` only after confirming target emails, folders, and admin pool health.
+9. Keep `V2_PORTAL_PROJECTION_ENABLED=false` until Portal payload plans have been reviewed.
+10. Enable `V2_PORTAL_PROJECTION_ENABLED=true` with `V2_PORTAL_PROJECTION_DRY_RUN=true` to inspect Portal delivery plans only.
+11. Configure `V2_PORTAL_PROJECTION_URL` and `V2_PORTAL_PROJECTION_SECRET` before turning off dry-run.
+12. Keep `V2_DRIVE_WORKER_DRY_RUN=true` while validating Drive delivery plans.
+13. Disable `V2_DRIVE_WORKER_DRY_RUN` only after confirming target emails, folders, and admin pool health.
 
 ## 4. Internal Endpoints
 
@@ -142,7 +147,10 @@ Expected behavior:
 - With dry-run off and `V2_DELIVERY_HANDLERS_ENABLED=false`: creates pending delivery plans and releases the outbox claim back to pending.
 - With `V2_DELIVERY_HANDLERS_ENABLED=true`: executes enabled delivery handlers.
 - Drive delivery remains pending dry-run unless `V2_DRIVE_WORKER_DRY_RUN=false`.
-- Portal projection delivery is intentionally not implemented yet and will fail safely if enabled before implementation.
+- Portal projection delivery is skipped while `V2_PORTAL_PROJECTION_ENABLED=false`.
+- Portal projection delivery remains pending dry-run while `V2_PORTAL_PROJECTION_DRY_RUN=true`.
+- Portal projection sends to `<V2_PORTAL_PROJECTION_URL or SYSTEM1_URL>/api/sync` only when enabled and dry-run is false.
+- Portal projection uses `V2_PORTAL_PROJECTION_SECRET` or `INTERNAL_SYNC_SECRET` as the `X-Sync-Secret` header; never print these values.
 
 ## 5. Cutover Gate
 
