@@ -1,10 +1,10 @@
 import { supabase } from "../supabase.js";
 import { getAdminFromRequest, normalizeEmail } from "../lms.js";
+import { applyCors } from "../cors.js";
 
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  const cors = applyCors(req, res, { mode: "admin" });
+  if (cors.handled) return res.status(cors.status).json(cors.body);
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();

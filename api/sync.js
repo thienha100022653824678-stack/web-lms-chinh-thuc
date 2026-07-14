@@ -8,12 +8,19 @@ import {
   timingSafeStringEqual,
   AuthSecretError
 } from "../utils/lms-secrets.js";
+import { applyCors } from "../utils/cors.js";
 
 export default async function handler(req, res) {
-  // CORS headers
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Sync-Secret");
+  // CORS: server-to-server. We allow requests without an Origin header
+  // (Shop → LMS), but reject cross-origin browser calls when the
+  // feature flag is on. The INTERNAL_SYNC_SECRET check below remains
+  // the authoritative authentication layer — CORS does not replace it.
+  const cors = applyCors(req, res, {
+    mode: "internal",
+    methods: "POST, OPTIONS",
+    allowedHeaders: "Content-Type, X-Sync-Secret"
+  });
+  if (cors.handled) return res.status(cors.status).json(cors.body);
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();

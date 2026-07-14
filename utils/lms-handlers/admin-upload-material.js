@@ -1,6 +1,7 @@
 import { PassThrough } from "stream";
 import { getAdminFromRequest, getGoogleDriveClient, resolveCourseFolderTree, saveCourseFolderId } from "../lms.js";
 import { supabase } from "../supabase.js";
+import { applyCors } from "../cors.js";
 
 const MAX_MATERIAL_BYTES = 50 * 1024 * 1024;
 
@@ -44,9 +45,8 @@ function cleanFileName(fileName = "document") {
 }
 
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  const cors = applyCors(req, res, { mode: "admin" });
+  if (cors.handled) return res.status(cors.status).json(cors.body);
 
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") {

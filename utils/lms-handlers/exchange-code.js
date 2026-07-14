@@ -7,6 +7,7 @@ import {
   signMediaUrls
 } from "../lms.js";
 import { OAuth2Client } from "google-auth-library";
+import { applyCors } from "../cors.js";
 
 const SESSION_COOKIE = "course_session_token";
 const ACTIVE_ENROLLMENT_STATUSES = new Set([
@@ -38,9 +39,12 @@ function isActiveEnrollment(status) {
  * which Google has deprecated for newer OAuth clients.
  */
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  const cors = applyCors(req, res, {
+    mode: "portal",
+    methods: "POST, OPTIONS",
+    allowedHeaders: "Content-Type"
+  });
+  if (cors.handled) return res.status(cors.status).json(cors.body);
 
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ allowed: false, error: "Method not allowed" });

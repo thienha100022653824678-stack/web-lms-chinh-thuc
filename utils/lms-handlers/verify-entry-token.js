@@ -8,6 +8,7 @@ import {
   touchStudentSession,
   verifyLmsEntryToken
 } from "../lms-session-guard.js";
+import { applyCors } from "../cors.js";
 
 const ACTIVE_ENROLLMENT_STATUSES = new Set([
   "active",
@@ -58,9 +59,12 @@ async function logDeviceEventSafe(payload) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  const cors = applyCors(req, res, {
+    mode: "portal",
+    methods: "POST, OPTIONS",
+    allowedHeaders: "Content-Type"
+  });
+  if (cors.handled) return res.status(cors.status).json(cors.body);
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();

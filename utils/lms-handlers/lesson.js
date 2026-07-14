@@ -11,6 +11,7 @@ import {
   isEntryTokenRequiredCourse,
   verifyLmsVerifiedSessionAccess
 } from "../lms-session-guard.js";
+import { applyCors } from "../cors.js";
 import { resolveMainMediaInfo } from "../lms-media.js";
 
 const SESSION_COOKIE = "course_session_token";
@@ -292,9 +293,12 @@ async function fetchRecipeText(recipeUrl) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-LMS-Session-Id, X-LMS-Device-Id");
+  const cors = applyCors(req, res, {
+    mode: "portal",
+    methods: "GET, OPTIONS",
+    allowedHeaders: "Content-Type, X-LMS-Session-Id, X-LMS-Device-Id"
+  });
+  if (cors.handled) return res.status(cors.status).json(cors.body);
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();

@@ -16,6 +16,7 @@ import {
   verifyLmsVerifiedSessionAccess
 } from "../lms-session-guard.js";
 import { resolveMainMediaInfo } from "../lms-media.js";
+import { applyCors } from "../cors.js";
 
 const SESSION_COOKIE = "course_session_token";
 const API_VERSION = "premium-bunny-stream-v1";
@@ -289,9 +290,12 @@ async function attachRecipeText(lesson) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-LMS-Session-Id, X-LMS-Device-Id");
+  const cors = applyCors(req, res, {
+    mode: "portal",
+    methods: "POST, OPTIONS",
+    allowedHeaders: "Content-Type, X-LMS-Session-Id, X-LMS-Device-Id"
+  });
+  if (cors.handled) return res.status(cors.status).json(cors.body);
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
