@@ -1,8 +1,13 @@
 import { supabase } from "../utils/supabase.js";
-import { 
-  normalizeEmail, 
+import {
+  normalizeEmail,
   syncEnrollment
 } from "../utils/lms.js";
+import {
+  getInternalSyncSecret,
+  timingSafeStringEqual,
+  AuthSecretError
+} from "../utils/lms-secrets.js";
 
 export default async function handler(req, res) {
   // CORS headers
@@ -18,11 +23,25 @@ export default async function handler(req, res) {
     return res.status(405).json({ success: false, error: "Method not allowed" });
   }
 
-  // Verify internal sync secret
+  // Verify internal sync secret (timing-safe, fail-closed)
   const syncSecret = req.headers["x-sync-secret"];
-  const systemSecret = process.env.INTERNAL_SYNC_SECRET;
 
-  if (!systemSecret || syncSecret !== systemSecret) {
+  let systemSecret;
+  try {
+    systemSecret = getInternalSyncSecret();
+  } catch (err) {
+    if (err instanceof AuthSecretError) {
+      return res.status(503).json({
+        success: false,
+        code: "sync_misconfigured",
+        error: "Internal sync is unavailable.",
+        missingEnvVars: err.missingEnvVars
+      });
+    }
+    throw err;
+  }
+
+  if (!syncSecret || !timingSafeStringEqual(String(syncSecret), systemSecret)) {
     return res.status(401).json({ success: false, error: "Unauthorized: Sync secret is invalid or missing." });
   }
 
