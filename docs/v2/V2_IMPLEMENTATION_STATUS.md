@@ -206,6 +206,56 @@ Fix applied to `utils/v2-readiness.js` (with `tests/v2-readiness.test.mjs`, 6 ca
 
 Net effect on preview: readiness moved `needs_review → ready_for_dry_run` (the tracked 3 junk-slug gaps no longer block shadow/dry-run validation), while still refusing `ready_for_guarded_delivery` until the gaps are resolved and the owner approves live delivery.
 
+### S3 step 6 live delivery results (preview only, 2026-07-15)
+
+Owner approved live delivery on preview. Production flags still off.
+
+**Preview env after flip (Preview only):**
+
+| Flag | Value | Notes |
+|---|---|---|
+| `V2_OUTBOX_SHADOW_MODE` | true | still on |
+| `V2_RECONCILIATION_READONLY` | true | still on |
+| `V2_PORTAL_PROJECTION_ENABLED` | true | still on |
+| `V2_PORTAL_PROJECTION_DRY_RUN` | **false** | flipped for live trial |
+| `V2_DELIVERY_HANDLERS_ENABLED` | **true** | flipped for live trial |
+| `V2_OUTBOX_WORKER_ENABLED` | **true** | required for sync-worker to run |
+| `V2_OUTBOX_WORKER_DRY_RUN` | **false** | so the worker actually delivers |
+| `V2_DRIVE_WORKER_DRY_RUN` | true | kept — Drive out of canary scope |
+| `SYSTEM1_URL` | `https://admin.yeunauan.live` | set on preview; secret falls back to `INTERNAL_SYNC_SECRET` |
+
+**Live preview deploy:** `https://web-lms-chinh-thuc-23k6tils5.vercel.app` (READY).
+
+**Seeded outbox event (manual seed via service role, not a real V1 write):**
+- `sync_outbox.id = 56a38d11-c86a-43e2-9bad-fbf851f3376b`
+- event: `course.publish_status_changed` for existing course `banhmi4k` (payload includes title/image/`is_published=true`).
+
+**First live attempt failed → fix → success:**
+1. Worker planned `targets: ["portal_projection"]` correctly.
+2. First delivery returned `status=retry_scheduled`, failure `portal_projection_http_failed: "Action không hợp lệ"`.
+3. Root cause: `buildPortalProjectionPayload` projected course.publish_status_changed to `action=syncCoursePublishStatus`. System1 `/api/sync` only accepts `syncCourse` / `syncEnrollment` / `revokeEnrollment` (confirmed by probe — that action returns 400 `"Action không hợp lệ"`).
+4. Fix in `utils/v2-portal-projection.js` (commit `06bd01e`): always project course.* events as `action=syncCourse`. The publish-status intent is carried by `isPublished` on the body, which System1 already handles. Verified System1 returns `{success:true, postId, updated:true}` for `syncCourse` with `courseSlug`.
+5. Reset the outbox row to `pending` and re-ran the worker on the fixed deploy.
+
+**Second live attempt (post-fix) — SUCCESS:**
+```
+mode=delivery_handlers
+processed=1
+status=delivered
+outcomes=[{target:portal_projection, status:success, code:portal_projection_delivered}]
+failures=[]
+```
+- `sync_outbox` row: `status=delivered`.
+- `sync_deliveries` row: `target_system=portal_projection`, `status=success`, `attempt_count=2` (1 failed pre-fix + 1 success post-fix).
+- System1 re-sync of the same course is idempotent (`updated:true`, same `postId=4a0142fc-…`).
+
+**Readiness after live delivery:** still `ready_for_dry_run` (correct — `live_delivery_still_guarded` and `portal_projection_still_guarded` are both `review` because the live flags are intentionally on, and `reconciliation_clean` is still `review` for the 3 tracked junk-slug gaps). Ready for guarded delivery remains blocked until the owner accepts those gaps (or cleans them) and re-flips the guarded flags if desired.
+
+**What is intentionally NOT done:**
+- Production flag flip — never performed.
+- Drive live delivery — `V2_DRIVE_WORKER_DRY_RUN` stays true.
+- No enrollment live sample yet (only a course publish event was delivered). Enrollment path is next if the owner wants a full canary.
+
 ### S4 canary-ready (complete pending owner canary sign-off)
 
 - `V2_ROLLBACK_RUNBOOK.md` updated with the 3-drill procedure (code, schema, flags).
