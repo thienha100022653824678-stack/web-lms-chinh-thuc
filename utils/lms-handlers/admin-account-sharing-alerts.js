@@ -1,5 +1,6 @@
 import { supabase } from "../supabase.js";
 import { getAdminFromRequest, normalizeEmail } from "../lms.js";
+import { applyCors } from "../cors.js";
 import {
   ACCOUNT_SHARING_EVENT_TYPES,
   ACCOUNT_SHARING_RISK_RULE_VERSION,
@@ -22,6 +23,38 @@ const RISK_LEVELS = new Set(["normal", "watch", "suspicious", "high"]);
 const DETAIL_PAGE_SIZE_DEFAULT = 50;
 const DETAIL_PAGE_SIZE_MAX = 100;
 const TIMELINE_COLLAPSE_WINDOW_MS = 5 * 60 * 1000;
+
+// RP2-B3 — Revoke reason validation. Pure function so it can be unit-tested
+// without a database. The admin must supply a non-empty reason (max 500 chars)
+// for every reset_session; we never use a default reason.
+export function validateRevokeReason(body) {
+  const raw = String(body?.reason ?? "").trim();
+  if (!raw) {
+    return { ok: false, code: "reason_required", status: 400 };
+  }
+  if (raw.length > 500) {
+    return { ok: false, code: "reason_too_long", status: 400 };
+  }
+  return { ok: true, reason: raw };
+}
+
+// RP2-B3 — Student existence lookup for student_not_found. Non-fatal: on any
+// lookup error we return true so a DB hiccup never blocks a legitimate revoke.
+// Email is already normalized (lowercased) by the caller, matching the
+// codebase's normalizeEmail convention for the students table.
+async function lookupStudentExists(supabase, email) {
+  try {
+    const { data, error } = await supabase
+      .from("students")
+      .select("id")
+      .eq("email", email)
+      .maybeSingle();
+    if (error) return true;
+    return Boolean(data);
+  } catch {
+    return true;
+  }
+}
 
 function getClientIp(req) {
   return String(
@@ -700,27 +733,69 @@ async function postAction(req, res, adminSession) {
   }
 
   if (action === "reset_session") {
-    const resetResult = await resetStudentSessionByEmail(supabase, email, {
-      adminEmail,
-      reason: "account_sharing_admin_reset"
-    });
-    await writeAdminAuditLog(supabase, {
+    const reasonCheck = validateRevokeReason(body);
+    if (!reasonCheck.ok) {
+      return res.status(reasonCheck.status).json({
+        success: false,
+        error: reasonCheck.code,
+        code: reasonCheck.code
+      });
+    }
+    const reason = reasonCheck.reason;
+
+    const deps = globalThis.__RP2B3_RESET_DEPS__ || {};
+    const existsFn = deps.lookupStudentExists || lookupStudentExists;
+    const resetFn = deps.resetStudentSessionByEmail || resetStudentSessionByEmail;
+    const auditFn = deps.writeAdminAuditLog || writeAdminAuditLog;
+    const reviewFn = deps.upsertReview || upsertReview;
+
+    let exists;
+    try {
+      exists = await existsFn(supabase, email);
+    } catch {
+      exists = true; // non-fatal
+    }
+    if (!exists) {
+      return res.status(404).json({
+        success: false,
+        error: "student_not_found",
+        code: "student_not_found"
+      });
+    }
+
+    let resetResult;
+    try {
+      resetResult = await resetFn(supabase, email, { adminEmail, reason });
+    } catch (err) {
+      console.error("[reset_session] revoke failed:", err.message);
+      return res.status(500).json({
+        success: false,
+        error: "revoke_failed",
+        code: "revoke_failed"
+      });
+    }
+
+    const affectedSessions = Number(resetResult?.studentSessions || 0);
+    await auditFn(supabase, {
       adminEmail,
       action: "account_sharing_reset_session",
       targetEmail: email,
       metadata: {
-        affectedStudentSessions: resetResult.studentSessions,
-        affectedEntryTokens: resetResult.entryTokens,
-        affectedLmsSessions: resetResult.lmsSessions,
-        usedRpc: resetResult.usedRpc
+        reason,
+        affectedStudentSessions: affectedSessions,
+        affectedEntryTokens: Number(resetResult?.entryTokens || 0),
+        affectedLmsSessions: Number(resetResult?.lmsSessions || 0),
+        usedRpc: resetResult?.usedRpc
       },
       ip,
       userAgent
     });
-    await upsertReview({ email, adminEmail, status: "monitoring" });
+    await reviewFn({ email, adminEmail, status: "monitoring" });
+
     return res.status(200).json({
       success: true,
-      affectedSessions: resetResult.studentSessions,
+      alreadyRevoked: affectedSessions === 0,
+      affectedSessions,
       reset: resetResult
     });
   }
