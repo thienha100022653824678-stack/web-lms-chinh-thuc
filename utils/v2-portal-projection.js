@@ -107,7 +107,12 @@ export async function buildPortalProjectionPayload({ supabase, event }) {
       : !!(payload.is_published ?? payload.isPublished);
 
     const body = {
-      action: eventType === 'course.publish_status_changed' ? 'syncCoursePublishStatus' : 'syncCourse',
+      // System1 /api/sync only accepts syncCourse / syncEnrollment /
+      // revokeEnrollment (its action allow-list rejects "syncCoursePublishStatus").
+      // The publish-status intent is carried by `isPublished` on the syncCourse
+      // body, which System1 already handles. Keep isPublished so any future
+      // target that does accept syncCoursePublishStatus can still read it.
+      action: 'syncCourse',
       courseSlug: slug,
       title,
       imageUrl,
