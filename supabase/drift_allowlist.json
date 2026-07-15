@@ -33,6 +33,16 @@
   "rls": [
     { "object": "_note", "reason": "All 25 public tables have RLS ON with 0 policy and force-RLS OFF (VERIFIED). This is the accepted baseline; Phase 2 (①) writes real policies. RLS-on state itself is not drift — individual per-table RLS toggles are still gated as FAIL." }
   ],
+  "policies": [
+    { "object": "courses.v3_anon_read_active_courses", "reason": "Phase 2 (①) RLS policy; allowlisted so gate accepts post-apply state as baseline once owner applies migration_v3_rls_policies.sql", "verified_source": "migration_v3_rls_policies.sql" },
+    { "object": "courses.v3_auth_read_active_courses", "reason": "Phase 2 (①) RLS policy", "verified_source": "migration_v3_rls_policies.sql" },
+    { "object": "lessons.v3_anon_read_free_lessons", "reason": "Phase 2 (①) RLS policy", "verified_source": "migration_v3_rls_policies.sql" },
+    { "object": "lessons.v3_auth_read_enrolled_lessons", "reason": "Phase 2 (①) RLS policy", "verified_source": "migration_v3_rls_policies.sql" },
+    { "object": "student_enrollments.v3_auth_read_own_enrollments", "reason": "Phase 2 (①) RLS policy", "verified_source": "migration_v3_rls_policies.sql" },
+    { "object": "lesson_progress.v3_auth_read_own_progress", "reason": "Phase 2 (①) RLS policy", "verified_source": "migration_v3_rls_policies.sql" },
+    { "object": "lesson_progress.v3_auth_update_own_progress", "reason": "Phase 2 (①) RLS policy", "verified_source": "migration_v3_rls_policies.sql" },
+    { "object": "student_active_sessions.v3_auth_read_own_sessions", "reason": "Phase 2 (①) RLS policy", "verified_source": "migration_v3_rls_policies.sql" }
+  ],
   "functions": [
     { "object": "handle_student_session_login", "reason": "SECURITY INVOKER (not DEFINER) + proconfig null; accepted baseline, Phase 2 (①) normalizes to DEFINER + pinned search_path", "verified_source": "Block 4" }
   ],
