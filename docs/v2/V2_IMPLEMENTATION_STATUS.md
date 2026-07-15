@@ -108,6 +108,13 @@ explicitly asks to switch traffic to V2.
 6. Owner approves → `V2_DELIVERY_HANDLERS_ENABLED=true`, `V2_PORTAL_PROJECTION_DRY_RUN=false`, keep `V2_DRIVE_WORKER_DRY_RUN=true`.
 7. `/api/v2/readiness` must reach `ready_for_guarded_delivery` for the canary scope.
 
+### S4 canary-ready (complete pending owner canary sign-off)
+
+- `V2_ROLLBACK_RUNBOOK.md` updated with the 3-drill procedure (code, schema, flags).
+- `V2_CUTOVER_RUNBOOK.md` added (documentation only; owner executes).
+- `V2_TEST_MATRIX.md` extended with canary scenarios.
+- Canary-ready state: all V2 flags off on production; V2 preview canary gated on `/api/v2/readiness`; rollback path practiced. Cutover traffic remains the owner's decision.
+
 ## Not Applied Automatically
 
 The following V2 migrations are committed but must not be applied to production
@@ -136,10 +143,10 @@ Supabase B session.
 
 ## Still Not Done
 
-- No V2 traffic cutover.
-- No V2 production deployment.
-- No V2 database migration has been applied by this branch work.
-- No V1 endpoint has been removed or blocked.
+- No V2 production cutover.
+- No V2 production flag flip.
+- No V1 endpoint removal.
+- All pending owner cutover approval.
 
 ## Current Guardrails
 
