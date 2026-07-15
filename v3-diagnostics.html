@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>V3 Diagnostics — Culinary LMS</title>
+  <style>
+    :root { --bg:#0f1115; --card:#181b22; --line:#262b36; --fg:#e6e9ef; --muted:#8b93a7; --ok:#2ecc71; --warn:#f1c40f; --bad:#e74c3c; --accent:#4a9eff; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--fg); }
+    header { padding:20px 24px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+    h1 { font-size:18px; margin:0; font-weight:700; }
+    .sub { color:var(--muted); font-size:13px; }
+    main { padding:24px; max-width:1100px; margin:0 auto; }
+    .row { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin-bottom:20px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
+    .card h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 10px; font-weight:600; }
+    .stat { font-size:28px; font-weight:700; }
+    .stat small { font-size:13px; color:var(--muted); font-weight:500; }
+    .kv { display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid var(--line); font-size:13px; }
+    .kv:last-child { border-bottom:none; }
+    .kv .k { color:var(--muted); }
+    .pill { display:inline-block; padding:2px 9px; border-radius:999px; font-size:12px; font-weight:600; }
+    .pill.ok { background:rgba(46,204,113,.15); color:var(--ok); }
+    .pill.warn { background:rgba(241,196,15,.15); color:var(--warn); }
+    .pill.bad { background:rgba(231,76,60,.15); color:var(--bad); }
+    .pill.mode { background:rgba(74,158,255,.15); color:var(--accent); }
+    button { background:var(--accent); color:#fff; border:none; padding:9px 16px; border-radius:8px; font-weight:600; cursor:pointer; font-size:13px; }
+    button:disabled { opacity:.5; cursor:default; }
+    input { background:var(--bg); border:1px solid var(--line); color:var(--fg); padding:9px 12px; border-radius:8px; font-size:13px; min-width:220px; }
+    .err { color:var(--bad); font-size:13px; margin-top:8px; }
+    .muted { color:var(--muted); }
+    footer { padding:16px 24px; color:var(--muted); font-size:12px; border-top:1px solid var(--line); }
+    code { background:var(--bg); padding:1px 6px; border-radius:5px; font-size:12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>V3 Diagnostics Dashboard</h1>
+      <div class="sub">Read-only operational metrics · outbox · delivery · runtime posture</div>
+    </div>
+    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+      <input id="secret" type="password" placeholder="Worker secret (x-v2-worker-secret)" autocomplete="off" />
+      <button id="refresh">Refresh</button>
+    </div>
+  </header>
+
+  <main>
+    <div id="error" class="err" hidden></div>
+
+    <div class="row">
+      <div class="card">
+        <h2>Runtime posture</h2>
+        <div class="stat"><span id="mode" class="pill mode">—</span></div>
+        <div style="margin-top:10px;">
+          <div class="kv"><span class="k">Kill switch</span><span id="kill">—</span></div>
+          <div class="kv"><span class="k">RLS enforced</span><span id="rls">—</span></div>
+          <div class="kv"><span class="k">V2 shadow</span><span id="v2shadow">—</span></div>
+          <div class="kv"><span class="k">V3 shadow</span><span id="v3shadow">—</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Outbox</h2>
+        <div class="stat" id="obPending">—<small> pending</small></div>
+        <div style="margin-top:10px;">
+          <div class="kv"><span class="k">Delivered</span><span id="obDelivered">—</span></div>
+          <div class="kv"><span class="k">Failed</span><span id="obFailed">—</span></div>
+          <div class="kv"><span class="k">Dead letter</span><span id="obDead">—</span></div>
+          <div class="kv"><span class="k">Success rate</span><span id="obRate">—</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Delivery targets</h2>
+        <div class="stat" id="dvPending">—<small> pending</small></div>
+        <div style="margin-top:10px;">
+          <div class="kv"><span class="k">Failed deliveries</span><span id="dvFailed">—</span></div>
+          <div class="kv"><span class="k">Dead letters</span><span id="dvDead">—</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Raw payload</h2>
+      <pre id="raw" class="muted" style="white-space:pre-wrap; font-size:12px; margin:0;">Enter the worker secret and press Refresh.</pre>
+    </div>
+  </main>
+
+  <footer>
+    V3 Phase 7 (⑨) diagnostics UI · consumes <code>GET /api/v3/diagnostics</code> (service-role gated) ·
+    all data is read-only; PII is already masked/hashed server-side (Phase 6 ⑪).
+  </footer>
+
+  <script type="module">
+    // Self-contained ES module, no build step, no external deps. The worker
+    // secret is entered by the admin and sent only as a request header; it is
+    // never persisted to storage and never logged.
+    const $ = (id) => document.getElementById(id);
+
+    function pill(el, value, goodWhen) {
+      const good = goodWhen(value);
+      el.textContent = String(value);
+      el.className = "pill " + (good ? "ok" : "bad");
+    }
+
+    function setText(id, v) { $(id).textContent = v == null ? "—" : String(v); }
+
+    async function load() {
+      const secret = $("secret").value.trim();
+      const errEl = $("error");
+      errEl.hidden = true;
+      if (!secret) { errEl.hidden = false; errEl.textContent = "Enter the worker secret first."; return; }
+      $("refresh").disabled = true;
+      try {
+        const res = await fetch("/api/v3/diagnostics", {
+          method: "GET",
+          headers: { "x-v2-worker-secret": secret },
+        });
+        if (res.status === 401) throw new Error("Unauthorized — check the worker secret.");
+        if (!res.ok) throw new Error("Request failed: " + res.status);
+        const body = await res.json();
+        const m = body.metrics || {};
+        const p = m.posture || {}, ob = m.outbox || {}, dv = m.delivery || {};
+
+        $("mode").textContent = p.effective_mode || "—";
+        pill($("kill"), p.kill_switch ? "ON" : "off", (v) => v === "off");
+        pill($("rls"), p.rls_enforced ? "yes" : "no", (v) => v === "yes");
+        setText("v2shadow", p.v2_shadow ? "on" : "off");
+        setText("v3shadow", p.v3_shadow ? "on" : "off");
+
+        const c = ob.counts || {};
+        setText("obPending", ob.pending ?? "—");
+        $("obPending").innerHTML = (ob.pending ?? "—") + '<small> pending</small>';
+        setText("obDelivered", c.delivered ?? 0);
+        setText("obFailed", c.failed ?? 0);
+        setText("obDead", c.dead_letter ?? 0);
+        setText("obRate", ob.successRate == null ? "n/a" : (ob.successRate * 100).toFixed(1) + "%");
+
+        $("dvPending").innerHTML = (dv.pendingDeliveries ?? "—") + '<small> pending</small>';
+        setText("dvFailed", dv.failedDeliveries ?? 0);
+        setText("dvDead", dv.deadLetters === -1 ? "table absent (migration pending)" : (dv.deadLetters ?? 0));
+
+        $("raw").textContent = JSON.stringify(body, null, 2);
+      } catch (e) {
+        errEl.hidden = false;
+        errEl.textContent = e.message || "Failed to load diagnostics.";
+      } finally {
+        $("refresh").disabled = false;
+      }
+    }
+
+    $("refresh").addEventListener("click", load);
+    $("secret").addEventListener("keydown", (e) => { if (e.key === "Enter") load(); });
+  </script>
+</body>
+</html>
