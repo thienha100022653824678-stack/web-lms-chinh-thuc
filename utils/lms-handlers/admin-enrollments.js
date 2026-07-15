@@ -1,6 +1,9 @@
 import { supabase } from "../supabase.js";
 import { getAdminFromRequest, normalizeEmail, syncEnrollment } from "../lms.js";
 import { applyCors } from "../cors.js";
+import {
+  maybeShadowEnrollmentAccess,
+} from "../v2-outbox-shadow.js";
 
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { mode: "admin" });
@@ -60,6 +63,12 @@ export default async function handler(req, res) {
         return res.status(500).json({ success: false, error: syncResult.error || "Lỗi đồng bộ phân quyền" });
       }
 
+      // V2 shadow: mirror the enrollment upsert to the outbox (fail-open).
+      await maybeShadowEnrollmentAccess(
+        { email: normalizeEmail(email), course_slug: courseSlug, status: "active" },
+        "upserted"
+      );
+
       return res.status(200).json({ success: true, enrollment: syncResult.enrollment, driveSync: syncResult.driveSync });
     }
 
@@ -98,6 +107,12 @@ export default async function handler(req, res) {
           action: status === "active" ? "create" : "revoke",
           expiredAt
         });
+
+        // V2 shadow: mirror the status change to the outbox (fail-open).
+        await maybeShadowEnrollmentAccess(
+          { email: oldEnroll.email, course_slug: oldEnroll.course_slug, status },
+          status === "active" ? "upserted" : "revoked"
+        );
       }
 
       return res.status(200).json({ success: true, enrollment: data });
@@ -130,6 +145,12 @@ export default async function handler(req, res) {
           courseSlug: enroll.course_slug,
           action: "revoke"
         });
+
+        // V2 shadow: mirror the revoke to the outbox (fail-open).
+        await maybeShadowEnrollmentAccess(
+          { email: enroll.email, course_slug: enroll.course_slug },
+          "revoked"
+        );
       }
 
       return res.status(200).json({ success: true, message: "Đã thu hồi quyền học thành công" });

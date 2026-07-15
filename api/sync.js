@@ -9,6 +9,10 @@ import {
   AuthSecretError
 } from "../utils/lms-secrets.js";
 import { applyCors } from "../utils/cors.js";
+import {
+  maybeShadowCoursePublish,
+  maybeShadowEnrollmentAccess,
+} from "../utils/v2-outbox-shadow.js";
 
 export default async function handler(req, res) {
   // CORS: server-to-server. We allow requests without an Origin header
@@ -128,6 +132,16 @@ export default async function handler(req, res) {
         result = { id: newCourse.id, created: true };
       }
 
+      // V2 shadow: mirror the course publish event to the outbox when
+      // V2_OUTBOX_SHADOW_MODE is on. Fail-open — never affects V1 response.
+      await maybeShadowCoursePublish({
+        slug: slug.trim(),
+        title: nextTitle,
+        image_url: nextImageUrl,
+        is_published: active !== undefined ? active : true,
+        expected_start_date: nextExpectedStartDate,
+      });
+
       return res.status(200).json({ success: true, course: result });
     }
 
@@ -145,6 +159,14 @@ export default async function handler(req, res) {
         action: "create"
       });
 
+      // V2 shadow: mirror the enrollment upsert to the outbox (fail-open).
+      if (syncResult?.success) {
+        await maybeShadowEnrollmentAccess(
+          { email: normalizeEmail(email), course_slug: courseSlug, status: "active" },
+          "upserted"
+        );
+      }
+
       return res.status(200).json(syncResult);
     }
 
@@ -161,6 +183,14 @@ export default async function handler(req, res) {
         courseSlug,
         action: "revoke"
       });
+
+      // V2 shadow: mirror the enrollment revoke to the outbox (fail-open).
+      if (syncResult?.success) {
+        await maybeShadowEnrollmentAccess(
+          { email: normalizeEmail(email), course_slug: courseSlug },
+          "revoked"
+        );
+      }
 
       return res.status(200).json(syncResult);
     }

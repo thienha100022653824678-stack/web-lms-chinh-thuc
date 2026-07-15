@@ -215,8 +215,14 @@ Both migrations remain additive; V1 production code/flags are still off. Do not 
 
 - ~~Enable and observe Portal projection dry-run after diagnostics are clean.~~ **Done on preview 2026-07-15** — flags on, diagnostics/readiness/outbox/reconciliation exercised (see S3 flag progression results).
 - ~~**S3 flag progression steps 4–5 (shadow + projection dry-run):**~~ **Done on preview.** Steps 6–7 (live delivery + `ready_for_guarded_delivery`) still owner-gated.
+- ~~**Wire outbox producers into V1 write paths**~~ **done (this commit):**
+  - New fail-open helper `utils/v2-outbox-shadow.js` (`maybeShadowCoursePublish`, `maybeShadowEnrollmentAccess`). Never throws; logs and returns `{failedOpen:true}` on error. 7 unit tests in `tests/v2-outbox-shadow.test.mjs`.
+  - Wired into `api/sync.js` after successful `syncCourse` / `syncEnrollment` / `revokeEnrollment`.
+  - Wired into `utils/lms-handlers/admin-enrollments.js` after successful POST grant / PUT status change / DELETE revoke.
+  - Flag-off path is a pure no-op (V1 behavior unchanged). Flag-on only enqueues when `V2_OUTBOX_SHADOW_MODE=true` (already set on preview).
+  - Still no live traffic triggered in this session — shadow volume will grow on the next real course/enrollment write against the preview.
 - **Open follow-ups before live delivery can be meaningful:**
-  1. Wire `enqueueCoursePublishEvent` / `enqueueEnrollmentAccessEvent` into V1 course/enrollment write paths (currently the helpers exist but have zero call sites) so shadow outbox volume can grow and `/api/v2/portal-projection-preview` can sample real payloads vs V1 `/api/sync`.
+  1. Trigger a real course/enrollment write on the preview (or wait for natural traffic) → confirm `/api/v2/outbox` has rows → sample `/api/v2/portal-projection-preview?outboxId=…` vs V1 `/api/sync` contract.
   2. Decide owner policy on the 3 tracked `orders_missing_course_id` junk slugs (`donut`, `test-bake_1`) — accept as non-blocking, or clean them, before expecting readiness `ready_for_dry_run` / `ready_for_guarded_delivery`.
   3. Owner approve step 6: flip `V2_DELIVERY_HANDLERS_ENABLED=true` + `V2_PORTAL_PROJECTION_DRY_RUN=false` on **preview only**, keep `V2_DRIVE_WORKER_DRY_RUN=true`. Do not touch production.
   4. Optionally enable `V2_OUTBOX_WORKER_ENABLED=true` + `V2_OUTBOX_WORKER_DRY_RUN=true` on preview for dry-run plan inspection once shadow rows exist.
