@@ -13,8 +13,12 @@ import { google } from "googleapis";
 import crypto from "crypto";
 import {
   isEntryTokenRequiredCourse,
-  verifyLmsVerifiedSessionAccess
+  verifyLmsVerifiedSessionAccess,
+  mapLmsAccessReasonToError,
+  httpStatusForLmsAccessError,
+  shouldRequireLmsVerifiedSession
 } from "../lms-session-guard.js";
+import { isV2GlobalOneDeviceEnabled } from "../v2-flags.js";
 import { resolveMainMediaInfo } from "../lms-media.js";
 import { applyCors } from "../cors.js";
 
@@ -46,6 +50,22 @@ function getLmsSessionHeaders(req) {
     lmsSessionId: String(req.headers["x-lms-session-id"] || "").trim(),
     lmsDeviceId: String(req.headers["x-lms-device-id"] || "").trim()
   };
+}
+
+// Centralized error response for RP2-B1. Strips any DB / session /
+// device metadata before responding, regardless of which internal reason
+// triggered the failure. Aligns with the wire contract documented in
+// docs/v2-new/RP2_B_SESSION_DEVICE_GUARD_PLAN.md §21.
+function respondWithAccessError(res, { reason, flagOn, fallbackStatus = 403 }) {
+  const errorCode = mapLmsAccessReasonToError(reason);
+  const status = httpStatusForLmsAccessError(errorCode, { flagOn });
+  return res.status(status || fallbackStatus).json({
+    success: false,
+    allowed: false,
+    error: errorCode,
+    authError: errorCode,
+    code: errorCode
+  });
 }
 
 function getGoogleAuth() {
@@ -313,48 +333,68 @@ export default async function handler(req, res) {
 
     const lmsHeaders = getLmsSessionHeaders(req);
     const hasLmsSessionHeaders = Boolean(lmsHeaders.lmsSessionId && lmsHeaders.lmsDeviceId);
+    const flagOn = isV2GlobalOneDeviceEnabled();
 
     let email = null;
-    let fromSession = false;
     let lmsSessionAccess = null;
     let lmsSessionFailureReason = "";
 
     if (hasLmsSessionHeaders) {
-      const access = await verifyLmsVerifiedSessionAccess(supabase, {
-        ...lmsHeaders,
-        courseSlug: courseSlug || null
-      });
+      const access = globalThis.__RP2B1_LMS_SESSION_STUB__
+        ? globalThis.__RP2B1_LMS_SESSION_STUB__
+        : await verifyLmsVerifiedSessionAccess(supabase, {
+          ...lmsHeaders,
+          courseSlug: courseSlug || null
+        });
       if (access.ok) {
         email = access.email;
-        fromSession = true;
         lmsSessionAccess = access;
       } else {
         lmsSessionFailureReason = access.reason || "invalid_lms_session";
       }
+    } else {
+      lmsSessionFailureReason = "missing_lms_session";
     }
 
-    if (sToken) {
-      const decoded = verifyStudentSession(sToken);
-      if (decoded && decoded.email) {
-        email = decoded.email;
-        fromSession = true;
+    // RP2-B1: when the flag is on, every course is in scope. Cookie /
+    // credential paths may NOT authorize content on their own — they are
+    // only retained as compatibility identity for legacy callers but the
+    // request is rejected with the safe error contract if LMS verified
+    // session access is missing or invalid. We intentionally do NOT
+    // set email from cookie / credential when flagOn.
+    if (flagOn) {
+      if (!lmsSessionAccess) {
+        return respondWithAccessError(res, {
+          reason: lmsSessionFailureReason || "missing_lms_session",
+          flagOn: true
+        });
+      }
+      email = lmsSessionAccess.email;
+    } else {
+      if (!email && sToken) {
+        const decoded = verifyStudentSession(sToken);
+        if (decoded && decoded.email) {
+          email = decoded.email;
+        }
+      }
+
+      if (!email && credential) {
+        email = await verifyGoogleIdToken(credential);
+      }
+
+      if (!email) {
+        return res.status(401).json({
+          allowed: false,
+          error: "Missing or expired login session",
+          authError: "missing_login_session"
+        });
       }
     }
 
-    if (!email && credential) {
-      email = await verifyGoogleIdToken(credential);
-    }
-
-    if (!email) {
-      return res.status(401).json({
-        allowed: false,
-        error: "Missing or expired login session",
-        authError: "missing_login_session"
-      });
-    }
-
     // 1. Fetch all course enrollments for this student and normalize status locally.
-    const { data: enrollments, error: enrollError } = await supabase
+    const { data: enrollments, error: enrollError } = globalThis.__RP2B1_ENROLLMENTS_STUB__
+      ? globalThis.__RP2B1_ENROLLMENTS_STUB__
+      : await supabase
       .from("student_enrollments")
       .select("course_slug, status")
       .eq("email", email);
@@ -378,7 +418,11 @@ export default async function handler(req, res) {
     // If a course is specified, use it directly so the check below can return 403 if unauthorized
     const activeCourseSlug = lmsSessionAccess?.courseSlug || (courseSlug ? courseSlug : allowedCourses[0]);
 
-    if (isEntryTokenRequiredCourse(activeCourseSlug) && !lmsSessionAccess) {
+    // RP2-B1: when the flag is on, `shouldRequireLmsVerifiedSession` is
+    // always true and the LMS verified session was already enforced before
+    // we got here. The legacy course allowlist is no longer used as a
+    // bypass gate. Flag-off keeps the V1 behavior intact.
+    if (shouldRequireLmsVerifiedSession(activeCourseSlug) && !lmsSessionAccess) {
       const code = hasLmsSessionHeaders
         ? (lmsSessionFailureReason || "protected_session_invalid")
         : "entry_token_required";
@@ -402,14 +446,18 @@ export default async function handler(req, res) {
     }
 
     // 2. Load Course Config from courses and site_config table
-    const { data: courseRow } = await supabase
+    const { data: courseRow } = globalThis.__RP2B1_COURSES_STUB__
+      ? globalThis.__RP2B1_COURSES_STUB__
+      : await supabase
       .from("courses")
       .select("title, subtitle, image_url, raw_data")
       .eq("slug", activeCourseSlug)
       .maybeSingle();
     const courseRawData = (courseRow && courseRow.raw_data) || {};
 
-    const { data: configRows } = await supabase.from("site_config").select("key, value");
+    const { data: configRows } = globalThis.__RP2B1_SITE_CONFIG_STUB__
+      ? globalThis.__RP2B1_SITE_CONFIG_STUB__
+      : await supabase.from("site_config").select("key, value");
     const rawConfig = {};
     if (configRows) {
       configRows.forEach(row => {
@@ -436,7 +484,9 @@ export default async function handler(req, res) {
     };
 
     // 3. Load Lessons from Supabase
-    const { data: lessonsRows, error: lessonsError } = await supabase
+    const { data: lessonsRows, error: lessonsError } = globalThis.__RP2B1_LESSONS_STUB__
+      ? globalThis.__RP2B1_LESSONS_STUB__
+      : await supabase
       .from("lessons")
       .select("*")
       .eq("course_slug", activeCourseSlug)
@@ -498,6 +548,24 @@ export default async function handler(req, res) {
     // Fetch Google Docs recipe contents
     lessons = await Promise.all(lessons.map(attachRecipeText));
 
+    // RP2-B1: when the flag is on, the legacy cookie-based student session
+    // is NOT refreshed. The cookie is kept as a V1 compatibility identity
+    // for callers that still rely on it, but the source of truth for one-
+    // device access is the LMS verified session. Generating a new token
+    // here would only prolong the visibility window of a credential we are
+    // explicitly de-emphasizing.
+    if (flagOn) {
+      return res.status(200).json({
+        allowed: true,
+        apiVersion: API_VERSION,
+        email,
+        course: activeCourseSlug,
+        allowedCourses,
+        courseInfo,
+        lessons
+      });
+    }
+
     // Generate new student session token
     const newSession = createStudentSession(email);
     res.setHeader(
@@ -518,6 +586,18 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
+    // RP2-B1: surface a fail-closed 503 when the flag is on. We never
+    // echo the raw DB error to the client. Telemetry stays best-effort
+    // elsewhere and is independent of this branch.
+    if (isV2GlobalOneDeviceEnabled()) {
+      return res.status(503).json({
+        success: false,
+        allowed: false,
+        error: "one_device_policy_unavailable",
+        authError: "one_device_policy_unavailable",
+        code: "one_device_policy_unavailable"
+      });
+    }
     console.error("[course-data] Unexpected error:", err);
     return res.status(500).json({
       allowed: false,

@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { getAccountEventHashSecret, AuthSecretError } from "./lms-secrets.js";
+import { isV2GlobalOneDeviceEnabled } from "./v2-flags.js";
 
 export const STUDENT_SESSION_STATUSES = Object.freeze({
   ACTIVE: "active",
@@ -904,8 +905,104 @@ export function getEntryTokenRequiredCourses() {
     .filter(Boolean);
 }
 
-export function isEntryTokenRequiredCourse(courseSlug) {
+export function isEntryTokenRequiredCourse(courseSlug, env = process.env) {
   const normalizedCourseSlug = String(courseSlug || "").trim();
   if (!normalizedCourseSlug) return false;
-  return getEntryTokenRequiredCourses().includes(normalizedCourseSlug);
+  const list = String(env?.LMS_ENTRY_TOKEN_REQUIRED_COURSES || "")
+    .split(",")
+    .map((slug) => String(slug || "").trim())
+    .filter(Boolean);
+  return list.includes(normalizedCourseSlug);
+}
+
+/**
+ * RP2-B1 centralized access policy.
+ *
+ * - When V2_GLOBAL_ONE_DEVICE_ENABLED is ON: every course is treated as
+ *   protected content that requires LMS verified session access. The
+ *   caller must invoke `verifyLmsVerifiedSessionAccess` and reject when
+ *   it fails. The legacy course allowlist is irrelevant.
+ * - When the flag is OFF: fall back to the V1 behavior
+ *   (`isEntryTokenRequiredCourse`). Public lessons remain public.
+ *
+ * Returned boolean does NOT mean the caller has access; it only tells the
+ * caller that this content path is part of the one-device scope. The
+ * caller is responsible for actual verification.
+ */
+export function shouldRequireLmsVerifiedSession(courseSlug, env = process.env) {
+  if (isV2GlobalOneDeviceEnabled(env)) return true;
+  return isEntryTokenRequiredCourse(courseSlug, env);
+}
+
+/**
+ * RP2-B1 error mapping. Source-of-truth helpers for translating the
+ * raw `reason` returned by `verifyLmsVerifiedSessionAccess` (and the
+ * LMS `student_session_*` / `lms_session_*` lifecycle) into the safe
+ * external error contract documented in the plan.
+ *
+ * The mapping intentionally never leaks:
+ *   - the raw DB error
+ *   - the email
+ *   - the device id / session id
+ *   - the IP or user agent
+ *   - which internal lifecycle state was hit
+ *
+ * Callers can rely on this mapping for both course-data and lesson
+ * responses so the wire contract stays uniform.
+ */
+const PUBLIC_REASON_TO_ERROR = Object.freeze({
+  // The caller supplied no X-LMS-Session-Id / X-LMS-Device-Id headers,
+  // or the session row could not be found.
+  missing_lms_session: "invalid_session",
+  invalid_lms_session: "invalid_session",
+  // The headers identified a different device than the one stored
+  // on the LMS session. Per the plan, LMS reports this as
+  // `device_mismatch` (Portal owns the `device_active_elsewhere`
+  // case at login time).
+  device_mismatch: "device_mismatch",
+  // The course expected by the request does not match the course bound
+  // to the LMS verified session.
+  course_mismatch: "invalid_session",
+  // LMS verified session is no longer active. We surface the same
+  // generic contract as a missing session.
+  lms_session_logged_out: "session_revoked",
+  lms_session_expired: "session_expired",
+  lms_session_admin_reset: "session_revoked",
+  lms_session_revoked_by_reset: "session_revoked",
+  lms_session_superseded: "session_replaced",
+  // Underlying student session lifecycle.
+  student_session_inactive: "session_revoked",
+  student_session_logged_out: "session_revoked",
+  student_session_expired: "session_expired",
+  student_session_admin_reset: "session_revoked",
+  student_session_revoked_by_reset: "session_revoked",
+  student_session_superseded: "session_replaced",
+  // Enrollment is missing or not active. Caller treats it as a session
+  // problem because that is how the contract reads from the
+  // learner's perspective when the entry path is required.
+  enrollment_inactive: "invalid_session"
+});
+
+export function mapLmsAccessReasonToError(reason) {
+  if (!reason) return "invalid_session";
+  return PUBLIC_REASON_TO_ERROR[reason] || "invalid_session";
+}
+
+/**
+ * RP2-B1 HTTP status mapping. Kept centralized so response shapes
+ * stay identical between course-data and lesson. `one_device_policy_unavailable`
+ * is the only 503 outcome (fail-closed); everything else is 401/403
+ * depending on whether the failure is a session shape problem (401) or
+ * an explicit device mismatch (403). Per the plan we pick 401 for
+ * device_mismatch too so the contract is uniform and the mapping
+ * easier to reason about.
+ */
+export function httpStatusForLmsAccessError(errorCode, { flagOn = false } = {}) {
+  if (errorCode === "one_device_policy_unavailable") return 503;
+  if (errorCode === "device_mismatch") return 401;
+  return 401;
+}
+
+export function isLmsAccessVerificationError(reason) {
+  return Boolean(reason) && PUBLIC_REASON_TO_ERROR.hasOwnProperty(reason);
 }
