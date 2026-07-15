@@ -1,0 +1,17 @@
+{
+  "name": "@v3-lms/event-schema",
+  "version": "1.0.0",
+  "description": "Shared V3 event schema, DTO shapes, error codes, and helpers for Shop/Portal/LMS. Single source of truth — breaking contract changes are compile/test errors, not production 401s.",
+  "type": "module",
+  "main": "./src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs",
+    "./events": "./src/events.mjs",
+    "./dto": "./src/dto.mjs",
+    "./errors": "./src/errors.mjs",
+    "./helpers": "./src/helpers.mjs",
+    "./runtime": "./src/runtime.mjs"
+  },
+  "files": ["src"],
+  "license": "UNLICENSED"
+}
