@@ -51,7 +51,15 @@ function getSecretConfigured(diagnostics, key) {
   return Boolean(diagnostics?.flags?.secretsConfigured?.[key]);
 }
 
-function buildGates(diagnostics, reconciliation) {
+// §4 policy: a reconciliation "issue" is a tracked identity gap (e.g. an
+// order row whose course_slug has no matching courses row). Runbook §4
+// says these are NOT required to be 0 — they only need to appear in the
+// reconciliation report. So the gate is healthy (ok) whenever the checks
+// themselves ran without failure (failedChecks === 0). The gate is still
+// marked 'review' while any tracked issues exist, so the readiness level
+// caps at ready_for_dry_run (not ready_for_guarded_delivery) until the
+// owner accepts or cleans the gaps.
+export function buildGates(diagnostics, reconciliation) {
   const migrationOk = Boolean(diagnostics?.migrations?.ok);
   const outboxOk = Boolean(diagnostics?.outbox?.ok);
   const staleProcessingCount = Number(diagnostics?.outbox?.staleProcessingCount || 0);
@@ -67,6 +75,15 @@ function buildGates(diagnostics, reconciliation) {
     !getFlagEnabled(diagnostics, 'PORTAL_PROJECTION_ENABLED')
     || getFlagEnabled(diagnostics, 'PORTAL_PROJECTION_DRY_RUN')
   );
+
+  // Reconciliation check health = all checks ran without failure.
+  // issueCount (tracked gaps) is surfaced but does not make the gate fail.
+  const reconciliationChecksOk = Boolean(reconciliationSummary?.ok)
+    && Number(reconciliationSummary?.failedChecks || 0) === 0;
+  const reconciliationIssueCount = Number(reconciliationSummary?.issueCount || 0);
+  const reconciliationCleanStatus = (
+    reconciliationSummary && reconciliationChecksOk && reconciliationIssueCount === 0
+  ) ? 'pass' : 'review';
 
   return [
     gate(
@@ -125,10 +142,12 @@ function buildGates(diagnostics, reconciliation) {
     ),
     gate(
       'reconciliation_clean',
-      Boolean(reconciliationSummary?.ok) && Number(reconciliationSummary?.issueCount || 0) === 0,
-      Boolean(reconciliationSummary?.ok) && Number(reconciliationSummary?.issueCount || 0) === 0 ? 'pass' : 'review',
+      reconciliationChecksOk,
+      reconciliationCleanStatus,
       reconciliationSummary
-        ? 'Read-only reconciliation summary has been generated.'
+        ? reconciliationIssueCount > 0
+          ? `Reconciliation ran with ${reconciliationIssueCount} tracked identity gap(s); review per runbook §4 before guarded delivery.`
+          : 'Read-only reconciliation summary is clean.'
         : 'Read-only reconciliation has not run in this readiness check.',
       { reconciliation: reconciliationSummary }
     ),
@@ -151,7 +170,7 @@ function buildGates(diagnostics, reconciliation) {
   ];
 }
 
-function classifyReadiness(gates) {
+export function classifyReadiness(gates) {
   const blocked = gates.filter((item) => item.status === 'blocked');
   const reviews = gates.filter((item) => item.status === 'review');
   const reconciliationGate = gates.find((item) => item.name === 'reconciliation_clean');

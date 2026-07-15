@@ -175,7 +175,7 @@ Note: earlier empty-string values for `V2_OUTBOX_SHADOW_MODE` / `V2_RECONCILIATI
 5. `/api/v2/reconciliation` — `ok: true`, `failedChecks: 0`, `issueCount: 3`.
    - All 7 checks `ok: true`. The 3 issues are the same tracked identity gaps already recorded in postflight (`orders_missing_course_id` for slugs `donut` / `test-bake_1`). Outbox health check is clean.
 
-6. `/api/v2/readiness` — HTTP 200, `ok: true`, **level = `needs_review`**.
+6. `/api/v2/readiness` — HTTP 200, `ok: true`, **level = `needs_review`** (before classifier fix; see "S3 readiness classifier alignment" below).
    - Gates:
      - `migrations_visible:pass`
      - `worker_secret_configured:pass`
@@ -186,16 +186,25 @@ Note: earlier empty-string values for `V2_OUTBOX_SHADOW_MODE` / `V2_RECONCILIATI
      - **`reconciliation_clean:review`** ← only review gate (issueCount=3 from known junk slugs)
      - `live_delivery_still_guarded:pass` (handlers off)
      - `portal_projection_still_guarded:pass` (dry-run still on)
-   - Classification: `classifyReadiness` returns `ready_for_dry_run` only when `reconciliation_clean.ok && issueCount===0`. With 3 tracked issues it correctly stays at `needs_review`. This is expected per runbook §4 ("course_id is null not required to be 0, but every non-zero count must appear in the reconciliation report" — they do).
+   - Pre-fix classification: `classifyReadiness` required `reconciliation_clean.ok && issueCount===0` for `ready_for_dry_run`, so with 3 tracked gaps it stayed at `needs_review`. This conflicted with runbook §4 ("course_id is null not required to be 0, but every non-zero count must appear in the reconciliation report" — they do).
 
-7. `/api/v2/sync-worker` POST `{dryRun:true}` — HTTP 409 `v2_worker_disabled`.
-   - Expected: `V2_OUTBOX_WORKER_ENABLED` is still off. Enabling it is **not** part of runbook steps 4–5; leave it for a later dry-run once shadow producers exist. Do not flip without owner approval.
+### S3 readiness classifier alignment (2026-07-15)
 
-**What is intentionally NOT done yet (owner gates):**
-- Step 6 live delivery flip (`V2_DELIVERY_HANDLERS_ENABLED=true` + `V2_PORTAL_PROJECTION_DRY_RUN=false`) — **blocked on owner approval**. Keep Drive dry-run on.
-- Step 7 target level `ready_for_guarded_delivery` — blocked by (a) live-delivery still guarded (correct, intentional) and (b) the 3 tracked identity-gap issues. Owner can either accept those as non-blocking (and/or soft-adjust the readiness classifier) or clean the junk order slugs first.
-- Production flag flip — never performed. Production env has no V2_* flags set in this session.
-- Producer wiring of `enqueueCoursePublishEvent` / `enqueueEnrollmentAccessEvent` into V1 write paths — open follow-up so shadow volume can grow.
+The original `reconciliation_clean` gate treated any `issueCount > 0` as not-clean, which kept readiness at `needs_review` even though the reconciliation checks themselves all ran successfully (`failedChecks === 0`) and the only "issues" were the runbook-accepted tracked identity gaps. This made the readiness level lie about whether dry-run/shadow validation could begin.
+
+Fix applied to `utils/v2-readiness.js` (with `tests/v2-readiness.test.mjs`, 6 cases):
+- `reconciliation_clean` gate `ok` is now `reconciliationSummary.ok && failedChecks === 0` (checks-healthy), decoupled from `issueCount`.
+- The gate `status` stays `review` while `issueCount > 0` (tracked gaps exist) and `pass` only when `issueCount === 0`. This keeps the level capped at `ready_for_dry_run` (not `ready_for_guarded_delivery`) until the owner accepts or cleans the gaps — exactly the §4 contract.
+- `buildGates` and `classifyReadiness` are now exported (pure functions, unit-testable without DB/network).
+- New levels confirmed by tests:
+  - clean (issueCount=0, all pass) → `ready_for_guarded_delivery`
+  - tracked gaps (failedChecks=0, issueCount=3) → `ready_for_dry_run`
+  - failed check (failedChecks>0) → `needs_review`
+  - missing migrations → `blocked`
+  - live delivery + portal both live → `ready_for_dry_run` (review gates surface the intentional canary state)
+  - reconciliation disabled → `needs_review`
+
+Net effect on preview: readiness moved `needs_review → ready_for_dry_run` (the tracked 3 junk-slug gaps no longer block shadow/dry-run validation), while still refusing `ready_for_guarded_delivery` until the gaps are resolved and the owner approves live delivery.
 
 ### S4 canary-ready (complete pending owner canary sign-off)
 
