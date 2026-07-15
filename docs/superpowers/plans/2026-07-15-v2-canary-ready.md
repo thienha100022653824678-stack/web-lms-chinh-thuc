@@ -54,7 +54,7 @@
 
 ---
 
-## Task S0: Integration base — merge two V2 lineages
+## Task 0: Integration base — merge two V2 lineages (slice S0)
 
 **Files:**
 - Resolve conflict: `utils/v2-flags.js`
@@ -237,7 +237,7 @@ Expected: file exists. (If somehow missing, the plan author must have branched b
 
 ---
 
-## Task S1: RP2-B2 — Server-side student logout
+## Task 1: RP2-B2 — Server-side student logout (slice S1)
 
 **Files:**
 - Create: `utils/lms-handlers/logout.js`
@@ -660,7 +660,7 @@ Expected: clean merge; tests pass post-merge.
 
 ---
 
-## Task S2: RP2-B3 — Admin revoke polish
+## Task 2: RP2-B3 — Admin revoke polish (slice S2)
 
 **Files:**
 - Modify: `utils/lms-handlers/admin-account-sharing-alerts.js` (the `reset_session` branch in `postAction`, ~line 702; add two helpers near the top of the file)
@@ -1036,7 +1036,7 @@ Expected: clean merge; tests pass post-merge.
 
 ---
 
-## Task S3: Sync verification — identity migration, shadow, dry-run, live, readiness
+## Task 3: Sync verification — identity migration, shadow, dry-run, live, readiness (slice S3)
 
 This task is mostly **operator-driven** (owner applies migrations and flips preview flags per Q5 b-Y). The code deliverable is the reconciliation runbook + status doc update. Operator actions are gated verification steps that must be recorded before progressing.
 
@@ -1193,7 +1193,7 @@ Expected: clean merge; push succeeds.
 
 ---
 
-## Task S4: Canary readiness — rollback drill, cutover runbook, test matrix
+## Task 4: Canary readiness — rollback drill, cutover runbook, test matrix (slice S4)
 
 **Files:**
 - Modify: `docs/v2/V2_ROLLBACK_RUNBOOK.md`
