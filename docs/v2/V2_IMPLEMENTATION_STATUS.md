@@ -133,7 +133,69 @@ Applied by the owner's agent via the Supabase CLI (`supabase link` + `supabase d
 
 **V1 integrity (unchanged after apply):** courses 6, orders 24, student_enrollments 19, lessons 35, lesson_progress 0, students 13, site_config 66 — identical to preflight. Slug-duplicate groups 0. Session-guard tables intact (student_active_sessions 15, lms_verified_sessions 21, admin_audit_logs 2). ✓
 
-**Status of S3 Step 5 sub-steps 4–7 (flag progression + `/api/v2/readiness`):** NOT yet performed. These require a Vercel preview deploy of `v2/rebuild-20260715` with the V2 flags set — an owner action. The DB foundation is ready; the readiness endpoint cannot be exercised until the branch is deployed to a preview and flags are flipped per runbook §5.
+**Status of S3 Step 5 sub-steps 4–7 (flag progression + `/api/v2/readiness`):** Partially complete on preview (2026-07-15). See "S3 flag progression results" below for details. Live delivery (step 6) still requires explicit owner approval. Production flags remain off.
+
+### S3 flag progression results (preview only, 2026-07-15)
+
+**Preview deployment:**
+- URL: `https://web-lms-chinh-thuc-1dty4wvrt.vercel.app`
+- Deploy id: `dpl_5XR2aSgsda33Asqn1kCG3CJULrKF`
+- Target: preview (not production). Branch tip of `v2/rebuild-20260715` at the time of deploy.
+- Redeployed after flag write so the new env values were bound at build/runtime.
+
+**Preview env flags (Preview only — production untouched):**
+
+| Flag | Value | Notes |
+|---|---|---|
+| `V2_OUTBOX_SHADOW_MODE` | `true` | step 4 |
+| `V2_RECONCILIATION_READONLY` | `true` | readiness prerequisite |
+| `V2_PORTAL_PROJECTION_ENABLED` | `true` | step 5 |
+| `V2_PORTAL_PROJECTION_DRY_RUN` | `true` | step 5 (still guarded) |
+| `V2_DRIVE_WORKER_DRY_RUN` | `true` | keep Drive out of canary scope |
+| `V2_DELIVERY_HANDLERS_ENABLED` | *(unset / false)* | step 6 NOT flipped — needs owner approve |
+| `V2_OUTBOX_WORKER_ENABLED` | *(unset / false)* | worker still disabled (no pending rows) |
+| `V2_PLATFORM_ENABLED` | *(unset / false)* | runtimeMode stays `off` |
+
+Note: earlier empty-string values for `V2_OUTBOX_SHADOW_MODE` / `V2_RECONCILIATION_READONLY` on preview were rewritten as real `true` before the redeploy (empty strings were treated as disabled by the flag parser).
+
+**Endpoint results (auth via `x-v2-worker-secret` = `INTERNAL_SYNC_SECRET`):**
+
+1. `/api/v2/diagnostics` — `ok: true`
+   - Migrations: all 5 V2 tables + 3 column groups present.
+   - Outbox health: pending/processing/delivered/failed/dead_letter = 0; staleProcessing = 0.
+   - Flags match the table above. Secrets: `INTERNAL_SYNC_SECRET` configured; `V2_WORKER_SECRET` / `V2_PORTAL_PROJECTION_URL` / `V2_PORTAL_PROJECTION_SECRET` not set (fallback to `INTERNAL_SYNC_SECRET` for auth is fine).
+
+2. `/api/v2/outbox?resource=outbox&limit=20` — `ok: true`, **0 rows**.
+   - Expected: shadow write path (`utils/v2-outbox.js` → `enqueueCoursePublishEvent` / `enqueueEnrollmentAccessEvent`) is **not yet wired into any V1 call site**. Flag-on alone cannot produce shadow volume until producers are hooked. Inspector + schema are healthy; volume will stay 0 until producer wiring lands.
+
+3. `/api/v2/outbox?resource=deliveries` — `ok: true`, 0 rows. ✓
+
+4. `/api/v2/portal-projection-preview` (no id) — HTTP 409 `missing_outbox_id` (contract-correct fail-closed). Cannot sample a payload until at least one outbox row exists. Endpoint itself is live and authorized.
+
+5. `/api/v2/reconciliation` — `ok: true`, `failedChecks: 0`, `issueCount: 3`.
+   - All 7 checks `ok: true`. The 3 issues are the same tracked identity gaps already recorded in postflight (`orders_missing_course_id` for slugs `donut` / `test-bake_1`). Outbox health check is clean.
+
+6. `/api/v2/readiness` — HTTP 200, `ok: true`, **level = `needs_review`**.
+   - Gates:
+     - `migrations_visible:pass`
+     - `worker_secret_configured:pass`
+     - `outbox_readable:pass`
+     - `outbox_no_stale_processing:pass`
+     - `outbox_no_dead_letters:pass`
+     - `reconciliation_enabled:pass`
+     - **`reconciliation_clean:review`** ← only review gate (issueCount=3 from known junk slugs)
+     - `live_delivery_still_guarded:pass` (handlers off)
+     - `portal_projection_still_guarded:pass` (dry-run still on)
+   - Classification: `classifyReadiness` returns `ready_for_dry_run` only when `reconciliation_clean.ok && issueCount===0`. With 3 tracked issues it correctly stays at `needs_review`. This is expected per runbook §4 ("course_id is null not required to be 0, but every non-zero count must appear in the reconciliation report" — they do).
+
+7. `/api/v2/sync-worker` POST `{dryRun:true}` — HTTP 409 `v2_worker_disabled`.
+   - Expected: `V2_OUTBOX_WORKER_ENABLED` is still off. Enabling it is **not** part of runbook steps 4–5; leave it for a later dry-run once shadow producers exist. Do not flip without owner approval.
+
+**What is intentionally NOT done yet (owner gates):**
+- Step 6 live delivery flip (`V2_DELIVERY_HANDLERS_ENABLED=true` + `V2_PORTAL_PROJECTION_DRY_RUN=false`) — **blocked on owner approval**. Keep Drive dry-run on.
+- Step 7 target level `ready_for_guarded_delivery` — blocked by (a) live-delivery still guarded (correct, intentional) and (b) the 3 tracked identity-gap issues. Owner can either accept those as non-blocking (and/or soft-adjust the readiness classifier) or clean the junk order slugs first.
+- Production flag flip — never performed. Production env has no V2_* flags set in this session.
+- Producer wiring of `enqueueCoursePublishEvent` / `enqueueEnrollmentAccessEvent` into V1 write paths — open follow-up so shadow volume can grow.
 
 ### S4 canary-ready (complete pending owner canary sign-off)
 
@@ -151,8 +213,13 @@ Both migrations remain additive; V1 production code/flags are still off. Do not 
 
 ## In Progress / Next
 
-- Enable and observe Portal projection dry-run after diagnostics are clean.
-- **S3 flag progression (owner, post-migration):** on a Vercel preview deploy of `v2/rebuild-20260715`, flip `V2_OUTBOX_SHADOW_MODE=true` → verify `/api/v2/outbox`; then `V2_PORTAL_PROJECTION_ENABLED=true` + `V2_PORTAL_PROJECTION_DRY_RUN=true` → verify `/api/v2/portal-projection-preview` vs V1; then owner approves live delivery. `/api/v2/readiness` must reach `ready_for_guarded_delivery`. DB foundation is already applied + postflight-clean (see S3 results above).
+- ~~Enable and observe Portal projection dry-run after diagnostics are clean.~~ **Done on preview 2026-07-15** — flags on, diagnostics/readiness/outbox/reconciliation exercised (see S3 flag progression results).
+- ~~**S3 flag progression steps 4–5 (shadow + projection dry-run):**~~ **Done on preview.** Steps 6–7 (live delivery + `ready_for_guarded_delivery`) still owner-gated.
+- **Open follow-ups before live delivery can be meaningful:**
+  1. Wire `enqueueCoursePublishEvent` / `enqueueEnrollmentAccessEvent` into V1 course/enrollment write paths (currently the helpers exist but have zero call sites) so shadow outbox volume can grow and `/api/v2/portal-projection-preview` can sample real payloads vs V1 `/api/sync`.
+  2. Decide owner policy on the 3 tracked `orders_missing_course_id` junk slugs (`donut`, `test-bake_1`) — accept as non-blocking, or clean them, before expecting readiness `ready_for_dry_run` / `ready_for_guarded_delivery`.
+  3. Owner approve step 6: flip `V2_DELIVERY_HANDLERS_ENABLED=true` + `V2_PORTAL_PROJECTION_DRY_RUN=false` on **preview only**, keep `V2_DRIVE_WORKER_DRY_RUN=true`. Do not touch production.
+  4. Optionally enable `V2_OUTBOX_WORKER_ENABLED=true` + `V2_OUTBOX_WORKER_DRY_RUN=true` on preview for dry-run plan inspection once shadow rows exist.
 - Use `/api/v2/readiness` as the top-level gate before enabling worker dry-run or guarded delivery.
 - Use `/api/v2/outbox` to inspect shadow outbox rows and delivery plans before enabling live V2 handlers.
 - Use `/api/v2/portal-projection-preview` on sampled course/enrollment events before disabling Portal projection dry-run.
