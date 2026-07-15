@@ -1,0 +1,42 @@
+{
+  "_comment": "V3 Phase 1 (⑦) drift allowlist. Seeds the CURRENT production-B schema (VERIFIED 2026-07-15, docs/V3_SCHEMA_GAP_SQL_RESULTS.md) as the accepted baseline. Every entry is a known divergence between supabase_schema.sql / migration_*.sql (EXPECTED) and live production (ACTUAL) that the owner has accepted. The drift gate treats these as PASS. Phase 10 (⑧) formalizes each into an additive migration and removes it from this list. Nothing here is a secret; project ref aqozjkfwzmyfunqvcyjv is public.",
+  "_source": "docs/V3_SCHEMA_GAP_SQL_RESULTS.md",
+  "columns": [
+    { "object": "lessons.is_section", "reason": "drift column, 9 rows true; used by section/lesson UI", "verified_source": "Q11" },
+    { "object": "lessons.materials", "reason": "drift column (jsonb)", "verified_source": "Q11" },
+    { "object": "lessons.kind", "reason": "V2 identity column (section/lesson)", "verified_source": "Q11" },
+    { "object": "lessons.parent_section_id", "reason": "V2 identity FK->lessons.id", "verified_source": "Q11" },
+    { "object": "lessons.position", "reason": "V2 identity ordering column", "verified_source": "Q11" },
+    { "object": "courses.is_published", "reason": "drift column, 3 rows true", "verified_source": "Q11" },
+    { "object": "courses.expected_start_date", "reason": "drift column (date), used in api/sync.js", "verified_source": "Q11" },
+    { "object": "courses.drive_folder_id", "reason": "drift column; course-level drive folder", "verified_source": "Q1/Q11" },
+    { "object": "courses.drive_permission_mode", "reason": "drift column", "verified_source": "Q1/Q11" },
+    { "object": "courses.sync_lms_status", "reason": "sync columns exist on courses (not only orders as V1 doc said)", "verified_source": "Q1/Q11" },
+    { "object": "courses.sync_portal_status", "reason": "sync columns exist on courses", "verified_source": "Q1/Q11" },
+    { "object": "courses.sync_error", "reason": "sync columns exist on courses", "verified_source": "Q1/Q11" },
+    { "object": "orders.course_id", "reason": "V2 identity FK->courses.id (3 rows NULL, reconciliation pending)", "verified_source": "Q11" },
+    { "object": "orders.normalized_customer_email", "reason": "V2 identity column", "verified_source": "Q11" },
+    { "object": "orders.sync_correlation_id", "reason": "V2 identity column", "verified_source": "Q11" },
+    { "object": "orders.source_system", "reason": "V2 identity column", "verified_source": "Q11" },
+    { "object": "student_enrollments.course_id", "reason": "V2 identity FK->courses.id (backfilled clean)", "verified_source": "Q11" },
+    { "object": "student_enrollments.normalized_email", "reason": "V2 identity column", "verified_source": "Q11" },
+    { "object": "student_enrollments.sync_correlation_id", "reason": "V2 identity column", "verified_source": "Q11" },
+    { "object": "student_enrollments.source_system", "reason": "V2 identity column", "verified_source": "Q11" }
+  ],
+  "tables": [
+    { "object": "sync_outbox", "reason": "V2 outbox applied partially; exists in catalog (RLS on, 0 policy), not exposed via REST", "verified_source": "Q10" },
+    { "object": "sync_deliveries", "reason": "V2 outbox applied partially; exists in catalog (RLS on, 0 policy)", "verified_source": "Q10" },
+    { "object": "sync_dead_letters", "reason": "V2 outbox partial: NOT created on production; Phase 3 (④) adds it. Allowlisted so the gate does not fail on the absent third table until then", "verified_source": "Q10" },
+    { "object": "posts", "reason": "legacy projection living on same Supabase B (1 row); A/B ownership NOT yet decided by owner (GO condition #3)", "verified_source": "Q1" },
+    { "object": "spatial_ref_sys", "reason": "PostGIS system table present in catalog", "verified_source": "Block 1" }
+  ],
+  "rls": [
+    { "object": "_note", "reason": "All 25 public tables have RLS ON with 0 policy and force-RLS OFF (VERIFIED). This is the accepted baseline; Phase 2 (①) writes real policies. RLS-on state itself is not drift — individual per-table RLS toggles are still gated as FAIL." }
+  ],
+  "functions": [
+    { "object": "handle_student_session_login", "reason": "SECURITY INVOKER (not DEFINER) + proconfig null; accepted baseline, Phase 2 (①) normalizes to DEFINER + pinned search_path", "verified_source": "Block 4" }
+  ],
+  "grants": [
+    { "object": "handle_student_session_login:service_role", "reason": "service_role EXECUTE granted (PUBLIC/anon/authenticated correctly denied) — accepted baseline", "verified_source": "Block 4" }
+  ]
+}

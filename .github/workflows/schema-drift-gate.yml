@@ -1,0 +1,119 @@
+# V3 Phase 1 (⑦) — CI schema-drift gate.
+#
+# Generates EXPECTED schema from supabase/migrations/* on an ephemeral Postgres,
+# dumps ACTUAL from production B (read-only role), converts both to catalog JSON,
+# and diffs them through supabase/tools/schema-diff.mjs applying drift_allowlist.json.
+# FAIL on structural drift outside the allowlist.
+#
+# GREEN requires the owner to provision the `SUPABASE_DB_URL_RO` secret (a
+# read-only role that can SELECT catalog only). Until then the ACTUAL step is
+# skipped and the job passes with a notice — the workflow is syntactically valid
+# and the diff engine is exercised in `unit-tests` regardless.
+
+name: schema-drift-gate
+
+on:
+  pull_request:
+    branches:
+      - v3/research-20260715
+    paths:
+      - "supabase/**"
+      - ".github/workflows/schema-drift-gate.yml"
+  schedule:
+    # Nightly at 03:17 UTC — catch drift from manual SQL Editor edits.
+    - cron: "17 3 * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: schema-drift-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests:
+    # Always runs: exercises the pure diff engine, no secret required.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Run schema-diff engine tests
+        run: node --test tests/schema-diff.test.mjs
+
+  drift-gate:
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: expected
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # Pin the Supabase CLI so migration parsing/apply is reproducible.
+      SUPABASE_CLI_VERSION: "2.109.1"
+      EXPECTED_DB_URL: "postgresql://postgres:postgres@localhost:5432/expected"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install psql client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Apply migrations to ephemeral Postgres (EXPECTED)
+        run: |
+          shopt -s nullglob
+          files=(supabase/migrations/*.sql)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::notice::No supabase/migrations/*.sql yet (baseline is owner-only via 'supabase db pull'). Skipping EXPECTED apply."
+          else
+            for f in "${files[@]}"; do
+              echo "applying $f"
+              psql "$EXPECTED_DB_URL" -v ON_ERROR_STOP=1 -f "$f"
+            done
+          fi
+
+      - name: Dump EXPECTED catalog JSON
+        run: |
+          shopt -s nullglob
+          files=(supabase/migrations/*.sql)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::notice::No migrations to snapshot; EXPECTED catalog gate is inert until baseline exists."
+            echo '{"tables":{},"indexes":[],"constraints":[],"policies":[],"functions":[]}' > expected.json
+          else
+            psql "$EXPECTED_DB_URL" -tA -f supabase/tools/catalog-query.sql > expected.json
+          fi
+          echo "expected.json bytes: $(wc -c < expected.json)"
+
+      - name: Dump ACTUAL catalog JSON (production B, read-only)
+        id: actual
+        env:
+          SUPABASE_DB_URL_RO: ${{ secrets.SUPABASE_DB_URL_RO }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL_RO" ]; then
+            echo "::notice::SUPABASE_DB_URL_RO not set (owner action pending). Skipping ACTUAL dump; gate passes as inert."
+            echo "have_actual=false" >> "$GITHUB_OUTPUT"
+          else
+            psql "$SUPABASE_DB_URL_RO" -tA -f supabase/tools/catalog-query.sql > actual.json
+            echo "actual.json bytes: $(wc -c < actual.json)"
+            echo "have_actual=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run drift gate
+        if: steps.actual.outputs.have_actual == 'true'
+        run: |
+          node supabase/tools/run-drift-gate.mjs \
+            expected.json actual.json supabase/drift_allowlist.json
+
+      - name: Inert notice
+        if: steps.actual.outputs.have_actual != 'true'
+        run: echo "Drift gate inert until owner provisions SUPABASE_DB_URL_RO and a baseline migration exists."

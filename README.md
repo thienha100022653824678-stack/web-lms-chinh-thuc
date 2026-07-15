@@ -23,6 +23,8 @@ Hệ thống LMS được triển khai thông qua các trang tĩnh sau:
 
 ## 2. Các Bảng Cơ Sở Dữ Liệu LMS Mới (Supabase Tables)
 
+> **V3 (⑦) — nguồn sự thật schema:** `supabase_schema.sql` và các `migration_*.sql` ở thư mục gốc hiện là **lịch sử tham chiếu (deprecated)**. Từ V3, schema Supabase B được quản lý qua Supabase CLI trong thư mục [`supabase/`](./supabase/) (migrations + drift allowlist + CI gate). Baseline thật do owner sinh bằng `supabase db pull` — xem [docs/V3_PHASE_1_MIGRATION_TOOLING.md](./docs/V3_PHASE_1_MIGRATION_TOOLING.md). Đừng dùng `supabase_schema.sql` để khởi tạo môi trường mới nữa.
+
 Khi chạy các câu lệnh SQL bổ sung trong [supabase_schema.sql](./supabase_schema.sql), các bảng sau sẽ được tạo:
 * `lessons`: Lưu thông tin chi tiết bài học (tiêu đề, mô tả, số thứ tự, link video Bunny, link công thức Google Docs, tài liệu đính kèm `media_urls`, trạng thái hoạt động).
 * `students`: Lưu thông tin học viên (email, họ tên, điện thoại, ghi chú, trạng thái).
