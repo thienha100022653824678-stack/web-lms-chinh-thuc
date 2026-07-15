@@ -230,5 +230,5 @@ S1 ∥ S2 có thể song song (độc lập, vùng khác nhau: B2 portal route m
 - Risk V2 incremental summaries / retention / false positive lifecycle.
 - Admin UI diagnostics page (outbox / readiness / reconciliation dashboard).
 - RP2-C frontend Portal/LMS UI cho session guard.
-- Portal repo `student-web` ngoài worktree (dependency ghi rõ; canary security cần Portal V2 cùng bật).
+- Portal repo `student-web` ngoài worktree (dependency ghi rõ). Lưu ý P0-1: RPC `handle_student_session_login` (login decision "block B khi A active") có caller ở **Portal**, không trong LMS. RP2-B1 chỉ enforce **LMS-side** (course-data/lesson chặn khi thiếu verified session) — phần này chạy độc lập trên LMS. Phần **login-block** tại Portal cần Portal V2 cùng bật mới hoàn chỉnh chính sách one-device; canary LMS-side guard vẫn chạy được trước đó.
 - Cutover traffic thật / xóa V1 endpoint.
