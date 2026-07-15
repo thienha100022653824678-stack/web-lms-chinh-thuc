@@ -16,3 +16,6 @@ yarn-error.log*
 # V3 research scratch probes (do not commit)
 scratch/
 _tmp_env_inspect.mjs
+
+# Test-only supabase stub state (written by node:test, never committed)
+tests/.supabase-stub.json

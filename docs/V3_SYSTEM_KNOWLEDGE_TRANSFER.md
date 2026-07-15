@@ -391,6 +391,12 @@ Media: video Bunny (HMAC token TTL 600s + watermark email động), ảnh/Docs D
 - **Đồng bộ Portal**: mọi đổi chính sách session/one-device phải lockstep với repo `student-web`.
 - **Test trước**: `node --test` (hoặc Vitest nếu V3 lên TS), contract test vs schema, supabase stub — không merge không test.
 
+### 3.8 Master plan + runtime controller (2026-07-15)
+
+- **Master plan V3 (①-⑫):** `docs/superpowers/specs/2026-07-15-v3-master-plan-design.md` — 11 phase (0→10), đồ thị phụ thuộc, mỗi phase map tới 1 đề xuất. Owner chọn phạm vi = toàn bộ ①-⑫; triển khai tuần tự, auto-advance khi test đạt; dừng chỉ ở blocker thật sự của owner.
+- **Runtime controller (Phase 0 — IMPLEMENTED):** `PLATFORM_RUNTIME_MODE` DB-backed (`platform_runtime_config` singleton trên B, RLS-on, service-role/SQL Editor only). `utils/runtime-controller.js` — `getEffectiveMode()` là gate duy nhất (v1/v2/v3), fail-closed về v1, kill switch + rollback V1 tức thời (update 1 row, không redeploy), cache ~3s, `stampEvent()` gán `runtime_version` cho mọi event/log/delivery. Admin endpoint `api/v2/runtime.js` (service-role gate = `INTERNAL_SYNC_SECRET`, cùng door V2 worker, không secret mới). Single-writer invariant: chỉ 1 version ghi authoritative tại 1 thời điểm; shadow mode read-only. Chi tiết: `docs/V3_PHASE_0_RUNTIME_CONTROLLER.md`. Owner action pending: apply `migration_v3_runtime_config.sql` trên B (additive, không business data). Cho tới khi apply, controller fail-closed về v1 = hệ thống giống hệt hôm nay.
+- **Thứ tự hiện thực hóa:** Phase 0 ✅ → Phase 1 (⑦ migration tooling + CI schema-drift gate + baseline B) → Phase 2 (① RLS) → Phase 3 (④ outbox + ⑤ worker) → Phase 4 (② session + ③ device-id) → Phase 5 (⑥ router/edge) → Phase 6 (⑪ observability) → Phase 7 (⑨ FE) → Phase 8 (⑩ TS/monorepo) → Phase 9 (⑫ signed-URL/DRM) → Phase 10 (⑧ cleanup, cuối cùng, owner duyệt).
+
 ---
 
 ## 4. Bản đồ đọc nhanh cho AI mới
