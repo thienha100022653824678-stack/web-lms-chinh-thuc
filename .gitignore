@@ -19,3 +19,4 @@ _tmp_env_inspect.mjs
 
 # Test-only supabase stub state (written by node:test, never committed)
 tests/.supabase-stub.json
+tests/.supabase-stub.*.json

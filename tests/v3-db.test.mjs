@@ -18,7 +18,8 @@ import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const STUB_FILE = join(__dirname, ".supabase-stub.json");
+const STUB_FILE = join(__dirname, ".supabase-stub.v3-db.json");
+process.env.LMS_SUPABASE_STUB_FILE = STUB_FILE;
 function writeStub(obj) { writeFileSync(STUB_FILE, JSON.stringify(obj)); }
 function clearStub() { writeFileSync(STUB_FILE, JSON.stringify({})); }
 

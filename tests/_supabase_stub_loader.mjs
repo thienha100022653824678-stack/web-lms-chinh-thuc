@@ -10,11 +10,19 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const STUB_FILE = join(__dirname, ".supabase-stub.json");
+const DEFAULT_STUB_FILE = join(__dirname, ".supabase-stub.json");
+
+// Each test process may set LMS_SUPABASE_STUB_FILE to an isolated path so that
+// `node --test tests/*.test.mjs` (which runs files in parallel processes) does
+// not race on a single shared stub file. Read at call-time so the env set at
+// the top of a test file is honored.
+function stubFilePath() {
+  return process.env.LMS_SUPABASE_STUB_FILE || DEFAULT_STUB_FILE;
+}
 
 function readStub() {
   try {
-    return JSON.parse(readFileSync(STUB_FILE, "utf8"));
+    return JSON.parse(readFileSync(stubFilePath(), "utf8"));
   } catch {
     return {};
   }
