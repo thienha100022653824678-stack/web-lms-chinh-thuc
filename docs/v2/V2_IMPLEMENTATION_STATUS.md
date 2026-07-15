@@ -256,6 +256,68 @@ failures=[]
 - Drive live delivery — `V2_DRIVE_WORKER_DRY_RUN` stays true.
 - No enrollment live sample yet (only a course publish event was delivered). Enrollment path is next if the owner wants a full canary.
 
+### S4 Preview safe-state audit + rollback drills (2026-07-15)
+
+Run on Preview only (branch `v2/rebuild-20260715`, HEAD `e61e146`). Production, `main`, and V1 data untouched. Supabase B `aqozjkfwzmyfunqvcyjv` is shared by Preview — no destructive SQL was run, no enrollment/course test rows created, no Drive permission granted.
+
+**Was live delivery ever on (Preview)?** Yes, briefly, per "S3 step 6 live delivery results" above (owner-approved on 2026-07-15): `V2_DELIVERY_HANDLERS_ENABLED=true`, `V2_OUTBOX_WORKER_ENABLED=true`, `V2_OUTBOX_WORKER_DRY_RUN=false`, `V2_PORTAL_PROJECTION_DRY_RUN=false` delivered one seeded course event to System1, then. At the start of this audit the flags had **partially reverted**: delivery handlers + projection dry-run were already back to guarded, but `V2_OUTBOX_WORKER_ENABLED` was still left `true`.
+
+**Flag audit — before (deploy `dpl_F7sjT46p7yWiqXLNYTx5pGtQc1KZ`, url `web-lms-chinh-thuc-cq904ma55`):**
+
+| Flag | Before | Safe? |
+|---|---|---|
+| `V2_PLATFORM_ENABLED` | false | ok |
+| `V2_OUTBOX_SHADOW_MODE` | true | ok (observe-only) |
+| `V2_OUTBOX_WORKER_ENABLED` | **true** | ⚠ left on from live trial |
+| `V2_OUTBOX_WORKER_DRY_RUN` | true | ok |
+| `V2_DELIVERY_HANDLERS_ENABLED` | false | ok |
+| `V2_PORTAL_PROJECTION_ENABLED` | true | ok |
+| `V2_PORTAL_PROJECTION_DRY_RUN` | true | ok |
+| `V2_RECONCILIATION_READONLY` | true | ok |
+| `V2_DRIVE_WORKER_DRY_RUN` | true | ok |
+
+**Safe-state correction:** set `V2_OUTBOX_WORKER_ENABLED=false` and redeployed Preview (`web-lms-chinh-thuc-4f73k3oy9`). Post-fix verified: `/api/v2/diagnostics` HTTP 200 (worker off, delivery off, projection dry-run on, drive dry-run on, runtimeMode `off`), `/api/v2/outbox` HTTP 200 `ok:true`, `/api/v2/readiness` HTTP 200 `ready_for_dry_run`. Delivery, worker, and live projection are all off — no live path can fire.
+
+#### Drill 3 — Flag rollback (pass)
+
+- Action: on Preview set `V2_OUTBOX_SHADOW_MODE`, `V2_PORTAL_PROJECTION_ENABLED`, `V2_RECONCILIATION_READONLY` → `false` (delivery/worker/projection-dry-run already guarded), redeployed (`web-lms-chinh-thuc-2pfikuo0x`).
+- Result: `/api/v2/diagnostics` HTTP 200 — all V2 flags off/guarded, `runtimeMode:"off"`; `/api/v2/readiness` → `needs_review`; V1 intact (`GET /` 200, `GET /api/lms/portal?endpoint=public-config` 200).
+- Time: 2026-07-15 ~21:22 ICT. Pass/fail: **PASS** (V2 fully retreats to observe-off).
+- Documentation nuance (not a failure): the runbook Drill 3 pass-criterion says "readiness `blocked` with all flags off". Because the identity migrations are already applied (additively), `migrations_visible` stays `pass`, so the classifier floors at `needs_review`, not `blocked`. `blocked` only occurs when migrations are not visible. V2 runtime behavior is nonetheless fully withdrawn. Runbook wording should say "`needs_review` (migrations remain visibly applied) or `blocked`".
+- Restore: flipped the three flags back to `true` and redeployed (`web-lms-chinh-thuc-awxv4bj1y`); verified guarded safe state — shadow on, worker off, delivery off, projection dry-run on, drive dry-run on, readiness `ready_for_dry_run`.
+
+#### Drill 1 — Code rollback (pass)
+
+- Action: exercised revert-to-prior-deployment against an earlier Preview build (`web-lms-chinh-thuc-1dty4wvrt`, ~4h older tip) instead of a fresh redeploy, to prove a prior deployment is still serviceable.
+- Result: `GET /` 200, `GET /lms.html` 200, `GET /lesson.html` 200, `GET /api/lms/portal?endpoint=public-config` 200. `POST /api/sync` reachable and enforces auth (401 `Unauthorized: Sync secret is invalid or missing.` on a bad/missing secret — V1 contract intact; no valid-secret write was sent to avoid mutating shared data).
+- Restore: Preview returned to current HEAD `e61e146` (`web-lms-chinh-thuc-awxv4bj1y`). No force-push, no `main` change, git working tree clean.
+- Time: 2026-07-15 ~21:26 ICT. Pass/fail: **PASS**.
+
+#### Drill 2 — Schema rollback (simulation / review only — pass)
+
+- Action: **no DROP executed**, no destructive SQL on the shared Supabase B. Reviewed `scripts/v2/rollback-v2.sql` against the two applied migrations for recovery completeness.
+- Coverage check: rollback SQL's commented cleanup drops exactly the objects the migrations create — tables `sync_outbox` / `sync_deliveries` / `sync_dead_letters` / `course_slug_mappings` / `portal_post_course_mappings`, and columns on `orders` (`course_id`, `normalized_customer_email`, `sync_correlation_id`, `source_system`), `student_enrollments` (`normalized_email`, `sync_correlation_id`, `source_system`), `lessons` (`kind`, `parent_section_id`, `position`). All `drop … if exists`, and the destructive block is commented out by default. No V1 column is dropped.
+- Backup posture (from S3 apply record): migrations are additive-only; `walg_enabled=true`, `pitr_enabled=false`, no physical snapshot at apply time (owner accepted). Recovery path for a runtime issue is flag-off (Drill 3), not schema drop — schema drop is reserved for a disposable DB after export.
+- Time: 2026-07-15 ~21:28 ICT. Pass/fail: **PASS** (plan is complete and non-destructive; a real drop remains gated on owner approval + export on a disposable DB).
+
+#### Final Preview flag state (safe, after all drills)
+
+Deploy `web-lms-chinh-thuc-awxv4bj1y` (HEAD `e61e146`):
+
+| Flag | Value |
+|---|---|
+| `V2_PLATFORM_ENABLED` | false |
+| `V2_OUTBOX_SHADOW_MODE` | true |
+| `V2_OUTBOX_WORKER_ENABLED` | **false** (corrected) |
+| `V2_OUTBOX_WORKER_DRY_RUN` | true |
+| `V2_DELIVERY_HANDLERS_ENABLED` | false |
+| `V2_PORTAL_PROJECTION_ENABLED` | true |
+| `V2_PORTAL_PROJECTION_DRY_RUN` | true |
+| `V2_RECONCILIATION_READONLY` | true |
+| `V2_DRIVE_WORKER_DRY_RUN` | true |
+
+Readiness `ready_for_dry_run`; live delivery, outbox worker, and live projection all off. Production flags untouched throughout.
+
 ### S4 canary-ready (complete pending owner canary sign-off)
 
 - `V2_ROLLBACK_RUNBOOK.md` updated with the 3-drill procedure (code, schema, flags).
