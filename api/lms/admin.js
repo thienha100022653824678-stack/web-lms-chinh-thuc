@@ -21,6 +21,16 @@ import adminAccountSharingAlertsHandler from "../../utils/lms-handlers/admin-acc
 export const config = {
   api: {
     bodyParser: {
+      // RP-1 pre-commit review: kept at V1's 500mb. This route multiplexes
+      // admin uploads that arrive as base64 JSON in the request body:
+      //   - admin-upload-gdrive-video: up to 500MB (base64 ~666MB)
+      //   - admin-upload-material:     up to 50MB  (base64 ~66.7MB)
+      //   - admin-upload-image:        up to 4MB
+      // Lowering this to 25mb (an earlier draft) was a REGRESSION: it would
+      // reject material/video uploads at the parser before the handler could
+      // run. Tightening the body/upload limit is deferred to RP-3, where it
+      // can be designed per-route (e.g. dedicated multipart endpoints), not
+      // as a single global ceiling. Do NOT lower this within RP-1.
       sizeLimit: "500mb",
     },
   },

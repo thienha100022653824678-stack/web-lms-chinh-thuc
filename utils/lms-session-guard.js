@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { getAccountEventHashSecret, AuthSecretError } from "./lms-secrets.js";
 
 export const STUDENT_SESSION_STATUSES = Object.freeze({
   ACTIVE: "active",
@@ -28,8 +29,6 @@ export const DEFAULT_STUDENT_SESSION_IDLE_HOURS = 24;
 export const DEFAULT_LMS_SESSION_IDLE_HOURS = 24;
 export const ACCOUNT_SHARING_SCHEMA_VERSION = "v2";
 export const ACCOUNT_SHARING_RISK_RULE_VERSION = "risk_v2_p0";
-
-let missingAccountEventHashSecretWarned = false;
 
 const ACTIVE_ENROLLMENT_STATUSES = new Set([
   "active",
@@ -92,34 +91,24 @@ export function hashToken(rawToken) {
 export function hashOptionalValue(value) {
   const normalized = String(value || "").trim();
   if (!normalized) return null;
-  const secret = String(
-    process.env.ACCOUNT_EVENT_HASH_SECRET ||
-    process.env.SESSION_GUARD_HASH_SECRET ||
-    ""
-  ).trim();
-  if (!secret) {
-    warnMissingAccountEventHashSecret();
-    return crypto.createHash("sha256").update(normalized).digest("hex");
-  }
+  // RP-1: fail-closed. Hash values must use HMAC-SHA256 with a real secret.
+  // The legacy SHA-256 fallback is removed; configuration error is raised
+  // when the secret is missing.
+  const secret = getAccountEventHashSecret();
   return crypto.createHmac("sha256", secret).update(normalized).digest("hex");
 }
 
 export function warnMissingAccountEventHashSecret() {
-  if (missingAccountEventHashSecretWarned) return;
-  if (process.env.VERCEL_ENV === "production" || process.env.NODE_ENV === "production") {
-    console.warn("[account-sharing] ACCOUNT_EVENT_HASH_SECRET is not configured; falling back to legacy SHA-256 event hashes.");
-    missingAccountEventHashSecretWarned = true;
-  }
+  // Backward-compatible no-op. The fail-closed behavior now lives inside
+  // hashOptionalValue (which raises AuthSecretError on missing secret).
+  // This function is intentionally silent; callers should handle the error.
+  return false;
 }
 
 export function getAccountEventHashVersion() {
-  return String(
-    process.env.ACCOUNT_EVENT_HASH_SECRET ||
-    process.env.SESSION_GUARD_HASH_SECRET ||
-    ""
-  ).trim()
-    ? "hmac_sha256_v2"
-    : "sha256_v1";
+  // RP-1: any successful hash uses HMAC-SHA256 with the configured secret.
+  // The legacy "sha256_v1" version is no longer emitted.
+  return "hmac_sha256_v2";
 }
 
 export const ACCOUNT_SHARING_EVENT_TYPES = Object.freeze({
@@ -225,6 +214,29 @@ export async function logStudentDeviceEvent(supabase, {
   const safeReason = reason || reasonCode || "unspecified";
   const safeReasonCode = reasonCode || reason || "unspecified";
 
+  // RP-1: hashOptionalValue is fail-closed; if a required hash secret is
+  // missing we degrade telemetry by recording null hashes and flagging the
+  // configuration issue in metadata. We never block the request because
+  // telemetry is best-effort, but we DO avoid producing unverifiable hashes.
+  let newDeviceHashResolved = newDeviceHash;
+  let lmsDeviceHashResolved = null;
+  let lmsSessionHashResolved = null;
+  let ipHashResolved = ipHash;
+  let hashSecretMissing = false;
+  try {
+    newDeviceHashResolved = newDeviceHash || hashOptionalValue(lmsDeviceId);
+    lmsDeviceHashResolved = hashOptionalValue(lmsDeviceId);
+    lmsSessionHashResolved = hashOptionalValue(lmsSessionId);
+    ipHashResolved = ipHash || hashOptionalValue(ip);
+  } catch (err) {
+    if (err instanceof AuthSecretError) {
+      hashSecretMissing = true;
+      // Leave hashes null; the metadata flag records the config issue.
+    } else {
+      throw err;
+    }
+  }
+
   const insertPayload = {
     email: normalizedEmail,
     action: String(action || normalizedEventType),
@@ -232,21 +244,23 @@ export async function logStudentDeviceEvent(supabase, {
     course_slug: courseSlug || null,
     post_id: postId || null,
     old_device_hash: oldDeviceHash || null,
-    new_device_hash: newDeviceHash || hashOptionalValue(lmsDeviceId),
+    new_device_hash: newDeviceHashResolved,
     old_device_label: oldDeviceLabel || null,
     new_device_label: newDeviceLabel || null,
     old_student_session_id: oldStudentSessionId || null,
     new_student_session_id: newStudentSessionId || null,
-    lms_device_hash: hashOptionalValue(lmsDeviceId),
-    lms_session_hash: hashOptionalValue(lmsSessionId),
+    lms_device_hash: lmsDeviceHashResolved,
+    lms_session_hash: lmsSessionHashResolved,
     user_agent: userAgent || null,
-    ip_hash: ipHash || hashOptionalValue(ip),
+    ip_hash: ipHashResolved,
     reason: safeReason,
     event_source: source || "lms",
     risk_points: Number.isFinite(Number(riskPoints))
       ? Number(riskPoints)
       : getAccountSharingRiskPoints(normalizedEventType),
-    metadata: sanitizeEventMetadata(metadata),
+    metadata: hashSecretMissing
+      ? { ...sanitizeEventMetadata(metadata), hash_secret_missing: true }
+      : sanitizeEventMetadata(metadata),
     admin_email: adminEmail ? normalizeEmail(adminEmail) : null,
     event_idempotency_key: idempotencyKey || null,
     correlation_id: correlationId || null,
@@ -255,7 +269,7 @@ export async function logStudentDeviceEvent(supabase, {
     result: result || null,
     reason_code: safeReasonCode,
     schema_version: ACCOUNT_SHARING_SCHEMA_VERSION,
-    hash_version: getAccountEventHashVersion()
+    hash_version: hashSecretMissing ? "hmac_sha256_v2_unavailable" : getAccountEventHashVersion()
   };
 
   let { error } = await supabase
@@ -302,14 +316,30 @@ export async function writeAdminAuditLog(supabase, {
     return { ok: false, reason: "missing_action" };
   }
 
+  let resolvedIpHash = ipHash;
+  let hashSecretMissing = false;
+  try {
+    resolvedIpHash = ipHash || hashOptionalValue(ip);
+  } catch (err) {
+    if (err instanceof AuthSecretError) {
+      hashSecretMissing = true;
+      resolvedIpHash = null;
+    } else {
+      throw err;
+    }
+  }
+
+  const auditMetadata = metadata && typeof metadata === "object" ? { ...metadata } : {};
+  if (hashSecretMissing) auditMetadata.hash_secret_missing = true;
+
   const { error } = await supabase
     .from("admin_audit_logs")
     .insert({
       admin_email: adminEmail ? normalizeEmail(adminEmail) : null,
       action: normalizedAction,
       target_email: targetEmail ? normalizeEmail(targetEmail) : null,
-      metadata: metadata && typeof metadata === "object" ? metadata : {},
-      ip_hash: ipHash || hashOptionalValue(ip),
+      metadata: auditMetadata,
+      ip_hash: resolvedIpHash,
       user_agent: userAgent || null
     });
 

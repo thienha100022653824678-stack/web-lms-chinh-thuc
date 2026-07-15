@@ -1,6 +1,12 @@
 import { OAuth2Client } from "google-auth-library";
 import { google } from "googleapis";
 import crypto from "crypto";
+import {
+  getSessionSecret,
+  signSessionPayload,
+  verifySessionToken,
+  AuthSecretError
+} from "./lms-secrets.js";
 
 const SESSION_DAYS = Number(process.env.SESSION_DAYS || 30);
 const STUDENT_SESSION_COOKIE = "course_session_token";
@@ -23,31 +29,18 @@ export function isAdminEmail(email) {
   return getAdminEmails().includes(normalizeEmail(email));
 }
 
-// Session secrets
-function sessionSecrets() {
-  return [
-    process.env.SESSION_SECRET,
-    process.env.GOOGLE_CLIENT_ID,
-    "fallback-session-secret"
-  ]
-    .filter(Boolean)
-    .map(s => String(s).trim())
-    .filter((s, idx, self) => s && self.indexOf(s) === idx);
-}
-
-function sessionSecret() {
-  return sessionSecrets()[0] || "fallback-session-secret";
-}
-
 function base64url(input) {
   return Buffer.from(input).toString("base64url");
 }
 
-function signPayload(payloadBase64, secret = sessionSecret()) {
-  return crypto
-    .createHmac("sha256", secret)
-    .update(payloadBase64)
-    .digest("base64url");
+function signPayload(payloadBase64, secret = null) {
+  if (secret && secret !== "__use_current__") {
+    return crypto
+      .createHmac("sha256", secret)
+      .update(payloadBase64)
+      .digest("base64url");
+  }
+  return signSessionPayload(payloadBase64);
 }
 
 // Student Sessions
@@ -68,19 +61,8 @@ export function verifyStudentSession(token) {
   const parts = token.split(".");
   if (parts.length !== 2) return null;
 
-  const [payloadBase64, signature] = parts;
-  const validSignature = sessionSecrets().some(secret => {
-    const expectedSignature = signPayload(payloadBase64, secret);
-    try {
-      const a = Buffer.from(signature);
-      const b = Buffer.from(expectedSignature);
-      return a.length === b.length && crypto.timingSafeEqual(a, b);
-    } catch {
-      return false;
-    }
-  });
-
-  if (!validSignature) return null;
+  const payloadBase64 = verifySessionToken(token);
+  if (!payloadBase64) return null;
 
   try {
     const payload = JSON.parse(Buffer.from(payloadBase64, "base64url").toString("utf8"));
@@ -114,19 +96,8 @@ export function verifyAdminSession(token) {
   const parts = token.split(".");
   if (parts.length !== 2) return null;
 
-  const [payloadBase64, signature] = parts;
-  const validSignature = sessionSecrets().some(secret => {
-    const expectedSignature = signPayload(payloadBase64, secret);
-    try {
-      const a = Buffer.from(signature);
-      const b = Buffer.from(expectedSignature);
-      return a.length === b.length && crypto.timingSafeEqual(a, b);
-    } catch {
-      return false;
-    }
-  });
-
-  if (!validSignature) return null;
+  const payloadBase64 = verifySessionToken(token);
+  if (!payloadBase64) return null;
 
   try {
     const payload = JSON.parse(Buffer.from(payloadBase64, "base64url").toString("utf8"));
@@ -190,10 +161,21 @@ export async function verifyGoogleIdToken(credential) {
 export function cookieOptions(maxAgeMs) {
   const parts = [
     "Path=/",
+    "HttpOnly",
     "SameSite=Lax",
     `Max-Age=${Math.floor(maxAgeMs / 1000)}`
   ];
-  if (process.env.NODE_ENV === "production") {
+  // RP-1: Secure by default. The only way to disable is the explicit
+  // LMS_ALLOW_INSECURE_COOKIE=1 gate (only honored when not in production).
+  const allowInsecure = String(process.env.LMS_ALLOW_INSECURE_COOKIE || "").trim() === "1";
+  const isProduction =
+    String(process.env.NODE_ENV || "").toLowerCase() === "production" ||
+    String(process.env.VERCEL_ENV || "").toLowerCase() === "production";
+  if (allowInsecure && !isProduction) {
+    console.warn(
+      "[lms-cookie] LMS_ALLOW_INSECURE_COOKIE=1 detected outside production. Cookies will be issued without the Secure flag. Do NOT enable this in production."
+    );
+  } else {
     parts.push("Secure");
   }
   return parts.join("; ");

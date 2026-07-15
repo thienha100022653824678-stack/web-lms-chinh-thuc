@@ -1,14 +1,26 @@
 import { supabase } from "../utils/supabase.js";
-import { 
-  normalizeEmail, 
+import {
+  normalizeEmail,
   syncEnrollment
 } from "../utils/lms.js";
+import {
+  getInternalSyncSecret,
+  timingSafeStringEqual,
+  AuthSecretError
+} from "../utils/lms-secrets.js";
+import { applyCors } from "../utils/cors.js";
 
 export default async function handler(req, res) {
-  // CORS headers
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Sync-Secret");
+  // CORS: server-to-server. We allow requests without an Origin header
+  // (Shop → LMS), but reject cross-origin browser calls when the
+  // feature flag is on. The INTERNAL_SYNC_SECRET check below remains
+  // the authoritative authentication layer — CORS does not replace it.
+  const cors = applyCors(req, res, {
+    mode: "internal",
+    methods: "POST, OPTIONS",
+    allowedHeaders: "Content-Type, X-Sync-Secret"
+  });
+  if (cors.handled) return res.status(cors.status).json(cors.body);
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();
@@ -18,11 +30,25 @@ export default async function handler(req, res) {
     return res.status(405).json({ success: false, error: "Method not allowed" });
   }
 
-  // Verify internal sync secret
+  // Verify internal sync secret (timing-safe, fail-closed)
   const syncSecret = req.headers["x-sync-secret"];
-  const systemSecret = process.env.INTERNAL_SYNC_SECRET;
 
-  if (!systemSecret || syncSecret !== systemSecret) {
+  let systemSecret;
+  try {
+    systemSecret = getInternalSyncSecret();
+  } catch (err) {
+    if (err instanceof AuthSecretError) {
+      return res.status(503).json({
+        success: false,
+        code: "sync_misconfigured",
+        error: "Internal sync is unavailable.",
+        missingEnvVars: err.missingEnvVars
+      });
+    }
+    throw err;
+  }
+
+  if (!syncSecret || !timingSafeStringEqual(String(syncSecret), systemSecret)) {
     return res.status(401).json({ success: false, error: "Unauthorized: Sync secret is invalid or missing." });
   }
 

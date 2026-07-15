@@ -1,6 +1,7 @@
 import { PassThrough } from "stream";
 import { supabase } from "../supabase.js";
 import { getAdminFromRequest, getGoogleDriveClient } from "../lms.js";
+import { applyCors } from "../cors.js";
 
 export const config = {
   api: {
@@ -17,9 +18,8 @@ function bufferToStream(buffer) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  const cors = applyCors(req, res, { mode: "admin" });
+  if (cors.handled) return res.status(cors.status).json(cors.body);
 
   if (req.method === "OPTIONS") {
     return res.status(200).end();

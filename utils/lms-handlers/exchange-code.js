@@ -6,6 +6,8 @@ import {
   signBunnyEmbedUrl,
   signMediaUrls
 } from "../lms.js";
+import { OAuth2Client } from "google-auth-library";
+import { applyCors } from "../cors.js";
 
 const SESSION_COOKIE = "course_session_token";
 const ACTIVE_ENROLLMENT_STATUSES = new Set([
@@ -37,9 +39,12 @@ function isActiveEnrollment(status) {
  * which Google has deprecated for newer OAuth clients.
  */
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  const cors = applyCors(req, res, {
+    mode: "portal",
+    methods: "POST, OPTIONS",
+    allowedHeaders: "Content-Type"
+  });
+  if (cors.handled) return res.status(cors.status).json(cors.body);
 
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ allowed: false, error: "Method not allowed" });
@@ -69,26 +74,38 @@ export default async function handler(req, res) {
     });
     const tokenData = await tokenResponse.json();
     if (!tokenResponse.ok || tokenData.error) {
-      console.error("[exchange-code] Token exchange failed:", tokenData);
+      // RP-1: never log the full tokenData object — on some error shapes it
+      // can still carry id_token / access_token. Log only the error fields.
+      console.error(
+        "[exchange-code] Token exchange failed:",
+        tokenData?.error || "unknown_error"
+      );
       return res.status(401).json({
         allowed: false, error: "Google token exchange failed",
         detail: tokenData.error_description || tokenData.error || "Unknown error"
       });
     }
 
-    // 2. Decode id_token (we trust Google's token endpoint response)
+    // 2. Verify id_token signature server-side using Google's OAuth2 client.
+    //    RP-1: do NOT trust the raw id_token returned by the token endpoint
+    //    without verifying the signature. Previously the code only checked
+    //    the audience claim from a base64url-decoded payload.
     const idToken = tokenData.id_token;
     if (!idToken) return res.status(401).json({ allowed: false, error: "No id_token in Google response" });
 
     let email = null;
+    let oauthClient = null;
     try {
-      const parts = idToken.split(".");
-      const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
-      email = normalizeEmail(payload.email);
-      if (payload.aud !== clientId) return res.status(401).json({ allowed: false, error: "Token audience mismatch" });
-    } catch (decodeErr) {
-      console.error("[exchange-code] Failed to decode id_token:", decodeErr);
-      return res.status(401).json({ allowed: false, error: "Invalid id_token format" });
+      oauthClient = new OAuth2Client(clientId);
+      const ticket = await oauthClient.verifyIdToken({
+        idToken,
+        audience: clientId,
+      });
+      const payload = ticket.getPayload();
+      email = normalizeEmail(payload?.email);
+    } catch (verifyErr) {
+      console.error("[exchange-code] id_token verification failed:", verifyErr.message);
+      return res.status(401).json({ allowed: false, error: "Invalid or unverified id_token" });
     }
     if (!email) return res.status(401).json({ allowed: false, error: "No email in token" });
 
