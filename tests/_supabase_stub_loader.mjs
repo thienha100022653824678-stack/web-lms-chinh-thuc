@@ -44,7 +44,13 @@ function makeChain(result) {
     limit() { return Promise.resolve(chain._result); },
     maybeSingle: async () => chain._result,
     single: async () => chain._result,
-    select() { return chain; }
+    select() { return chain; },
+    // Write verbs return the same read-only chain so callers can do
+    // `upsert(row).select().single()`. The row is recorded (not persisted) so
+    // tests can assert what was written.
+    upsert(row, _opts) { if (globalThis.__SUPABASE_STUB_UPSERT__) globalThis.__SUPABASE_STUB_UPSERT__("(table)", row); return chain; },
+    insert(row) { if (globalThis.__SUPABASE_STUB_UPSERT__) globalThis.__SUPABASE_STUB_UPSERT__("(table)", row); return chain; },
+    update(row) { if (globalThis.__SUPABASE_STUB_UPSERT__) globalThis.__SUPABASE_STUB_UPSERT__("(table)", row); return chain; }
   };
   return chain;
 }
