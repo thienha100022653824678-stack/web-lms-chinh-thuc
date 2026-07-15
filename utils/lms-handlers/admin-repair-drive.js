@@ -1,5 +1,6 @@
 import { getAdminFromRequest, getGoogleDriveClient, resolveCourseFolderTree, saveCourseFolderId, getDriveFileId, getCourseFolderIdOrDiscover } from "../lms.js";
 import { supabase } from "../supabase.js";
+import { applyCors } from "../cors.js";
 
 async function moveDriveFileSafe(drive, fileId, newParentId) {
   try {

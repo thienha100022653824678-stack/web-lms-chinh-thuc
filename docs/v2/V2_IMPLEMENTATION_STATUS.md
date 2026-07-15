@@ -1,6 +1,6 @@
 # V2 Implementation Status
 
-This document tracks V2 work on branch `v2/platform-rebuild`.
+This document tracks V2 work on integration branch `v2/rebuild-20260715` (cut from `v2/platform-rebuild`).
 
 V1 production remains unchanged. Do not merge or deploy V2 until the owner
 explicitly asks to switch traffic to V2.

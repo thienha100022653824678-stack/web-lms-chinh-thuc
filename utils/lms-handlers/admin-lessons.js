@@ -1,5 +1,6 @@
 import { supabase } from "../supabase.js";
 import { getAdminFromRequest } from "../lms.js";
+import { applyCors } from "../cors.js";
 import { fetchRecipeText } from "./public-lesson.js";
 
 function normalizeMaterials(value) {

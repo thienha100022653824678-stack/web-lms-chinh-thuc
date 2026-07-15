@@ -70,15 +70,23 @@ export default async function handler(req, res) {
 
   if (hasHeaders) {
     let result;
-    if (globalThis.__RP2B2_LOGOUT_VERIFY_STUB__ !== undefined) {
-      result = globalThis.__RP2B2_LOGOUT_VERIFY_STUB__;
-    } else {
-      result = await verifyLmsVerifiedSessionAccess(supabase, { ...lmsHeaders });
-    }
-    if (result && result.ok) {
-      access = result;
-    } else {
-      failureReason = (result && result.reason) || "invalid_lms_session";
+    try {
+      if (globalThis.__RP2B2_LOGOUT_VERIFY_STUB__ !== undefined) {
+        result = typeof globalThis.__RP2B2_LOGOUT_VERIFY_STUB__ === "function"
+          ? await globalThis.__RP2B2_LOGOUT_VERIFY_STUB__(supabase, lmsHeaders)
+          : globalThis.__RP2B2_LOGOUT_VERIFY_STUB__;
+      } else {
+        result = await verifyLmsVerifiedSessionAccess(supabase, { ...lmsHeaders });
+      }
+      if (result && result.ok) {
+        access = result;
+      } else {
+        failureReason = (result && result.reason) || "invalid_lms_session";
+      }
+    } catch (err) {
+      console.error("[logout] verify failed:", err.message);
+      failureReason = "invalid_lms_session";
+      access = null;
     }
   } else {
     failureReason = "missing_lms_session";
