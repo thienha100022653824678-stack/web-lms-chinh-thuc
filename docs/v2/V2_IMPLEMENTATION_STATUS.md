@@ -5,6 +5,21 @@ This document tracks V2 work on integration branch `v2/rebuild-20260715` (cut fr
 V1 production remains unchanged. Do not merge or deploy V2 until the owner
 explicitly asks to switch traffic to V2.
 
+## Handoff status (2026-07-15, HEAD `b67c8c4`)
+
+- **S0–S4 complete.** Integration, RP2-B2 logout, RP2-B3 revoke polish, sync
+  verification runbook, and canary readiness (rollback drills) are all done.
+- **Preview is canary-ready** and sits in a **guarded safe state**: shadow on,
+  reconciliation read-only on, portal projection dry-run on, delivery handlers
+  off, outbox worker off, Drive dry-run on. Last safe deploy
+  `web-lms-chinh-thuc-awxv4bj1y`; readiness `ready_for_dry_run`.
+- **Production has NOT been enabled.** No production V2 flag is on; no production
+  deploy; no `main` merge.
+- **V1 is still the live serving system.** All V1 endpoints unchanged; the V2
+  shadow producer path is fail-open and a pure no-op when flags are off.
+- **Production canary is a separate Owner Gate** — see
+  `docs/v2/V2_PRODUCTION_CANARY_PLAN.md`. Not approved, not executed.
+
 ## Baseline
 
 - V1 stable tag: `v1-stable-20260713`
@@ -361,6 +376,11 @@ Both migrations remain additive; V1 production code/flags are still off. Do not 
 - No V2 production cutover.
 - No V2 production flag flip.
 - No V1 endpoint removal.
+- **Production canary (Owner Gate — not approved):** the smallest-scope
+  production canary is proposed in `docs/v2/V2_PRODUCTION_CANARY_PLAN.md`
+  (one course-publish event first, then one owner-controlled internal
+  enrollment; Drive stays dry-run). Awaiting explicit owner sign-off on the
+  named course slug + internal account and the junk-slug gap policy.
 - All pending owner cutover approval.
 
 ## Current Guardrails
