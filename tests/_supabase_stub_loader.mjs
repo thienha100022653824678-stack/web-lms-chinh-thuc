@@ -63,7 +63,14 @@ function fromStub(table) {
 
 const supabase = {
   from(table) { return fromStub(table); },
-  rpc(_name, _params) { return Promise.resolve({ data: null, error: null }); }
+  rpc(name, params) {
+    // Record calls so tests can assert what was sent to an RPC (e.g. the V3
+    // write-path runtime_version stamp). Harmless in production (flag off).
+    if (globalThis.__SUPABASE_STUB_RPC_CALLS__) {
+      globalThis.__SUPABASE_STUB_RPC_CALLS__.push({ name, params });
+    }
+    return Promise.resolve({ data: null, error: null });
+  }
 };
 
 export { supabase };
