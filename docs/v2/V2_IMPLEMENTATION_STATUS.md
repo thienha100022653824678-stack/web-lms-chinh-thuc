@@ -108,6 +108,33 @@ explicitly asks to switch traffic to V2.
 6. Owner approves → `V2_DELIVERY_HANDLERS_ENABLED=true`, `V2_PORTAL_PROJECTION_DRY_RUN=false`, keep `V2_DRIVE_WORKER_DRY_RUN=true`.
 7. `/api/v2/readiness` must reach `ready_for_guarded_delivery` for the canary scope.
 
+### S3 migration + postflight results (applied 2026-07-15, Supabase B `aqozjkfwzmyfunqvcyjv`)
+
+Applied by the owner's agent via the Supabase CLI (`supabase link` + `supabase db query --linked -f`), in the runbook §3 order. Additive-only; no V1 column dropped/renamed. Backup posture: `walg_enabled=true`, `pitr_enabled=false`, no physical backup snapshot present at apply time (owner accepted additive-only apply).
+
+**Preflight (read-only snapshot, saved):**
+- pgcrypto extension + `gen_random_uuid()` present. ✓
+- All 7 V1 core tables exist (courses, orders, lessons, students, student_enrollments, site_config, lesson_progress). ✓
+- All 8 session-guard tables exist (RP2-B0/B1 surface). ✓
+- `handle_student_session_login` + `cleanup_student_account_risk_events` present. `reset_student_session_guard` **exists but with a different signature** than preflight expects (`(p_email text, p_admin_email text DEFAULT, p_reason text DEFAULT)` → jsonb, vs preflight's `(text×7, boolean)`). Pre-existing; not touched by these migrations; not a V2-sync blocker. Flagged for owner review of the preflight script.
+- `idx_one_active_student_session_per_email` present; **0 emails with >1 active session**. ✓
+- Row counts: courses 6, orders 24 (24 with course_slug), student_enrollments 19 (19 with course_slug), lessons 35 (35 with course_slug). No slug duplicates. Pre-migration unmatched: orders 3, enrollments 0, lessons 0.
+
+**Applied:**
+1. `migration_v2_sync_outbox.sql` → created `sync_outbox`, `sync_deliveries`, `sync_dead_letters` + 6 indexes (additive).
+2. `migration_v2_identity_mapping.sql` → added V2 columns on orders/student_enrollments/lessons, created `course_slug_mappings` + `portal_post_course_mappings` + 10 indexes, backfilled identity.
+
+**Postflight (all gates pass):**
+- V2 tables: all 5 `exists=true`. ✓
+- V2 columns: all 10 `exists=true`. ✓
+- V2 indexes: all 16 `exists=true`. ✓
+- Row counts: `sync_outbox` 0, `sync_deliveries` 0, `sync_dead_letters` 0 (no shadow events yet — flags still off, expected), `course_slug_mappings` 6 (= course count), `portal_post_course_mappings` 0.
+- Identity gaps (tracked, not required to be 0): `orders_with_slug_course_id_null` = **3** (`donut` ×1, `test-bake_1` ×2 — no matching `courses` row for those slugs); enrollments 0; lessons 0; `orders_missing_normalized_email` 0; `sections_without_kind_section` 0; `lesson_rows_without_kind_lesson` 0.
+
+**V1 integrity (unchanged after apply):** courses 6, orders 24, student_enrollments 19, lessons 35, lesson_progress 0, students 13, site_config 66 — identical to preflight. Slug-duplicate groups 0. Session-guard tables intact (student_active_sessions 15, lms_verified_sessions 21, admin_audit_logs 2). ✓
+
+**Status of S3 Step 5 sub-steps 4–7 (flag progression + `/api/v2/readiness`):** NOT yet performed. These require a Vercel preview deploy of `v2/rebuild-20260715` with the V2 flags set — an owner action. The DB foundation is ready; the readiness endpoint cannot be exercised until the branch is deployed to a preview and flags are flipped per runbook §5.
+
 ### S4 canary-ready (complete pending owner canary sign-off)
 
 - `V2_ROLLBACK_RUNBOOK.md` updated with the 3-drill procedure (code, schema, flags).
@@ -117,26 +144,20 @@ explicitly asks to switch traffic to V2.
 
 ## Not Applied Automatically
 
-The following V2 migrations are committed but must not be applied to production
-without an explicit apply/test step:
+- ~~`migration_v2_sync_outbox.sql`~~ **applied 2026-07-15** on Supabase B `aqozjkfwzmyfunqvcyjv` (see S3 results above).
+- ~~`migration_v2_identity_mapping.sql`~~ **applied 2026-07-15** on Supabase B `aqozjkfwzmyfunqvcyjv` (see S3 results above).
 
-- `migration_v2_sync_outbox.sql`
-- `migration_v2_identity_mapping.sql`
-
-They are additive, but the system should still apply and verify them in a controlled
-Supabase B session.
+Both migrations remain additive; V1 production code/flags are still off. Do not drop V2 objects on production without owner approval + export (see `scripts/v2/rollback-v2.sql`).
 
 ## In Progress / Next
 
 - Enable and observe Portal projection dry-run after diagnostics are clean.
-- Resolve V2 identity-mapping schema drift before reconciliation dry-run.
-- Run `scripts/v2/preflight-v2.sql` in Supabase B SQL Editor before applying missing identity migration pieces.
-- Run `scripts/v2/postflight-v2.sql` after schema completion.
+- **S3 flag progression (owner, post-migration):** on a Vercel preview deploy of `v2/rebuild-20260715`, flip `V2_OUTBOX_SHADOW_MODE=true` → verify `/api/v2/outbox`; then `V2_PORTAL_PROJECTION_ENABLED=true` + `V2_PORTAL_PROJECTION_DRY_RUN=true` → verify `/api/v2/portal-projection-preview` vs V1; then owner approves live delivery. `/api/v2/readiness` must reach `ready_for_guarded_delivery`. DB foundation is already applied + postflight-clean (see S3 results above).
 - Use `/api/v2/readiness` as the top-level gate before enabling worker dry-run or guarded delivery.
 - Use `/api/v2/outbox` to inspect shadow outbox rows and delivery plans before enabling live V2 handlers.
 - Use `/api/v2/portal-projection-preview` on sampled course/enrollment events before disabling Portal projection dry-run.
 - Enable live Portal projection only after payload samples match V1 `/api/sync` behavior.
-- Add read-only reconciliation runbook and expected result thresholds.
+- Add read-only reconciliation runbook and expected result thresholds.  *(done — see `V2_RECONCILIATION_RUNBOOK.md`)*
 - Add admin V2 diagnostics page guarded by admin auth.
 - Add session lease V2 only after sync/reconciliation is stable.
 - Add Drive permission job queue after outbox delivery is proven.

@@ -12,3 +12,12 @@ yarn-debug.log*
 yarn-error.log*
 .vercel
 .env*
+
+# supabase CLI local link state (never commit)
+supabase/
+
+# agent scratch / review dossiers (never commit)
+scratch/
+.claude/
+review-dossier-*/
+.superpowers/
