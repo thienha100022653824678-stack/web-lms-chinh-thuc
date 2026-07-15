@@ -1484,7 +1484,9 @@ test("security: V2_GLOBAL_ONE_DEVICE_ENABLED only appears in expected files", as
     "tests/supabase-loader.mjs",
     "tests/_supabase_stub_loader.mjs",
     "docs/v2-new/RP2_B_SESSION_DEVICE_GUARD_PLAN.md",
-    "docs/v2-new/RP2_B1_IMPLEMENTATION_RESULT.md"
+    "docs/v2-new/RP2_B1_IMPLEMENTATION_RESULT.md",
+    "docs/superpowers/specs/2026-07-15-v2-canary-ready-design.md",
+    "docs/superpowers/plans/2026-07-15-v2-canary-ready.md"
   ]);
   // Lazy walk via fs (kept inside test for isolation).
   const cp = await import("node:child_process");
