@@ -796,7 +796,12 @@ async function postAction(req, res, adminSession) {
       success: true,
       alreadyRevoked: affectedSessions === 0,
       affectedSessions,
-      reset: resetResult
+      reset: {
+        studentSessions: Number(resetResult?.studentSessions || 0),
+        entryTokens: Number(resetResult?.entryTokens || 0),
+        lmsSessions: Number(resetResult?.lmsSessions || 0),
+        usedRpc: Boolean(resetResult?.usedRpc)
+      }
     });
   }
 

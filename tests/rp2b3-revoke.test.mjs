@@ -179,3 +179,31 @@ test("reset_session: revoke throws -> 500 revoke_failed", async () => {
   });
   restoreEnv(snap);
 });
+
+test("reset_session: fallback resetResult with sessions array -> response body has no session id", async () => {
+  clearFlagEnv(); const snap = snapshotEnv();
+  await withDeps({
+    lookupStudentExists: async () => true,
+    resetStudentSessionByEmail: async () => ({
+      ok: true,
+      studentSessions: 1,
+      entryTokens: null,
+      lmsSessions: null,
+      revokedBefore: "2026-01-01T00:00:00Z",
+      usedRpc: false,
+      sessions: [{ student_session_id: "sess_secret_xyz" }]
+    }),
+    writeAdminAuditLog: async () => ({ ok: true }),
+    upsertReview: async () => ({})
+  }, async () => {
+    const { default: handler } = await import("../utils/lms-handlers/admin-account-sharing-alerts.js");
+    const res = mockRes();
+    await handler(await adminReq({ action: "reset_session", email: "stu@example.com", reason: "mat may" }), res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.jsonBody.alreadyRevoked, false);
+    assert.equal(res.jsonBody.affectedSessions, 1);
+    assert.equal(JSON.stringify(res.jsonBody).includes("sess_secret_xyz"), false);
+    assert.equal(res.jsonBody.reset.sessions, undefined);
+  });
+  restoreEnv(snap);
+});

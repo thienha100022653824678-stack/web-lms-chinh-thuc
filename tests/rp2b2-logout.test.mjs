@@ -172,3 +172,31 @@ test("logout: rejects GET with 405", async () => {
     assert.equal(res.statusCode, 405);
   } finally { restoreEnv(snap); }
 });
+
+test("logout: flag-on, verify throws -> 401 invalid_session, no cookie clear", async () => {
+  clearFlagEnv(); process.env.V2_GLOBAL_ONE_DEVICE_ENABLED = "1";
+  const snap = snapshotEnv();
+  globalThis.__RP2B2_LOGOUT_VERIFY_STUB__ = async () => { throw new Error("db down"); };
+  try {
+    const { default: handler } = await import("../utils/lms-handlers/logout.js");
+    const res = mockRes();
+    await handler(mockReq({ headers: { "x-lms-session-id": "lms_abc", "x-lms-device-id": "dev_1" } }), res);
+    assert.equal(res.statusCode, 401);
+    assert.equal(res.jsonBody.error, "invalid_session");
+    assert.equal(res.headers["Set-Cookie"], undefined);
+  } finally { restoreEnv(snap); delete globalThis.__RP2B2_LOGOUT_VERIFY_STUB__; }
+});
+
+test("logout: flag-off, verify throws -> 200 serverRevoked false, cookie cleared", async () => {
+  clearFlagEnv();
+  const snap = snapshotEnv();
+  globalThis.__RP2B2_LOGOUT_VERIFY_STUB__ = async () => { throw new Error("db down"); };
+  try {
+    const { default: handler } = await import("../utils/lms-handlers/logout.js");
+    const res = mockRes();
+    await handler(mockReq({ headers: { "x-lms-session-id": "lms_abc", "x-lms-device-id": "dev_1" } }), res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.jsonBody.serverRevoked, false);
+    assert.match(res.headers["Set-Cookie"] || "", /course_session_token=;/);
+  } finally { restoreEnv(snap); delete globalThis.__RP2B2_LOGOUT_VERIFY_STUB__; }
+});
