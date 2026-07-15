@@ -9,8 +9,12 @@ import {
 import { google } from "googleapis";
 import {
   isEntryTokenRequiredCourse,
-  verifyLmsVerifiedSessionAccess
+  verifyLmsVerifiedSessionAccess,
+  mapLmsAccessReasonToError,
+  httpStatusForLmsAccessError,
+  shouldRequireLmsVerifiedSession
 } from "../lms-session-guard.js";
+import { isV2GlobalOneDeviceEnabled } from "../v2-flags.js";
 import { applyCors } from "../cors.js";
 import { resolveMainMediaInfo } from "../lms-media.js";
 
@@ -41,6 +45,20 @@ function getLmsSessionHeaders(req) {
     lmsSessionId: String(req.headers["x-lms-session-id"] || "").trim(),
     lmsDeviceId: String(req.headers["x-lms-device-id"] || "").trim()
   };
+}
+
+// RP2-B1 safe access-error response. Mirrors the same helper in
+// course-data.js so the wire contract stays identical between the two
+// endpoints (no DB error / device id / session id / email leakage).
+function respondWithAccessError(res, { reason, flagOn, fallbackStatus = 403 }) {
+  const errorCode = mapLmsAccessReasonToError(reason);
+  const status = httpStatusForLmsAccessError(errorCode, { flagOn });
+  return res.status(status || fallbackStatus).json({
+    success: false,
+    error: errorCode,
+    authError: errorCode,
+    code: errorCode
+  });
 }
 
 function normalizeMaterials(value) {
@@ -314,26 +332,42 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 1. Fetch student session from cookies
+    // 1. Resolve identity. RP2-B1: when the flag is on, the only
+    // authorized identity is the LMS verified session. The cookie is
+    // parsed only to keep V1 callers happy in the flag-off path; it
+    // never authorizes content access on its own.
     const cookies = parseCookies(req);
     const sToken = cookies[SESSION_COOKIE];
     const lmsHeaders = getLmsSessionHeaders(req);
     const hasLmsSessionHeaders = Boolean(lmsHeaders.lmsSessionId && lmsHeaders.lmsDeviceId);
+    const flagOn = isV2GlobalOneDeviceEnabled();
     let email = null;
     let lmsSessionAccess = null;
     let lmsSessionFailureReason = "";
 
     if (hasLmsSessionHeaders) {
-      const access = await verifyLmsVerifiedSessionAccess(supabase, lmsHeaders);
+      const access = globalThis.__RP2B1_LMS_SESSION_STUB__
+        ? globalThis.__RP2B1_LMS_SESSION_STUB__
+        : await verifyLmsVerifiedSessionAccess(supabase, lmsHeaders);
       if (access.ok) {
         email = access.email;
         lmsSessionAccess = access;
       } else {
         lmsSessionFailureReason = access.reason || "invalid_lms_session";
       }
+    } else {
+      lmsSessionFailureReason = "missing_lms_session";
     }
 
-    if (sToken) {
+    if (flagOn) {
+      if (!lmsSessionAccess) {
+        return respondWithAccessError(res, {
+          reason: lmsSessionFailureReason || "missing_lms_session",
+          flagOn: true
+        });
+      }
+      email = lmsSessionAccess.email;
+    } else if (sToken) {
       const decoded = verifyStudentSession(sToken);
       if (decoded && decoded.email) {
         email = decoded.email;
@@ -349,26 +383,36 @@ export default async function handler(req, res) {
     }
 
     // 2. Fetch lesson record
-    const { data: lesson, error: fetchError } = await supabase
+    const { data: lesson, error: fetchError } = globalThis.__RP2B1_LESSONS_STUB__
+      ? globalThis.__RP2B1_LESSONS_STUB__
+      : await supabase
       .from("lessons")
       .select("*")
       .eq("id", id)
       .maybeSingle();
 
+    // RP2-B1 stub shim: when the production code path runs through the
+    // sentinels, the returned `data` is an object (not an array). The
+    // production chain returns an array via select().maybeSingle(); we
+    // normalize the sentinel into the same shape so the rest of the
+    // handler can stay verbatim.
+    const lessonRecord = Array.isArray(lesson) ? lesson[0] : lesson;
     if (fetchError) throw fetchError;
-    if (!lesson) {
+    if (!lessonRecord) {
       return res.status(404).json({ success: false, error: "Không tìm thấy bài học" });
     }
+    const lessonResolved = lessonRecord;
 
-    if (lmsSessionAccess && String(lesson.course_slug || "").trim() !== lmsSessionAccess.courseSlug) {
-      return res.status(403).json({
-        success: false,
-        error: "PhiÃªn há»c khÃ´ng cÃ³ quyá»n xem bÃ i há»c cá»§a khÃ³a nÃ y.",
-        course: lesson.course_slug
+    if (lmsSessionAccess && String(lessonResolved.course_slug || "").trim() !== lmsSessionAccess.courseSlug) {
+      // RP2-B1: safe error contract — never echo the binding course.
+      return respondWithAccessError(res, {
+        reason: "course_mismatch",
+        flagOn,
+        fallbackStatus: 403
       });
     }
 
-    if (isEntryTokenRequiredCourse(lesson.course_slug) && !lmsSessionAccess) {
+    if (shouldRequireLmsVerifiedSession(lessonResolved.course_slug) && !lmsSessionAccess) {
       const code = hasLmsSessionHeaders
         ? (lmsSessionFailureReason || "protected_session_invalid")
         : "entry_token_required";
@@ -376,17 +420,19 @@ export default async function handler(req, res) {
         success: false,
         authError: code,
         code,
-        course: lesson.course_slug,
+        course: lessonResolved.course_slug,
         error: "Liên kết lớp học này cần được mở từ Cổng học viên. Vui lòng quay lại trang bài học trên yeunauan.live và bấm “Bài học gốc phục vụ giảng dạy” để vào lớp."
       });
     }
 
     // 3. Verify student enrollment for the course that this lesson belongs to
-    const { data: enrollment, error: enrollError } = await supabase
+    const { data: enrollment, error: enrollError } = globalThis.__RP2B1_ENROLLMENTS_STUB__
+      ? globalThis.__RP2B1_ENROLLMENTS_STUB__
+      : await supabase
       .from("student_enrollments")
       .select("id, status")
       .eq("email", email)
-      .eq("course_slug", lesson.course_slug)
+      .eq("course_slug", lessonResolved.course_slug)
       .limit(10);
 
     if (enrollError) throw enrollError;
@@ -396,20 +442,22 @@ export default async function handler(req, res) {
         success: false,
         error: "Bạn không có quyền xem bài học của khóa học này.",
         email,
-        course: lesson.course_slug
+        course: lessonResolved.course_slug
       });
     }
 
     // 4. Calculate exact displayLesson by querying all non-hidden lessons of this course ordered by lesson_no
-    const { data: siblingLessons } = await supabase
+    const { data: siblingLessons } = globalThis.__RP2B1_SIBLING_LESSONS_STUB__
+      ? globalThis.__RP2B1_SIBLING_LESSONS_STUB__
+      : await supabase
       .from("lessons")
       .select("id, is_section")
-      .eq("course_slug", lesson.course_slug)
+      .eq("course_slug", lessonResolved.course_slug)
       .neq("status", "hidden")
       .order("lesson_no", { ascending: true });
 
     const hasSection = (siblingLessons || []).some(l => Boolean(l.is_section));
-    let displayLesson = lesson.lesson_no;
+    let displayLesson = lessonResolved.lesson_no;
     let sectionCounter = 0;
     let globalCounter = 0;
 
@@ -420,7 +468,7 @@ export default async function handler(req, res) {
       } else {
         sectionCounter++;
         globalCounter++;
-        if (sib.id === lesson.id) {
+        if (sib.id === lessonResolved.id) {
           displayLesson = hasSection ? sectionCounter : globalCounter;
           break;
         }
@@ -428,34 +476,34 @@ export default async function handler(req, res) {
     }
 
     // 5. Secure Video URL & Media URLs
-    const securedVideo = signBunnyEmbedUrl(lesson.video_url || "");
-    const securedMedia = signMediaUrls(lesson.media_urls || "");
-    const mainMediaInfo = Boolean(lesson.is_section)
+    const securedVideo = signBunnyEmbedUrl(lessonResolved.video_url || "");
+    const securedMedia = signMediaUrls(lessonResolved.media_urls || "");
+    const mainMediaInfo = Boolean(lessonResolved.is_section)
       ? { mainMediaType: "none", mainMediaMimeType: "", mainMediaName: "" }
-      : await resolveMainMediaInfo(lesson.video_url || "", getDriveFileMetadata);
+      : await resolveMainMediaInfo(lessonResolved.video_url || "", getDriveFileMetadata);
 
     // 6. Fetch recipe text
-    const recipeText = await fetchRecipeText(lesson.recipe_url);
+    const recipeText = await fetchRecipeText(lessonResolved.recipe_url);
 
     // Formatted lesson output
     const formattedLesson = {
-      id: lesson.id,
-      course: lesson.course_slug,
-      lesson: lesson.lesson_no,
+      id: lessonResolved.id,
+      course: lessonResolved.course_slug,
+      lesson: lessonResolved.lesson_no,
       displayLesson: displayLesson,
-      title: lesson.title,
-      description: lesson.description || "",
-      duration: lesson.duration_text || "",
-      level: lesson.level || "",
-      thumbnailUrl: lesson.thumbnail_url || "",
-      videoUrl: lesson.video_url || "",
-      recipeUrl: lesson.recipe_url || "",
+      title: lessonResolved.title,
+      description: lessonResolved.description || "",
+      duration: lessonResolved.duration_text || "",
+      level: lessonResolved.level || "",
+      thumbnailUrl: lessonResolved.thumbnail_url || "",
+      videoUrl: lessonResolved.video_url || "",
+      recipeUrl: lessonResolved.recipe_url || "",
       mediaUrls: securedMedia,
       ...mainMediaInfo,
-      materials: Boolean(lesson.is_section) ? [] : normalizeMaterials(lesson.materials),
-      isSection: Boolean(lesson.is_section),
-      views: lesson.views || 0,
-      status: lesson.status || "active",
+      materials: Boolean(lessonResolved.is_section) ? [] : normalizeMaterials(lessonResolved.materials),
+      isSection: Boolean(lessonResolved.is_section),
+      views: lessonResolved.views || 0,
+      status: lessonResolved.status || "active",
       recipeText,
       ...securedVideo
     };
@@ -467,6 +515,17 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
+    // RP2-B1 fail-closed: when the flag is on we never leak the raw
+    // DB error to the client. Telemetry is best-effort and lives in
+    // lms-session-guard.
+    if (isV2GlobalOneDeviceEnabled()) {
+      return res.status(503).json({
+        success: false,
+        error: "one_device_policy_unavailable",
+        authError: "one_device_policy_unavailable",
+        code: "one_device_policy_unavailable"
+      });
+    }
     console.error("[api/lms/lesson] Error:", err);
     return res.status(500).json({
       success: false,

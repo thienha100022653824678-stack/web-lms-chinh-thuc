@@ -37,3 +37,37 @@ export function getV2ListFlag(name) {
 export function getV2RuntimeMode() {
   return getV2Env('V2_RUNTIME_MODE', isV2FlagEnabled(V2_FLAGS.PLATFORM_ENABLED) ? 'enabled' : 'off');
 }
+
+// ── RP2-A / RP2-B1 security flags (strict parser) ───────────────────────────
+// Pure-function parser: only 1/true/yes/on (case-insensitive, trimmed) become
+// true. Anything else (0/false/no/off/empty/undefined/non-string) is false.
+// Never raises, never logs, never echoes the env value. Accepts an env-shaped
+// object so tests can pass a snapshot without touching process.env.
+export function parseBooleanFlag(value) {
+  if (value === true) return true;
+  if (typeof value !== 'string') return false;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return false;
+  return (
+    normalized === '1' ||
+    normalized === 'true' ||
+    normalized === 'yes' ||
+    normalized === 'on'
+  );
+}
+
+// RP2-A CORS allowlist flag. Kept separate from the one-device flag so the two
+// features can be enabled independently.
+export function isV2CorsAllowlistEnabled(env = process.env) {
+  return parseBooleanFlag(env?.V2_CORS_ALLOWLIST_ENABLED);
+}
+
+// RP2-B1 global one-device / LMS verified-session enforcement. When true,
+// course-data/lesson treat every course as requiring a verified LMS session
+// and the legacy LMS_ENTRY_TOKEN_REQUIRED_COURSES allowlist is ignored as a
+// bypass gate. When false (default), V1 behavior is preserved exactly.
+export function isV2GlobalOneDeviceEnabled(env = process.env) {
+  return parseBooleanFlag(env?.V2_GLOBAL_ONE_DEVICE_ENABLED);
+}
+
+export const _internals = { parseBooleanFlag };

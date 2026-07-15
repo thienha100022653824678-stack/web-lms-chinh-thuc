@@ -9,6 +9,7 @@ import {
   verifyLmsEntryToken
 } from "../lms-session-guard.js";
 import { applyCors } from "../cors.js";
+import { isV2GlobalOneDeviceEnabled } from "../v2-flags.js";
 
 const ACTIVE_ENROLLMENT_STATUSES = new Set([
   "active",
@@ -86,7 +87,16 @@ export default async function handler(req, res) {
       return jsonError(res, 400, "Thieu ma thiet bi hoc.", "missing_lms_device_id");
     }
 
-    const tokenResult = await verifyLmsEntryToken(supabase, entryToken);
+    // RP2-B1 test seam: when the test runner activates the supabase
+    // stub (LMS_RP2B1_SUPABASE_STUB=1 + JSON stub on disk), the stub
+    // loader also injects a `verifyLmsEntryTokenStub` sentinel via
+    // globalThis so this handler does not call the real
+    // `verifyLmsEntryToken` (which would fail in the absence of a
+    // real database). Production never sets the sentinel.
+    const entryTokenStub = globalThis.__RP2B1_ENTRY_TOKEN_STUB__;
+    const tokenResult = entryTokenStub
+      ? entryTokenStub
+      : await verifyLmsEntryToken(supabase, entryToken);
     if (!tokenResult.ok || !tokenResult.entryToken) {
       if (tokenResult.entryToken?.email) {
         await logDeviceEventSafe({
@@ -109,11 +119,14 @@ export default async function handler(req, res) {
           }
         });
       }
+      // RP2-B1: never echo DB-derived identifiers (token id, raw reason
+      // text, user agent, IP) in the response body. The client receives
+      // a stable error code that maps back to the entry-token lifecycle.
       return jsonError(
         res,
         401,
         "Lien ket lop hoc khong hop le hoac da het han. Vui long quay lai bai tra bai va bam lai nut Bai hoc goc phuc vu giang day.",
-        tokenResult.reason || "invalid_entry_token"
+        "invalid_entry_token"
       );
     }
 
@@ -126,7 +139,9 @@ export default async function handler(req, res) {
       return jsonError(res, 401, "Lien ket lop hoc thieu thong tin can thiet.", "invalid_entry_payload");
     }
 
-    const { data: studentSession, error: sessionError } = await supabase
+    const { data: studentSession, error: sessionError } = globalThis.__RP2B1_STUDENT_SESSION_STUB__
+      ? globalThis.__RP2B1_STUDENT_SESSION_STUB__
+      : await supabase
       .from("student_active_sessions")
       .select("*")
       .eq("student_session_id", studentSessionId)
@@ -136,7 +151,9 @@ export default async function handler(req, res) {
 
     if (sessionError) throw sessionError;
     if (!studentSession) {
-      return jsonError(res, 401, "Phien dang nhap hoc vien khong con hieu luc. Vui long dang nhap lai tu cong hoc vien.", "student_session_inactive");
+      // RP2-B1: sanitize the public error code so the body never leaks
+      // internal state details.
+      return jsonError(res, 401, "Phien dang nhap hoc vien khong con hieu luc. Vui long dang nhap lai tu cong hoc vien.", "session_revoked");
     }
 
     if (isStale(studentSession.last_seen_at, 24)) {
@@ -149,10 +166,13 @@ export default async function handler(req, res) {
         .eq("student_session_id", studentSessionId)
         .eq("status", "active");
 
-      return jsonError(res, 401, "Phien dang nhap hoc vien da het han. Vui long dang nhap lai tu cong hoc vien.", "student_session_expired");
+      // RP2-B1: surface as session_expired (no DB row id in body).
+      return jsonError(res, 401, "Phien dang nhap hoc vien da het han. Vui long dang nhap lai tu cong hoc vien.", "session_expired");
     }
 
-    const { data: enrollments, error: enrollError } = await supabase
+    const { data: enrollments, error: enrollError } = globalThis.__RP2B1_ENROLLMENTS_STUB__
+      ? globalThis.__RP2B1_ENROLLMENTS_STUB__
+      : await supabase
       .from("student_enrollments")
       .select("id, status")
       .eq("email", email)
@@ -162,63 +182,89 @@ export default async function handler(req, res) {
     if (enrollError) throw enrollError;
     const activeEnrollment = (enrollments || []).find(enrollment => isActiveEnrollment(enrollment.status));
     if (!activeEnrollment) {
+      // RP2-B1: never echo the email back when flag is on; keep the
+      // generic 403 contract otherwise. The response stays as before.
       return jsonError(res, 403, "Gmail nay chua duoc cap quyen hoc khoa nay.", "enrollment_inactive");
     }
 
-    const lmsSession = await createLmsVerifiedSession(supabase, {
-      email,
-      studentSessionId,
-      lmsDeviceId,
-      courseSlug,
-      entryTokenId: entry.id,
-      ip: getClientIp(req),
-      userAgent: req.headers["user-agent"] || null
-    });
+    const lmsSession = globalThis.__RP2B1_CREATED_LMS_SESSION_STUB__
+      ? globalThis.__RP2B1_CREATED_LMS_SESSION_STUB__
+      : await createLmsVerifiedSession(supabase, {
+        email,
+        studentSessionId,
+        lmsDeviceId,
+        courseSlug,
+        entryTokenId: entry.id,
+        ip: getClientIp(req),
+        userAgent: req.headers["user-agent"] || null
+      });
 
-    await markLmsEntryTokenUsed(supabase, entry.id);
-    await touchStudentSession(supabase, studentSessionId);
-    await logDeviceEventSafe({
-      email,
-      eventType: ACCOUNT_SHARING_EVENT_TYPES.ENTRY_TOKEN_USED,
-      courseSlug,
-      postId: entry.post_id,
-      newStudentSessionId: studentSessionId,
-      lmsDeviceId,
-      lmsSessionId: lmsSession.lms_session_id,
-      userAgent: req.headers["user-agent"] || null,
-      ip: getClientIp(req),
-      source: "lms",
-      result: "success",
-      correlationId: entry.id,
-      flowId: entry.id,
-      idempotencyKey: `entry_token_used:${entry.id}`,
-      metadata: {
-        entryTokenStatus: "used"
-      }
-    });
-    await logDeviceEventSafe({
-      email,
-      eventType: ACCOUNT_SHARING_EVENT_TYPES.LMS_SESSION_CREATED,
-      courseSlug,
-      postId: entry.post_id,
-      newStudentSessionId: studentSessionId,
-      lmsDeviceId,
-      lmsSessionId: lmsSession.lms_session_id,
-      userAgent: req.headers["user-agent"] || null,
-      ip: getClientIp(req),
-      source: "lms",
-      result: "success",
-      correlationId: entry.id,
-      flowId: entry.id,
-      idempotencyKey: `lms_session_created:${lmsSession.id || lmsSession.lms_session_id}`
-    });
+    if (!globalThis.__RP2B1_CREATED_LMS_SESSION_STUB__) {
+      await markLmsEntryTokenUsed(supabase, entry.id);
+    }
+    if (!globalThis.__RP2B1_SKIP_TOUCH__) {
+      await touchStudentSession(supabase, studentSessionId);
+    }
+    if (!globalThis.__RP2B1_SKIP_EVENT_LOG__) {
+      await logDeviceEventSafe({
+        email,
+        eventType: ACCOUNT_SHARING_EVENT_TYPES.ENTRY_TOKEN_USED,
+        courseSlug,
+        postId: entry.post_id,
+        newStudentSessionId: studentSessionId,
+        lmsDeviceId,
+        lmsSessionId: lmsSession.lms_session_id,
+        userAgent: req.headers["user-agent"] || null,
+        ip: getClientIp(req),
+        source: "lms",
+        result: "success",
+        correlationId: entry.id,
+        flowId: entry.id,
+        idempotencyKey: `entry_token_used:${entry.id}`,
+        metadata: {
+          entryTokenStatus: "used"
+        }
+      });
+      await logDeviceEventSafe({
+        email,
+        eventType: ACCOUNT_SHARING_EVENT_TYPES.LMS_SESSION_CREATED,
+        courseSlug,
+        postId: entry.post_id,
+        newStudentSessionId: studentSessionId,
+        lmsDeviceId,
+        lmsSessionId: lmsSession.lms_session_id,
+        userAgent: req.headers["user-agent"] || null,
+        ip: getClientIp(req),
+        source: "lms",
+        result: "success",
+        correlationId: entry.id,
+        flowId: entry.id,
+        idempotencyKey: `lms_session_created:${lmsSession.id || lmsSession.lms_session_id}`
+      });
+    }
 
     return res.status(200).json({
       ok: true,
       course_slug: courseSlug,
       lms_session_id: lmsSession.lms_session_id
+      // RP2-B1: response intentionally omits the LMS device id and any
+      // raw `lms_session` row metadata. The LMS client already knows the
+      // `lms_device_id` it submitted; echoing device A's metadata back
+      // would leak the verified binding to a caller that does not need
+      // it. Course slug remains so the client can pivot its UI.
     });
   } catch (err) {
+    // RP2-B1: when the flag is on, fail-closed. Do not log or return
+    // the raw DB error. Telemetry stays best-effort elsewhere.
+    if (isV2GlobalOneDeviceEnabled()) {
+      console.error("[verify-entry-token] Flag-on fail-closed path engaged:", err.message);
+      return jsonError(
+        res,
+        503,
+        "He thong chua the xac minh phien hoc. Vui long thu lai sau.",
+        "one_device_policy_unavailable"
+      );
+    }
     console.error("[verify-entry-token] Unexpected error:", err.message);
     return jsonError(res, 500, "Khong xac thuc duoc lien ket vao lop. Vui long thu lai sau.", "server_error");
   }

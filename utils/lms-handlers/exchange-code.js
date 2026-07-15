@@ -8,6 +8,7 @@ import {
 } from "../lms.js";
 import { OAuth2Client } from "google-auth-library";
 import { applyCors } from "../cors.js";
+import { isV2GlobalOneDeviceEnabled } from "../v2-flags.js";
 
 const SESSION_COOKIE = "course_session_token";
 const ACTIVE_ENROLLMENT_STATUSES = new Set([
@@ -39,6 +40,30 @@ function isActiveEnrollment(status) {
  * which Google has deprecated for newer OAuth clients.
  */
 export default async function handler(req, res) {
+  // RP2-B1: this handler is currently an orphan (no router mapping and
+  // no caller in either the LMS or Portal repos), but its existence
+  // constitutes a future bypass vector — if a future developer wires
+  // it back up, the V1 path will mint a `course_session_token` cookie
+  // and grant course access without ever invoking the Portal one-
+  // device login RPC. To make that bypass impossible to re-enable
+  // accidentally, we fail closed BEFORE any Google/Supabase/session
+  // work whenever the V2 one-device flag is on.
+  if (isV2GlobalOneDeviceEnabled()) {
+    const cors = applyCors(req, res, {
+      mode: "portal",
+      methods: "POST, OPTIONS",
+      allowedHeaders: "Content-Type"
+    });
+    if (cors.handled) return res.status(cors.status).json(cors.body);
+    if (req.method === "OPTIONS") return res.status(200).end();
+    return res.status(410).json({
+      allowed: false,
+      error: "legacy_login_disabled",
+      code: "legacy_login_disabled",
+      message: "This login flow is disabled. Vui long dang nhap qua Cong hoc vien de su dung lop hoc."
+    });
+  }
+
   const cors = applyCors(req, res, {
     mode: "portal",
     methods: "POST, OPTIONS",
@@ -184,6 +209,9 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error("[exchange-code] Unexpected error:", err);
-    return res.status(500).json({ allowed: false, error: "Server error", detail: err.message });
+    // RP2-B1: when the flag is on this branch is never reached
+    // because the early guard returned 410. Sanitize the response so
+    // the JSON body never leaks the raw DB error to the client.
+    return res.status(500).json({ allowed: false, error: "Server error" });
   }
 }
