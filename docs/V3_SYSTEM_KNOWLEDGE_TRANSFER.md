@@ -333,6 +333,7 @@ Media: video Bunny (HMAC token TTL 600s + watermark email động), ảnh/Docs D
 - Đề xuất: **Supabase CLI migrations** (hoặc sqitch/drizzle-kit) với up/down, version control. **CI gate**: sinh schema từ migration → so vs live DB dump → fail nếu drift. Tự sinh ERD. Bỏ seed data ra file riêng.
 - Lý do: kết thúc "cột này có thật không"; rollback có ý nghĩa; V3 đổi schema an toàn.
 - Rủi ro: migration init từ schema hiện hữu cần snapshot production cẩn thận.
+- **PLAN READY (2026-07-15):** Kế hoạch chi tiết đã soạn tại `docs/V3_PROPOSAL_7_MIGRATION_TOOL_PLAN.md` (cấu trúc thư mục Supabase CLI, baseline không replay migration lịch sử, tách seed, CI gate so catalog, xử lý A/B, rollback, danh sách file, 7 điều kiện GO). Chưa sửa tooling — chờ owner (1) chạy `docs/V3_SCHEMA_GAP_SQL_VERIFICATION.sql` + paste kết quả `docs/V3_SCHEMA_GAP_SQL_RESULTS.md`, (2) chốt `posts` A/B ownership (xem `docs/V3_SOURCE_AUDIT_FINDINGS.md`), (3) duyệt plan, (4) drill rollback PASS.
 
 **⑧ Chính thức hóa `is_section`/`materials`/`expected_start_date`/`is_published` + dọn dead schema.**
 - Vấn đề: V1 dùng cột không có schema (drift), có fallback ẩn lỗi.

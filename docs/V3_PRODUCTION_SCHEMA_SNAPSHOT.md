@@ -2,9 +2,11 @@
 
 > **Đã điền 2026-07-15** bằng cách query trực tiếp Supabase B (project ref `aqozjkfwzmyfunqvcyjv`) qua PostgREST **read-only** bằng `SUPABASE_SERVICE_ROLE_KEY` (từ `.env.local`). Không có query nào đụng dữ liệu học viên; không log secret.
 >
-> **Quan trọng — giới hạn phương pháp:** PostgREST (REST API) **không truy cập được** `information_schema`/`pg_catalog`/`pg_policies`/`pg_constraint`/`pg_index`/`pg_stat` trực tiếp. Nên các mục đánh dấu ⚠️ **GIỚI HẠN** dưới đây không lấy được qua REST — chỉ lấy được qua SQL Editor (psql) hoặc Supabase Management API (cần PAT). Đã ghi rõ cái nào đã verify qua REST, cái nào còn `UNVERIFIED-via-SQL` để Fable 5 biết.
+> **Cập nhật 2026-07-15 (lần 2 — gap catalog VERIFIED):** 4 gap còn lại (RLS/index/constraint/grant) đã được Fable 5 chạy read-only qua `supabase db query --linked` (Management API, role `postgres`) và paste vào `docs/V3_SCHEMA_GAP_SQL_RESULTS.md`. → **Toàn bộ schema snapshot B hiện VERIFIED** (REST + catalog). Sửa lại Q10 (outbox): `sync_outbox`/`sync_deliveries` **CÓ tồn tại** trong catalog (REST 404 trước đó là do RLS on + 0 policy, không phải chưa CREATE); `sync_dead_letters` **không có** → outbox migration apply **một phần**.
 >
-> **Bảo vệ dữ liệu:** Đã gọi `reset_student_session_guard` với email phantom `__v3_probe_no_such_user__@example.com` để xác nhận RPC/grant hoạt động (read-only intent, không có session thật). Side-effect tạo 1 row `student_session_controls` + 1 row `admin_audit_logs` với email phantom → **đã dọn sạch** (xác nhận `admin_audit_logs` về 2, `student_session_controls` về 0 cho phantom). Không đụng row thật nào.
+> **Quan trọng — giới hạn phương pháp (đã giải quyết):** PostgREST (REST API) không truy cập được `information_schema`/`pg_catalog`. 4 gap đã được bù qua `supabase db query --linked` (chỉ SELECT catalog). Mọi mục dưới đây đã VERIFIED.
+>
+> **Bảo vệ dữ liệu:** Đã gọi `reset_student_session_guard` với email phantom `__v3_probe_no_such_user__@example.com` để xác nhận RPC/grant hoạt động (read-only intent, không có session thật). Side-effect tạo 1 row `student_session_controls` + 1 row `admin_audit_logs` với email phantom → **đã dọn sạch** (xác nhận `admin_audit_logs` về 2, `student_session_controls` về 0 cho phantom). Không đụng row thật nào. Catalog probe (lần 2) **chỉ SELECT, không side-effect**.
 
 ---
 
@@ -17,7 +19,7 @@
 - **`posts` table tồn tại trên cùng Supabase B** (id/title/recipe/images/views/course_slug/status/hero_media_url) → phải là projection legacy, không phải Supabase A riêng biệt (cần owner xác nhận).
 - **`student_session_controls` chỉ 1 row** (đã dọn probe) → bảng generation/bulk-revoke gần như trống production.
 - **Active sessions: 2** (status=active) trên 15 tổng — 1-active/email cần verify qua SQL (Q3 constraint).
-- **RLS / grant / policy / trigger / index = UNVERIFIED-via-SQL** (PostgREST không thấy được). Đây là gap quan trọng nhất cho đề xuất V3 ① (RLS). Owner cần chạy Q3/Q5/Q7/Q8/Q9 trong SQL Editor.
+- **RLS / grant / policy / trigger / index = ✅ VERIFIED** (catalog, 2026-07-15 lần 2). **RLS ON 100% bảng, 0 policy**, force-RLS OFF. `handle_student_session_login` EXECUTE: service_role ✅ / PUBLIC+anon+authenticated ❌, **SECURITY INVOKER** (không DEFINER). Xem `docs/V3_SCHEMA_GAP_SQL_RESULTS.md`.
 
 ---
 
@@ -158,19 +160,19 @@ id(uuid PK), course_id(uuid FK→courses.id), course_slug, normalized_course_slu
 #### `posts` (1 row — legacy projection, cùng Supabase B)
 id(uuid PK), title, recipe, images(text[]), views(integer), created_at, course_slug, status, hero_media_url
 
-### ⚠️ Q1 RLS status — UNVERIFIED-via-SQL
-PostgREST không trả `rowsecurity`/`forcerowsecurity`. V2 doc ghi `student_session_controls` có RLS. **Owner cần chạy Q5 (pg_policies) + `SELECT relname, relrowsecurity FROM pg_class` trong SQL Editor** để biết bảng nào bật RLS. Đây là input bắt buộc cho đề xuất V3 ①.
+### ⚠️ Q1 RLS status — ✅ VERIFIED (catalog 2026-07-15 lần 2)
+**RLS ON trên 100% bảng public (25 bảng), `relforcerowsecurity=false` trên tất cả, 0 policy.** Service-role bypass RLS → hiện chỉ an toàn khi mọi read/write qua service-role. `student_session_controls` bật RLS như V2 doc ghi, nhưng **không có policy** (footgun). Đây là input bắt buộc cho đề xuất V3 ①. Chi tiết: `docs/V3_SCHEMA_GAP_SQL_RESULTS.md` Block 1.
 
 ---
 
-## Q10 — V2 outbox tables (✅ VERIFIED via REST: **CHƯA CREATE**)
+## Q10 — V2 outbox tables (✅ VERIFIED via REST + catalog — **CORRECTION**)
 
 ```
-sync_outbox            status=404 Not Found
-sync_deliveries        status=404 Not Found
-sync_dead_letters      status=404 Not Found
+sync_outbox            REST 404, NHƯNG CÓ TRONG pg_class (RLS on, 0 policy)
+sync_deliveries        REST 404, NHƯNG CÓ TRONG pg_class (RLS on, 0 policy)
+sync_dead_letters      KHÔNG có trong catalog lẫn REST
 ```
-→ **3 bảng outbox V2 chưa tồn tại trên production.** Migration `migration_v2_sync_outbox.sql` committed nhưng **chưa apply**. Khẳng định này quan trọng cho đề xuất V3 ④ (outbox làm xương sống): V3 phải apply migration outbox hoặc thiết kế lại outbox.
+→ **Sửa lại kết luận trước:** `sync_outbox` + `sync_deliveries` **ĐÃ CREATE** trên production (RLS on, 0 policy → REST/PostgREST không expose vì anon/authenticated bị chặn mặc định). **`sync_dead_letters` chưa CREATE.** → Outbox migration apply **một phần** (2/3 bảng). V3 ④ chỉ cần thêm migration cho `sync_dead_letters` + viết policy RLS nếu muốn observe qua REST, không cần tạo lại outbox từ 0.
 
 ---
 
@@ -195,7 +197,7 @@ sync_dead_letters      status=404 Not Found
 | courses | drive_folder_id, drive_permission_mode | ✅ có | |
 | courses | sync_lms_status, sync_portal_status, sync_error | ✅ có | |
 
-→ **Kết luận:** identity mapping migration (`migration_v2_identity_mapping.sql`) **đã apply** (cột + course_slug_mappings 6 rows + backfill enrollments/lessons sạch). Chỉ `orders.course_id` còn 3 gap → cần reconciliation. Outbox migration **chưa apply** (Q10).
+→ **Kết luận:** identity mapping migration (`migration_v2_identity_mapping.sql`) **đã apply** (cột + course_slug_mappings 6 rows + backfill enrollments/lessons sạch). Chỉ `orders.course_id` còn 3 gap → cần reconciliation. Outbox migration **apply một phần** (Q10: `sync_outbox`+`sync_deliveries` có, `sync_dead_letters` chưa).
 
 ---
 
@@ -236,51 +238,30 @@ sync_dead_letters      status=404 Not Found
 - `reset_student_session_guard` — ✅ **đã test executable**: gọi với email phantom trả `{ok:true, studentSessions:0, entryTokens:0, lmsSessions:0, revokedBefore:"...", usedRpc:true}` → **GRANT service_role hoạt động** (đã dọn side-effect).
 - `cleanup_student_account_risk_events` — exposed (chưa test).
 
-### ⚠️ Q6/Q7 RPC grant detail — UNVERIFIED-via-SQL
-PostgREST không trả `prosecdef`/`proconfig`/`routine_privileges`. V2 doc (Phụ lục F.10) cảnh báo `handle_student_session_login` migration **không có GRANT/REVOKE** → có thể đang `PUBLIC EXECUTE`. Vì `reset_student_session_guard` chạy được bằng service-role → grant service_role OK cho nó. Nhưng `handle_student_session_login` (caller Portal dùng service-role) **chưa xác minh grant**. **Owner cần chạy Q6+Q7 trong SQL Editor** (xem "Còn cần owner verify" dưới).
+### ✅ Q6/Q7 RPC grant detail — VERIFIED (catalog 2026-07-15 lần 2)
+- `handle_student_session_login`: **SECURITY INVOKER** (không DEFINER), `proconfig` null (không pin search_path), owner `postgres`. EXECUTE: `postgres`/`service_role`/`supabase_admin` ✅; **PUBLIC/anon/authenticated ❌** → grant hardening **đã apply**. Caller Portal dùng service-role → OK. Khác pattern mong muốn DEFINER — V3 ① nên chuẩn hóa.
+- `reset_student_session_guard`: SECURITY DEFINER + `search_path=public`. EXECUTE: postgres/service_role/supabase_admin ✅.
+- `cleanup_student_account_risk_events`: SECURITY DEFINER + `search_path=public`. EXECUTE: postgres/service_role/supabase_admin ✅.
+- `record_view`: **không tồn tại trên B** → RPC Portal views chỉ ở A (hoặc chưa apply).
+Chi tiết: `docs/V3_SCHEMA_GAP_SQL_RESULTS.md` Block 4.
 
 ---
 
 ## CÒN CẦN OWNER VERIFY QUA SQL EDITOR (PostgREST không thấy được)
 
-> Đây là 4 gap còn lại — PostgREST chỉ thấy bảng/cột/RPC exposed, không thấy catalog nội bộ. Owner chạy trong **Supabase B SQL Editor** (read-only `SELECT`):
+> **✅ ĐÃ HOÀN TẤT 2026-07-15 (lần 2).** 4 gap dưới đây đã được Fable 5 chạy read-only qua `supabase db query --linked` (catalog SELECT). Kết quả paste trong `docs/V3_SCHEMA_GAP_SQL_RESULTS.md`. Mục này giữ lại làm bản đồ "từng là gap" cho truy vết; không còn chặn V3.
 
-### Gap 1 — RLS status + policy (V3 đề xuất ① cần cái này)
-```sql
-SELECT relname, relrowsecurity, relforcerowsecurity
-FROM pg_class c JOIN pg_namespace n ON c.relnamespace=n.oid
-WHERE n.nspname='public' AND c.relkind='r' ORDER BY relname;
+### Gap 1 — RLS status + policy (V3 đề xuất ① cần cái này) — ✅ VERIFIED
+RLS ON 100% bảng, **0 policy**, force-RLS OFF. Chi tiết trong `V3_SCHEMA_GAP_SQL_RESULTS.md` Block 1.
 
-SELECT schemaname, tablename, policyname, permissive, roles, cmd, qual, with_check
-FROM pg_policies WHERE schemaname='public' ORDER BY tablename, policyname;
-```
+### Gap 2 — Index (đặc biệt unique partial 1-active-session/email — invariant #5) — ✅ VERIFIED
+`idx_one_active_student_session_per_email` UNIQUE partial `WHERE status='active'` **CÓ thật**. Chi tiết Block 2.
 
-### Gap 2 — Index (đặc biệt unique partial 1-active-session/email — invariant #5)
-```sql
-SELECT tablename, indexname, indexdef FROM pg_indexes
-WHERE schemaname='public' ORDER BY tablename, indexname;
-```
-→ Xác minh `idx_one_active_student_session_per_email` (UNIQUE partial `WHERE status='active'`) có thật.
+### Gap 3 — Constraint (UNIQUE email,course_slug — invariant #1) — ✅ VERIFIED
+`student_enrollments_email_course_slug_key` = `UNIQUE (email, course_slug)` **CÓ**. Chi tiết Block 3.
 
-### Gap 3 — Constraint (UNIQUE email,course_slug — invariant #1)
-```sql
-SELECT conrelid::regclass AS tbl, conname, contype, pg_get_constraintdef(oid)
-FROM pg_constraint WHERE connamespace='public'::regnamespace
-ORDER BY conrelid::regclass::text, contype, conname;
-```
-
-### Gap 4 — Function grant (handle_student_session_login — blocker V2)
-```sql
-SELECT p.proname, p.prosecdef, pg_get_function_identity_arguments(p.oid) AS args
-FROM pg_proc p JOIN pg_namespace n ON p.pronamespace=n.oid
-WHERE n.nspname='public' ORDER BY p.proname;
-
-SELECT routine_name, grantee, privilege_type
-FROM information_schema.routine_privileges
-WHERE routine_schema='public' ORDER BY routine_name, grantee;
-```
-
-> Sau khi owner paste kết quả 4 gap này vào (hoặc vào file riêng `docs/V3_SCHEMA_GAP_SQL_RESULTS.md`), Fable 5 có bức tranh production đầy đủ. **Tuy nhiên, 4 gap này không chặn việc Fable 5 bắt đầu đọc transfer doc + đề xuất V3** — chỉ là input refine cho đề xuất RLS/grant/index.
+### Gap 4 — Function grant (handle_student_session_login — blocker V2) — ✅ VERIFIED
+service_role ✅; PUBLIC/anon/authenticated ❌; **SECURITY INVOKER** (không DEFINER). Chi tiết Block 4.
 
 ---
 
@@ -289,10 +270,10 @@ WHERE routine_schema='public' ORDER BY routine_name, grantee;
 1. **`courses` cũng có `sync_lms_status`/`sync_portal_status`/`sync_error`** — V1 doc (AG-11) ghi các cột này chỉ ở `orders`/phía A. Thực tế `courses` cũng có. Cần cập nhật invariant/contract.
 2. **`courses.drive_folder_id` + `drive_permission_mode`** tồn tại — V1 doc chưa nhắc cột này trên `courses` (chỉ nhắc trên enrollments). Drive folder có thể lưu cả course-level.
 3. **`posts` ở cùng Supabase B** (không phải Supabase A riêng) — V1 doc giả định 2 Supabase tách biệt. `posts` (1 row) trên cùng project `aqozjkfwzmyfunqvcyjv`. Cần owner xác nhận `posts` có thực sự dùng hay legacy dead.
-4. **Outbox V2 chưa apply production** — V2 `V2_IMPLEMENTATION_STATUS.md` ghi "migration committed but not applied". Đã confirm bằng REST 404. V3 ④ phải tính đến việc outbox bắt đầu từ 0.
+4. **Outbox V2 apply một phần trên production** — `sync_outbox` + `sync_deliveries` **ĐÃ CREATE** (RLS on, 0 policy → REST/PostgREST không expose, nên snapshot REST trước đó báo 404 nhầm là "chưa create"). `sync_dead_letters` **chưa CREATE**. V3 ④ chỉ cần thêm migration cho `sync_dead_letters` + viết RLS policy nếu muốn observe qua REST.
 5. **`student_device_change_logs`** phình to (30 cột) hơn V1 doc mô tả — có `event_idempotency_key`, `correlation_id`, `request_id`, `flow_id`, `lms_device_hash`, `lms_session_hash`, `risk_points`, `metadata`, `schema_version`, `hash_version`... → telemetry phong phú hơn suy đoán.
 6. **`drive_permission_logs` có `student_email` + `course_id`** riêng (bên cạnh `email`/`course_slug`) — V2 identity đã lan vào log table.
 
 ---
 
-> **Tài liệu này đủ để Fable 5 architect V3** với độ chính xác cao về schema (bảng/cột/RPC/identity/drift/row-count đều verified). 4 gap RLS/index/constraint/grant cần owner bổ sung qua SQL Editor nhưng **không chặn bắt đầu**. Fable 5 đọc file này + `V3_SYSTEM_KNOWLEDGE_TRANSFER.md` + (nếu có) `V3_SCHEMA_GAP_SQL_RESULTS.md` là đủ để lên kế hoạch V3 chính xác.
+> **Tài liệu này đủ để Fable 5 architect V3** với độ chính xác cao về schema (bảng/cột/RPC/identity/drift/row-count/RLS/index/constraint/grant đều **VERIFIED** qua REST + catalog 2026-07-15). 4 gap RLS/index/constraint/grant đã được bù qua `supabase db query --linked` (xem `docs/V3_SCHEMA_GAP_SQL_RESULTS.md`). Fable 5 đọc file này + `V3_SYSTEM_KNOWLEDGE_TRANSFER.md` + `V3_SCHEMA_GAP_SQL_RESULTS.md` là đủ để lên kế hoạch V3 chính xác.

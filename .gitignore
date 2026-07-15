@@ -12,3 +12,7 @@ yarn-debug.log*
 yarn-error.log*
 .vercel
 .env*
+
+# V3 research scratch probes (do not commit)
+scratch/
+_tmp_env_inspect.mjs

@@ -1,11 +1,21 @@
 # V3 — Handoff Prompt (copy-paste vào phiên Claude Fable 5)
 
+> **Cập nhật 2026-07-15 (source audit + ⑦ plan):** Phiên V3 research đã hoàn thành source audit Supabase A/B ownership và soạn plan chi tiết cho Đề xuất ⑦. Xem 3 file mới:
+> - `docs/V3_SOURCE_AUDIT_FINDINGS.md` — kết luận A/B sở hữu bảng nào (verified từ code).
+> - `docs/V3_SCHEMA_GAP_SQL_VERIFICATION.sql` — file SQL read-only owner chạy (4 block: RLS / index / constraint / function grant).
+> - `docs/V3_SCHEMA_GAP_SQL_RESULTS.md` — nơi owner paste kết quả (đang trống).
+> - `docs/V3_PROPOSAL_7_MIGRATION_TOOL_PLAN.md` — plan ⑦ (chưa sửa tooling, chờ GO).
+>
+> **Quyết định tạm (chưa chốt):** KHÔNG kết luận B canonical / A projection cho bảng `posts` khi chưa đủ bằng chứng (runtime A chưa verify — chỉ thấy tên biến trong Portal code). Xem điều kiện GO #3 trong plan ⑦.
+>
+> **Điều kiện GO cho ⑦:** (1) owner chạy `V3_SCHEMA_GAP_SQL_VERIFICATION.sql` + paste kết quả; (2) 4 gap VERIFIED; (3) owner chốt `posts` A/B ownership; (4) owner tạo role read-only cho CI; (5) owner duyệt plan ⑦; (6) drill rollback PASS; (7) V1 baseline nguyên vẹn (đã verify 2026-07-15). NO-GO nếu thiếu #1/#2/#3.
+>
 > **Cách dùng:** Mở phiên Claude Fable 5 **tại worktree V3** (xem đường dẫn dưới). Copy toàn bộ nội dung trong khung `PROMPT` bên dưới và paste vào phiên đó làm tin nhắn đầu tiên.
 >
 > **Điều kiện tiên quyết (owner làm trước khi paste):**
 > 1. Branch `v3/research-20260715` đã push lên origin ✅ (đã xong).
 > 2. Worktree V3 đã tạo ✅ (đã xong): `_worktrees/v3-research-20260715`.
-> 3. `docs/V3_PRODUCTION_SCHEMA_SNAPSHOT.md` đã được owner điền kết quả query production (chưa xong — làm BƯỚC A). Nếu chưa điền, Fable 5 vẫn đọc được transfer doc nhưng phải đánh dấu các giả định schema là `UNVERIFIED` cho tới khi owner điền.
+> 3. `docs/V3_PRODUCTION_SCHEMA_SNAPSHOT.md` đã được owner điền kết quả query production (chưa xong — làm BƯỚC A). Nếu chưa điền, Fable 5 vẫn đọc được transfer doc nhưng phải đánh dấu các giả định schema là `UNVERIFIED` cho tới khi owner điền. **Bổ sung 2026-07-15:** owner cũng cần chạy `docs/V3_SCHEMA_GAP_SQL_VERIFICATION.sql` (4 gap catalog) và paste vào `docs/V3_SCHEMA_GAP_SQL_RESULTS.md` — đây là input bắt buộc cho Đề xuất ⑦.
 
 ---
 
@@ -122,8 +132,9 @@ Chưa sửa code ở lượt này.
 
 ### Thứ tự thao tác cho owner
 1. **BƯỚC A (chỉ owner làm được):** Mở Supabase B SQL Editor → chạy 12 query trong `docs/V3_PRODUCTION_SCHEMA_SNAPSHOT.md` → paste kết quả vào các section → commit (`docs(v3): fill production schema snapshot`) → push.
-2. Mở terminal tại worktree V3 (đường dẫn trên) → chạy `claude` (chọn model Fable 5).
-3. Copy khối `PROMPT` bên trên → paste làm tin nhắn đầu tiên.
+2. **BƯỚC A2 (chỉ owner làm được — mới 2026-07-15):** Cùng SQL Editor → chạy file `docs/V3_SCHEMA_GAP_SQL_VERIFICATION.sql` (4 block, read-only SELECT) → paste result grid vào `docs/V3_SCHEMA_GAP_SQL_RESULTS.md` (theo section heading) → commit (`docs(v3): fill production schema gap SQL results`) → push. Đây là input bắt buộc cho Đề xuất ⑦ (drift allowlist seed + baseline fidelity).
+3. Mở terminal tại worktree V3 (đường dẫn trên) → chạy `claude` (chọn model Fable 5).
+4. Copy khối `PROMPT` bên trên → paste làm tin nhắn đầu tiên.
 
 ### Lưu ý
 - Nếu owner chưa kịp làm BƯỚC A, vẫn paste prompt được — Fable 5 sẽ đọc transfer doc, liệt kê các mục cần verify, và đánh dấu `UNVERIFIED` thay vì đoán.
