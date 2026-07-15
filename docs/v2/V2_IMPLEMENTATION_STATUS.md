@@ -92,6 +92,22 @@ explicitly asks to switch traffic to V2.
   - Finds schema drift: V2 outbox tables exist, but identity-mapping columns on `orders`, `student_enrollments`, and `lessons` are incomplete.
   - Keeps V2 dry-run blocked until `migration_v2_identity_mapping.sql` is reviewed/applied and postflight passes.
 
+## v2/rebuild-20260715 Integration
+
+- S0 base: merged `v2/rebuild-20260714` (RP-1, RP2-A, RP2-B0) and `feat/v2-rp2b1-session-device-guard` (RP2-B1) into a branch cut from `v2/platform-rebuild`. Single conflict `utils/v2-flags.js` resolved as union. Inherited tests pass (RP-1 48, RP2-A 29, RP2-B1 full).
+- S1 RP2-B2: server-side logout endpoint `api/lms/portal.js?endpoint=logout` (`utils/lms-handlers/logout.js`). Idempotent, fail-closed on flag-on, V1-compat on flag-off. 9 tests pass.
+- S2 RP2-B3: admin `reset_session` now requires reason, returns `student_not_found` / `already_revoked` / `revoke_failed`, audits the real reason. Tests pass.
+
+### S3 operator steps (owner-driven, gate on /api/v2/readiness)
+
+1. Backup Supabase B, run `scripts/v2/preflight-v2.sql`.
+2. Apply `migration_v2_sync_outbox.sql` then `migration_v2_identity_mapping.sql` (transactional).
+3. Run `scripts/v2/postflight-v2.sql`; all V2 objects `exists=true`.
+4. Preview env: `V2_OUTBOX_SHADOW_MODE=true` → verify `/api/v2/outbox`.
+5. `V2_PORTAL_PROJECTION_ENABLED=true` + `V2_PORTAL_PROJECTION_DRY_RUN=true` → verify `/api/v2/portal-projection-preview` vs V1.
+6. Owner approves → `V2_DELIVERY_HANDLERS_ENABLED=true`, `V2_PORTAL_PROJECTION_DRY_RUN=false`, keep `V2_DRIVE_WORKER_DRY_RUN=true`.
+7. `/api/v2/readiness` must reach `ready_for_guarded_delivery` for the canary scope.
+
 ## Not Applied Automatically
 
 The following V2 migrations are committed but must not be applied to production
