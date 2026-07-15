@@ -26,7 +26,6 @@
   "tables": [
     { "object": "sync_outbox", "reason": "V2 outbox applied partially; exists in catalog (RLS on, 0 policy), not exposed via REST", "verified_source": "Q10" },
     { "object": "sync_deliveries", "reason": "V2 outbox applied partially; exists in catalog (RLS on, 0 policy)", "verified_source": "Q10" },
-    { "object": "sync_dead_letters", "reason": "V2 outbox partial: NOT created on production; Phase 3 (④) adds it. Allowlisted so the gate does not fail on the absent third table until then", "verified_source": "Q10" },
     { "object": "posts", "reason": "legacy projection living on same Supabase B (1 row); A/B ownership NOT yet decided by owner (GO condition #3)", "verified_source": "Q1" },
     { "object": "spatial_ref_sys", "reason": "PostGIS system table present in catalog", "verified_source": "Block 1" }
   ],
