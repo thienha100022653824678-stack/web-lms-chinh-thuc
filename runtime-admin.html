@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Runtime Switch — Quản trị V1/V2/V3 · Culinary LMS</title>
+  <style>
+    :root {
+      --bg:#0f1115; --card:#181b22; --line:#262b36; --fg:#e6e9ef; --muted:#8b93a7;
+      --ok:#2ecc71; --warn:#f1c40f; --bad:#e74c3c; --accent:#4a9eff; --accent2:#9b6bff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin:0; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      background:var(--bg); color:var(--fg);
+    }
+    header { padding:20px 24px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+    h1 { font-size:18px; margin:0; font-weight:700; }
+    .sub { color:var(--muted); font-size:13px; margin-top:2px; }
+    main { padding:24px; max-width:1180px; margin:0 auto; }
+    .row { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; margin-bottom:18px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
+    .card h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 10px; font-weight:600; }
+    .kv { display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid var(--line); font-size:13px; gap:10px; }
+    .kv:last-child { border-bottom:none; }
+    .kv .k { color:var(--muted); }
+    .kv .v { text-align:right; word-break:break-word; }
+    .pill { display:inline-block; padding:2px 9px; border-radius:999px; font-size:12px; font-weight:600; }
+    .pill.ok { background:rgba(46,204,113,.15); color:var(--ok); }
+    .pill.warn { background:rgba(241,196,15,.15); color:var(--warn); }
+    .pill.bad { background:rgba(231,76,60,.15); color:var(--bad); }
+    .pill.mode { background:rgba(74,158,255,.15); color:var(--accent); }
+    .pill.v2 { background:rgba(155,107,255,.15); color:var(--accent2); }
+    button {
+      background:var(--accent); color:#fff; border:none; padding:9px 16px; border-radius:8px;
+      font-weight:600; cursor:pointer; font-size:13px; transition:opacity .12s, background .12s;
+    }
+    button:disabled { opacity:.45; cursor:default; }
+    button.secondary { background:#262b36; color:var(--fg); }
+    button.danger { background:var(--bad); }
+    button.warn { background:var(--warn); color:#1a1a1a; }
+    button.ghost { background:transparent; border:1px solid var(--line); color:var(--muted); }
+    input { background:var(--bg); border:1px solid var(--line); color:var(--fg); padding:9px 12px; border-radius:8px; font-size:13px; }
+    .err { color:var(--bad); font-size:13px; margin-top:8px; }
+    .ok-note { color:var(--ok); font-size:13px; margin-top:8px; }
+    .muted { color:var(--muted); }
+    code { background:var(--bg); padding:1px 6px; border-radius:5px; font-size:12px; }
+    .gate { padding:6px 0; border-bottom:1px solid var(--line); font-size:12px; display:flex; justify-content:space-between; gap:8px; }
+    .gate:last-child { border-bottom:none; }
+    .gate .name { color:var(--fg); }
+    .gate .st { font-weight:600; white-space:nowrap; }
+    footer { padding:16px 24px; color:var(--muted); font-size:12px; border-top:1px solid var(--line); line-height:1.6; }
+    .switch-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-top:6px; }
+    .switch-grid button { padding:12px; font-size:14px; }
+    .modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; z-index:50; padding:16px; }
+    .modal-backdrop.show { display:flex; }
+    .modal { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:22px; max-width:520px; width:100%; }
+    .modal h3 { margin:0 0 10px; font-size:15px; }
+    .modal .patch { background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:10px; font-size:12px; white-space:pre-wrap; word-break:break-word; margin:10px 0; }
+    .modal .actions { display:flex; gap:10px; justify-content:flex-end; margin-top:14px; flex-wrap:wrap; }
+    .toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .secret-wrap { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .banner { padding:10px 14px; border-radius:8px; font-size:13px; margin-bottom:14px; }
+    .banner.bad { background:rgba(231,76,60,.12); color:var(--bad); border:1px solid rgba(231,76,60,.3); }
+    .banner.ok { background:rgba(46,204,113,.12); color:var(--ok); border:1px solid rgba(46,204,113,.3); }
+    .spinner { display:inline-block; width:13px; height:13px; border:2px solid var(--muted); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; vertical-align:-2px; margin-right:6px; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .bigmode { font-size:26px; font-weight:800; letter-spacing:.02em; }
+    .src { font-size:11px; color:var(--muted); margin-top:6px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Runtime Switch — V1 / V2 / V3</h1>
+      <div class="sub">Quản trị <code>platform_runtime_config</code> · nguồn sự thật từ backend Supabase B · không lưu secret</div>
+    </div>
+    <div class="toolbar">
+      <div class="secret-wrap">
+        <input id="secret" type="password" placeholder="Worker secret (x-v2-worker-secret)" autocomplete="off" style="min-width:240px;" />
+        <button id="loadBtn">Load state</button>
+      </div>
+      <button id="refreshBtn" class="secondary" disabled>Refresh</button>
+    </div>
+  </header>
+
+  <main>
+    <div id="banner" class="banner bad" hidden></div>
+
+    <!-- Runtime state (single source of truth) -->
+    <div class="row">
+      <div class="card">
+        <h2>Runtime state · backend</h2>
+        <div class="bigmode"><span id="effMode" class="pill mode">—</span></div>
+        <div style="margin-top:10px;">
+          <div class="kv"><span class="k">active_mode</span><span class="v" id="activeMode">—</span></div>
+          <div class="kv"><span class="k">effective_mode</span><span class="v" id="effectiveMode">—</span></div>
+          <div class="kv"><span class="k">kill_switch</span><span class="v" id="kill">—</span></div>
+          <div class="kv"><span class="k">v2_shadow_mode</span><span class="v" id="v2shadow">—</span></div>
+          <div class="kv"><span class="k">v3_shadow_mode</span><span class="v" id="v3shadow">—</span></div>
+          <div class="kv"><span class="k">updated_by</span><span class="v" id="updatedBy">—</span></div>
+          <div class="kv"><span class="k">updated_at</span><span class="v" id="updatedAt">—</span></div>
+        </div>
+        <div class="src">Nguồn: <code>GET /api/v2/runtime</code> → <code>platform_runtime_config</code> (Supabase B). UI chỉ hiển thị sau khi backend xác nhận.</div>
+      </div>
+
+      <div class="card">
+        <h2>V2 readiness</h2>
+        <div id="v2Readiness"><span class="muted">Chưa load.</span></div>
+        <div class="src"><code>GET /api/v2/readiness</code> · read-only</div>
+      </div>
+
+      <div class="card">
+        <h2>V3 readiness · diagnostics</h2>
+        <div id="v3Diag"><span class="muted">Chưa load.</span></div>
+        <div class="src"><code>GET /api/v3/diagnostics</code> · read-only</div>
+      </div>
+    </div>
+
+    <!-- Switch panel -->
+    <div class="card" style="margin-bottom:18px;">
+      <h2>Switch panel · POST /api/v2/runtime (worker-secret gated, audit mỗi flip)</h2>
+      <p class="muted" style="font-size:13px; margin:0 0 12px;">
+        Mọi thay đổi đều <b>confirm bằng tay</b> trước khi gửi. UI không tự đổi trạng thái — chỉ cập nhật sau khi backend trả về.
+        Kill switch = ép V1 bất chấp active_mode (rollback tức thì, không redeploy).
+      </p>
+
+      <div style="margin-bottom:14px;">
+        <div class="muted" style="font-size:12px; margin-bottom:6px;">Chọn active_mode:</div>
+        <div class="switch-grid">
+          <button id="setV1" class="secondary" disabled>Set V1 active</button>
+          <button id="setV2" class="secondary" disabled>Set V2 active</button>
+          <button id="setV3" class="secondary" disabled>Set V3 active</button>
+        </div>
+      </div>
+
+      <div style="margin-bottom:14px;">
+        <div class="muted" style="font-size:12px; margin-bottom:6px;">Rollback / kill switch:</div>
+        <div class="switch-grid">
+          <button id="rollbackV1" class="warn" disabled>Rollback → V1</button>
+          <button id="killOn" class="danger" disabled>Kill switch ON</button>
+          <button id="killOff" class="secondary" disabled>Kill switch OFF</button>
+        </div>
+      </div>
+
+      <div>
+        <div class="muted" style="font-size:12px; margin-bottom:6px;">Shadow modes (read-only observe-and-log, không ghi business):</div>
+        <div class="switch-grid">
+          <button id="v2shadowOn" class="secondary" disabled>V2 shadow ON</button>
+          <button id="v2shadowOff" class="secondary" disabled>V2 shadow OFF</button>
+          <button id="v3shadowOn" class="secondary" disabled>V3 shadow ON</button>
+          <button id="v3shadowOff" class="secondary" disabled>V3 shadow OFF</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Raw backend payload</h2>
+      <pre id="raw" class="muted" style="white-space:pre-wrap; font-size:12px; margin:0;">Nhập worker secret rồi bấm “Load state”.</pre>
+    </div>
+  </main>
+
+  <footer>
+    <b>Runtime admin</b> · consumes <code>GET/POST /api/v2/runtime</code>, <code>GET /api/v2/readiness</code>, <code>GET /api/v3/diagnostics</code>.
+    Tất cả đều service-role gated qua <code>x-v2-worker-secret</code> (cùng door V2 worker, không secret mới).
+    Secret chỉ đi trong request header, <b>không bao giờ</b> lưu vào localStorage/sessionStorage/cookie, không log.
+    State chỉ được tin sau khi backend xác nhận — UI không bao giờ tự quyết active_mode.
+    Mỗi flip được ghi vào <code>platform_runtime_config_audit</code>.
+  </footer>
+
+  <!-- Confirm modal -->
+  <div id="modal" class="modal-backdrop">
+    <div class="modal">
+      <h3 id="modalTitle">Xác nhận thay đổi runtime</h3>
+      <div id="modalBody"></div>
+      <div class="patch" id="modalPatch"></div>
+      <div class="muted" style="font-size:12px;">Gõ chính xác mã bên dưới để xác nhận:</div>
+      <input id="modalConfirm" type="text" placeholder="mã xác nhận" autocomplete="off" style="width:100%; margin-top:6px;" />
+      <div id="modalErr" class="err" hidden></div>
+      <div class="actions">
+        <button id="modalCancel" class="ghost">Huỷ</button>
+        <button id="modalOk" class="danger" disabled>Xác nhận &amp; gửi</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    // Self-contained ES module. No build step, no external deps, no remote scripts.
+    // The worker secret is entered by the admin and sent ONLY as a request header.
+    // It is never persisted to any storage and never logged. The UI NEVER decides
+    // active_mode on its own — every state shown is echoed back from the backend
+    // after it confirms the change. Refresh = empty until "Load state" re-reads.
+    const $ = (id) => document.getElementById(id);
+    const SECRET_KEY = "x-v2-worker-secret";
+
+    let pendingAction = null; // { patch, confirmWord, title, body }
+
+    function setBanner(msg, kind) {
+      const b = $("banner");
+      b.hidden = !msg;
+      b.className = "banner " + (kind === "ok" ? "ok" : "bad");
+      b.textContent = msg || "";
+    }
+
+    function pillForMode(mode) {
+      const el = document.createElement("span");
+      el.className = "pill " + (mode === "v2" ? "v2" : "mode");
+      el.textContent = String(mode || "—").toUpperCase();
+      return el;
+    }
+
+    function setText(id, v) { $(id).textContent = v == null ? "—" : String(v); }
+
+    function pillBool(id, value, goodWhenOff, onLabel, offLabel) {
+      const el = $(id);
+      const off = !value;
+      el.textContent = value ? onLabel : offLabel;
+      el.className = "pill " + (off === goodWhenOff ? "ok" : "bad");
+    }
+
+    function secretHeaders(extra) {
+      const h = { [SECRET_KEY]: ($("secret").value || "").trim() };
+      if (extra) Object.assign(h, extra);
+      return h;
+    }
+
+    function setBusy(on) {
+      $("loadBtn").disabled = on;
+      $("refreshBtn").disabled = on || !$("secret").value.trim();
+      document.querySelectorAll(".switch-grid button").forEach((b) => { b.disabled = on || !$("secret").value.trim(); });
+      if (on) $("loadBtn").innerHTML = '<span class="spinner"></span>Loading';
+      else $("loadBtn").textContent = "Load state";
+    }
+
+    async function getJson(url, opts) {
+      const res = await fetch(url, opts);
+      const text = await res.text();
+      let body = null;
+      try { body = text ? JSON.parse(text) : null; } catch { body = { _raw: text }; }
+      return { status: res.status, body };
+    }
+
+    function renderRuntime(cfg) {
+      const config = cfg?.config || {};
+      const eff = cfg?.effective_mode ?? "—";
+      $("effMode").innerHTML = "";
+      $("effMode").appendChild(pillForMode(eff));
+      setText("activeMode", config.active_mode ?? "—");
+      setText("effectiveMode", eff);
+      pillBool("kill", config.kill_switch, true, "ON", "off");
+      pillBool("v2shadow", config.v2_shadow_mode, true, "on", "off");
+      pillBool("v3shadow", config.v3_shadow_mode, true, "on", "off");
+      setText("updatedBy", config.updated_by ?? "—");
+      setText("updatedAt", config.updated_at ?? "—");
+    }
+
+    function gatePill(status) {
+      const map = { pass: "ok", blocked: "bad", review: "warn" };
+      const cls = map[status] || "warn";
+      return `<span class="pill ${cls}">${status}</span>`;
+    }
+
+    function renderV2Readiness(result) {
+      if (!result) { $("v2Readiness").innerHTML = '<span class="muted">—</span>'; return; }
+      const r = result.readiness || {};
+      const gates = result.gates || [];
+      const level = r.level || "—";
+      const ok = r.ok ? "ok" : "bad";
+      let html = `<div class="kv"><span class="k">level</span><span class="v"><span class="pill ${ok}">${level}</span></span></div>`;
+      html += `<div class="kv"><span class="k">summary</span><span class="v" style="font-size:11px;">${(r.summary || "").slice(0,120)}</span></div>`;
+      html += `<div style="margin-top:8px;">`;
+      for (const g of gates) {
+        html += `<div class="gate"><span class="name">${g.name}</span><span class="st">${gatePill(g.status)}</span></div>`;
+      }
+      html += `</div>`;
+      $("v2Readiness").innerHTML = html;
+    }
+
+    function renderV3Diag(result) {
+      if (!result) { $("v3Diag").innerHTML = '<span class="muted">—</span>'; return; }
+      const m = result.metrics || {};
+      const p = m.posture || {}, ob = m.outbox || {}, dv = m.delivery || {};
+      const c = ob.counts || {};
+      let html = `<div class="kv"><span class="k">effective_mode</span><span class="v"><span class="pill mode">${p.effective_mode || "—"}</span></span></div>`;
+      html += `<div class="kv"><span class="k">kill_switch</span><span class="v"><span class="pill ${p.kill_switch ? "bad" : "ok"}">${p.kill_switch ? "ON" : "off"}</span></span></div>`;
+      html += `<div class="kv"><span class="k">rls_enforced</span><span class="v"><span class="pill ${p.rls_enforced ? "ok" : "warn"}">${p.rls_enforced ? "yes" : "no"}</span></span></div>`;
+      html += `<div class="kv"><span class="k">v2_shadow</span><span class="v">${p.v2_shadow ? "on" : "off"}</span></div>`;
+      html += `<div class="kv"><span class="k">v3_shadow</span><span class="v">${p.v3_shadow ? "on" : "off"}</span></div>`;
+      html += `<div class="kv"><span class="k">outbox pending</span><span class="v">${ob.pending ?? "—"}</span></div>`;
+      html += `<div class="kv"><span class="k">outbox delivered</span><span class="v">${c.delivered ?? 0}</span></div>`;
+      html += `<div class="kv"><span class="k">outbox failed</span><span class="v">${c.failed ?? 0}</span></div>`;
+      html += `<div class="kv"><span class="k">outbox dead</span><span class="v">${c.dead_letter ?? 0}</span></div>`;
+      html += `<div class="kv"><span class="k">success rate</span><span class="v">${ob.successRate == null ? "n/a" : (ob.successRate*100).toFixed(1)+"%"}</span></div>`;
+      html += `<div class="kv"><span class="k">deliveries pending</span><span class="v">${dv.pendingDeliveries ?? "—"}</span></div>`;
+      html += `<div class="kv"><span class="k">dead letters</span><span class="v">${dv.deadLetters === -1 ? "table absent" : (dv.deadLetters ?? 0)}</span></div>`;
+      $("v3Diag").innerHTML = html;
+    }
+
+    async function loadAll() {
+      const secret = ($("secret").value || "").trim();
+      if (!secret) { setBanner("Nhập worker secret trước.", "bad"); return; }
+      setBanner(""); setBusy(true);
+      let firstErr = null;
+      try {
+        const [runtime, v2r, v3d] = await Promise.all([
+          getJson("/api/v2/runtime", { method: "GET", headers: secretHeaders() }),
+          getJson("/api/v2/readiness", { method: "GET", headers: secretHeaders() }),
+          getJson("/api/v3/diagnostics", { method: "GET", headers: secretHeaders() }),
+        ]);
+
+        if (runtime.status === 401) firstErr = "Unauthorized — sai worker secret.";
+        else if (!runtime.ok && runtime.status >= 400) firstErr = `runtime: HTTP ${runtime.status}`;
+
+        if (runtime.ok && runtime.body?.ok) renderRuntime(runtime.body);
+        else if (runtime.status === 401) { $("effMode").textContent = "Unauthorized"; }
+
+        if (v2r.ok && v2r.body) renderV2Readiness(v2r.body);
+        else $("v2Readiness").innerHTML = `<span class="muted">readiness: HTTP ${v2r.status}</span>`;
+
+        if (v3d.ok && v3d.body) renderV3Diag(v3d.body);
+        else $("v3Diag").innerHTML = `<span class="muted">diagnostics: HTTP ${v3d.status}</span>`;
+
+        const raw = { runtime: runtime.body, v2_readiness: v2r.body, v3_diagnostics: v3d.body };
+        $("raw").textContent = JSON.stringify(raw, null, 2);
+
+        if (firstErr) setBanner(firstErr, "bad");
+        else setBanner("State loaded từ backend.", "ok");
+      } catch (e) {
+        setBanner("Load thất bại: " + (e?.message || e), "bad");
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    // ── Confirm modal ────────────────────────────────────────────────────────
+    function openModal(action) {
+      pendingAction = action;
+      $("modalTitle").textContent = action.title;
+      $("modalBody").innerHTML = action.body;
+      $("modalPatch").textContent = "POST /api/v2/runtime\n" + JSON.stringify(action.patch, null, 2);
+      $("modalConfirm").value = "";
+      $("modalErr").hidden = true;
+      $("modalOk").disabled = true;
+      $("modal").classList.add("show");
+      $("modalOk").className = action.btnClass || "danger";
+      $("modalOk").textContent = action.btnLabel || "Xác nhận & gửi";
+      setTimeout(() => $("modalConfirm").focus(), 30);
+    }
+    function closeModal() {
+      $("modal").classList.remove("show");
+      pendingAction = null;
+    }
+    $("modalConfirm").addEventListener("input", () => {
+      const ok = $("modalConfirm").value.trim() === (pendingAction?.confirmWord || "");
+      $("modalOk").disabled = !ok;
+      $("modalErr").hidden = true;
+    });
+    $("modalCancel").addEventListener("click", closeModal);
+    $("modal").addEventListener("click", (e) => { if (e.target.id === "modal") closeModal(); });
+
+    async function sendPatch(patch) {
+      setBanner(""); setBusy(true);
+      try {
+        const res = await getJson("/api/v2/runtime", {
+          method: "POST",
+          headers: secretHeaders({ "Content-Type": "application/json" }),
+          body: JSON.stringify(patch),
+        });
+        if (res.status === 401) { setBanner("Unauthorized — sai worker secret.", "bad"); return; }
+        if (!res.ok || res.status >= 400) { setBanner(`Flip thất bại: HTTP ${res.status} ${res.body?.error||""}`, "bad"); return; }
+        if (res.body?.ok && res.body?.config) {
+          renderRuntime(res.body);
+          setBanner("Flip thành công — backend đã xác nhận. Đang refresh readiness/diagnostics…", "ok");
+          // Re-read readiness + diagnostics (state already updated from POST response).
+          const [v2r, v3d] = await Promise.all([
+            getJson("/api/v2/readiness", { method: "GET", headers: secretHeaders() }),
+            getJson("/api/v3/diagnostics", { method: "GET", headers: secretHeaders() }),
+          ]);
+          if (v2r.ok && v2r.body) renderV2Readiness(v2r.body);
+          if (v3d.ok && v3d.body) renderV3Diag(v3d.body);
+          const raw = { runtime: res.body, v2_readiness: v2r.body, v3_diagnostics: v3d.body };
+          $("raw").textContent = JSON.stringify(raw, null, 2);
+          setBanner("Flip thành công — backend đã xác nhận.", "ok");
+        } else {
+          setBanner("Flip không ok: " + (res.body?.error || "unknown"), "bad");
+        }
+      } catch (e) {
+        setBanner("Flip lỗi: " + (e?.message || e), "bad");
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    $("modalOk").addEventListener("click", () => {
+      if (!pendingAction) return;
+      if ($("modalConfirm").value.trim() !== pendingAction.confirmWord) {
+        $("modalErr").hidden = false;
+        $("modalErr").textContent = "Mã xác nhận không khớp.";
+        return;
+      }
+      const patch = pendingAction.patch;
+      closeModal();
+      sendPatch(patch);
+    });
+
+    // ── Button wiring ────────────────────────────────────────────────────────
+    function modeAction(mode) {
+      return {
+        title: `Chuyển active_mode → ${mode.toUpperCase()}`,
+        body: `Sẽ đặt <code>active_mode='${mode}'</code>. Version này trở thành authoritative write path. Các version kia tiếp tục chạy song song (shadow nếu bật).`,
+        patch: { active_mode: mode },
+        confirmWord: mode,
+        btnClass: mode === "v1" ? "warn" : "danger",
+        btnLabel: `Xác nhận → ${mode.toUpperCase()}`,
+      };
+    }
+    $("setV1").addEventListener("click", () => openModal(modeAction("v1")));
+    $("setV2").addEventListener("click", () => openModal(modeAction("v2")));
+    $("setV3").addEventListener("click", () => openModal(modeAction("v3")));
+    $("rollbackV1").addEventListener("click", () => openModal({
+      title: "Rollback → V1",
+      body: `Đặt <code>active_mode='v1'</code>. V1 trở lại authoritative. Không redeploy. (Kill switch vẫn giữ nguyên — bật riêng nếu cần ép V1 bất chấp active_mode.)`,
+      patch: { active_mode: "v1" },
+      confirmWord: "v1",
+      btnClass: "warn",
+      btnLabel: "Xác nhận rollback V1",
+    }));
+    $("killOn").addEventListener("click", () => openModal({
+      title: "Bật kill switch (ép V1)",
+      body: `Đặt <code>kill_switch=true</code>. <b>Effective mode = V1</b> bất chấp active_mode. Đây là escape hatch tức thì, không redeploy.`,
+      patch: { kill_switch: true },
+      confirmWord: "KILL",
+      btnClass: "danger",
+      btnLabel: "Xác nhận KILL switch ON",
+    }));
+    $("killOff").addEventListener("click", () => openModal({
+      title: "Tắt kill switch",
+      body: `Đặt <code>kill_switch=false</code>. Effective mode trở lại theo <code>active_mode</code>. Chỉ tắt khi active_mode đã ở giá trị an toàn.`,
+      patch: { kill_switch: false },
+      confirmWord: "OFF",
+      btnClass: "secondary",
+      btnLabel: "Xác nhận KILL switch OFF",
+    }));
+    $("v2shadowOn").addEventListener("click", () => openModal({
+      title: "V2 shadow ON",
+      body: `Đặt <code>v2_shadow_mode=true</code>. V2 observe-and-log read-only, không ghi business trừ khi active_mode='v2'.`,
+      patch: { v2_shadow_mode: true },
+      confirmWord: "v2-on",
+      btnClass: "secondary",
+      btnLabel: "Xác nhận V2 shadow ON",
+    }));
+    $("v2shadowOff").addEventListener("click", () => openModal({
+      title: "V2 shadow OFF",
+      body: `Đặt <code>v2_shadow_mode=false</code>.`,
+      patch: { v2_shadow_mode: false },
+      confirmWord: "v2-off",
+      btnClass: "secondary",
+      btnLabel: "Xác nhận V2 shadow OFF",
+    }));
+    $("v3shadowOn").addEventListener("click", () => openModal({
+      title: "V3 shadow ON",
+      body: `Đặt <code>v3_shadow_mode=true</code>. V3 observe-and-log read-only, không ghi business trừ khi active_mode='v3'.`,
+      patch: { v3_shadow_mode: true },
+      confirmWord: "v3-on",
+      btnClass: "secondary",
+      btnLabel: "Xác nhận V3 shadow ON",
+    }));
+    $("v3shadowOff").addEventListener("click", () => openModal({
+      title: "V3 shadow OFF",
+      body: `Đặt <code>v3_shadow_mode=false</code>.`,
+      patch: { v3_shadow_mode: false },
+      confirmWord: "v3-off",
+      btnClass: "secondary",
+      btnLabel: "Xác nhận V3 shadow OFF",
+    }));
+
+    $("loadBtn").addEventListener("click", loadAll);
+    $("refreshBtn").addEventListener("click", loadAll);
+    $("secret").addEventListener("keydown", (e) => { if (e.key === "Enter") loadAll(); });
+    // Enable buttons once a secret is typed.
+    $("secret").addEventListener("input", () => {
+      const has = !!$("secret").value.trim();
+      $("refreshBtn").disabled = !has;
+      document.querySelectorAll(".switch-grid button").forEach((b) => { b.disabled = !has; });
+    });
+  </script>
+</body>
+</html>
