@@ -13,8 +13,15 @@ import {
   maybeShadowCoursePublish,
   maybeShadowEnrollmentAccess,
 } from "../utils/v2-outbox-shadow.js";
+import { warmRuntimeConfig } from "../utils/v2-runtime-controller.js";
 
 export default async function handler(req, res) {
+  // Warm the V1/V2 runtime master switch once per request so the
+  // synchronous behavioral gate (isV2ActiveCached) is populated before the
+  // shadow-write helper reads V2_OUTBOX_SHADOW_MODE. Best-effort; never
+  // throws. See utils/v2-runtime-controller.js.
+  await warmRuntimeConfig();
+
   // CORS: server-to-server. We allow requests without an Origin header
   // (Shop → LMS), but reject cross-origin browser calls when the
   // feature flag is on. The INTERNAL_SYNC_SECRET check below remains

@@ -31,12 +31,21 @@ function maybeThrow(stub, table) {
   }
 }
 
-function makeChain(result) {
-  // Read-only, thenable-ish chain. Each method returns the same chain
-  // so callers can do `select().eq(...).maybeSingle()`.
+function makeChain(result, table) {
+  // Read-only + write, thenable-ish chain. Each read method returns the
+  // same chain so callers can do `select().eq(...).maybeSingle()`.
+  // `upsert`/`insert` are supported (additive) so write-path tests
+  // (e.g. v2-runtime-mode endpoint) can exercise the controller's
+  // site_config upsert + admin_audit_logs insert without a real DB.
+  // When `globalThis.__V2RM_SUPABASE_WRITES__` is an array, each write is
+  // recorded as { table, operation, payload } for test assertions.
+  //
+  // Thenable: awaiting a read chain (e.g. `await supabase.from(t).select().in(...)`
+  // without a terminal .maybeSingle) resolves to { data, error }.
   const chain = {
     _result: result,
     eq() { return chain; },
+    in() { return chain; },
     neq() {
       return { order: () => Promise.resolve(chain._result) };
     },
@@ -44,9 +53,32 @@ function makeChain(result) {
     limit() { return Promise.resolve(chain._result); },
     maybeSingle: async () => chain._result,
     single: async () => chain._result,
-    select() { return chain; }
+    select() { return chain; },
+    upsert(data) {
+      recordWrite(table, "upsert", data);
+      // Return a thenable that resolves to the standard { data, error }.
+      return Promise.resolve({ data: null, error: null });
+    },
+    insert(data) {
+      recordWrite(table, "insert", data);
+      return Promise.resolve({ data: null, error: null });
+    },
+    then(resolve, reject) {
+      return Promise.resolve(chain._result).then(resolve, reject);
+    }
   };
   return chain;
+}
+
+function recordWrite(table, operation, payload) {
+  try {
+    const recorder = globalThis.__V2RM_SUPABASE_WRITES__;
+    if (Array.isArray(recorder)) {
+      recorder.push({ table, operation, payload });
+    }
+  } catch {
+    /* best-effort; never let recording break a write */
+  }
 }
 
 function fromStub(table) {
@@ -54,11 +86,11 @@ function fromStub(table) {
   maybeThrow(stub, table);
   const data = clone(stub[table]);
   if (data === undefined || data === null) {
-    return makeChain({ data: null, error: null });
+    return makeChain({ data: null, error: null }, table);
   }
   const isArray = Array.isArray(data);
   const result = isArray ? { data: data.slice(), error: null } : { data, error: null };
-  return makeChain(result);
+  return makeChain(result, table);
 }
 
 const supabase = {

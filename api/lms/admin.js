@@ -17,6 +17,8 @@ import adminDriveRetryHandler from "../../utils/lms-handlers/admin-drive-retry.j
 import adminVerifyMediaHandler from "../../utils/lms-handlers/admin-verify-media.js";
 import adminStudentTraceHandler from "../../utils/lms-handlers/admin-student-trace.js";
 import adminAccountSharingAlertsHandler from "../../utils/lms-handlers/admin-account-sharing-alerts.js";
+import adminRuntimeModeHandler from "../../utils/lms-handlers/admin-runtime-mode.js";
+import { warmRuntimeConfig } from "../../utils/v2-runtime-controller.js";
 
 export const config = {
   api: {
@@ -37,6 +39,13 @@ export const config = {
 };
 
 export default async function handler(req, res) {
+  // Warm the V1/V2 runtime master switch once per request so the
+  // synchronous behavioral gate (isV2ActiveCached) is populated for every
+  // downstream admin handler (e.g. admin-enrollments shadow writes).
+  // Best-effort; never throws. Admin routes are NOT one-device-gated, but
+  // the runtime switch still governs the V2 sync/outbox features they share.
+  await warmRuntimeConfig();
+
   const { endpoint } = req.query || {};
 
   if (endpoint === "auth") {
@@ -95,6 +104,9 @@ export default async function handler(req, res) {
   }
   if (endpoint === "account-sharing-alerts") {
     return adminAccountSharingAlertsHandler(req, res);
+  }
+  if (endpoint === "runtime-mode") {
+    return adminRuntimeModeHandler(req, res);
   }
 
   return res.status(404).json({ success: false, error: "LMS Admin Endpoint not found" });

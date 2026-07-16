@@ -114,6 +114,9 @@
         <button onclick="switchTab('enrollments')" id="tabBtn-enrollments" class="tab-btn flex-grow lg:flex-none flex items-center justify-center lg:justify-start gap-2.5 py-4 lg:py-3 px-5 text-sm font-bold border-b-2 lg:border-b-0 lg:border-l-4 border-transparent text-slate-500 hover:bg-slate-50 transition">
           🔑 Phân Quyền
         </button>
+        <button onclick="switchTab('system')" id="tabBtn-system" class="tab-btn flex-grow lg:flex-none flex items-center justify-center lg:justify-start gap-2.5 py-4 lg:py-3 px-5 text-sm font-bold border-b-2 lg:border-b-0 lg:border-l-4 border-transparent text-slate-500 hover:bg-slate-50 transition">
+          ⚙️ Hệ Thống
+        </button>
       </aside>
 
       <!-- Main Panel Workspace -->
@@ -442,6 +445,71 @@
                 <!-- Dynamically populated -->
               </tbody>
             </table>
+          </div>
+        </div>
+
+        <!-- ── TAB: SYSTEM (V1/V2 runtime switch) ── -->
+        <div id="tabContent-system" class="tab-content hidden flex-grow space-y-6">
+          <!-- Mode switch card -->
+          <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+            <h2 class="text-lg font-extrabold text-slate-800">Chế độ hệ thống (V1 / V2)</h2>
+            <p class="text-xs text-slate-500 mt-1 mb-5 leading-relaxed">
+              Một nút chuyển phiên bản hệ thống. <b>V1</b> = hệ thống hiện tại (mặc định, an toàn).
+              <b>V2</b> = hệ thống mới (đã sẵn sàng canary). Bạn có thể chuyển qua lại V1 ↔ V2 nhiều lần để tự kiểm tra.
+              Chuyển về V1 ngay lập tức rút toàn bộ tính năng V2 (không làm mất dữ liệu). V2 chỉ kích hoạt tính năng
+              khi bạn đã bật flag riêng của từng tính năng; bản thân nút V2 chỉ "cho phép" V2 hoạt động.
+            </p>
+            <div id="runtimeModeStateBox" class="rounded-xl border border-slate-200 bg-slate-50 p-4 mb-5">
+              <div class="flex flex-wrap items-center gap-4">
+                <div class="flex items-center gap-2">
+                  <span class="text-[10px] font-black text-slate-400 uppercase">Chế độ hiện tại</span>
+                  <span id="runtimeModeBadge" class="text-sm font-extrabold px-3 py-1 rounded-full bg-slate-200 text-slate-700">…</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-[10px] font-black text-slate-400 uppercase">Hiệu lực</span>
+                  <span id="runtimeEffectiveBadge" class="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-200 text-slate-600">…</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-[10px] font-black text-slate-400 uppercase">Kill switch</span>
+                  <span id="runtimeKillBadge" class="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-200 text-slate-600">…</span>
+                </div>
+                <div class="flex items-center gap-2 ml-auto">
+                  <button onclick="loadRuntimeMode()" class="text-xs font-bold text-slate-500 hover:text-brandGreen transition">↻ Làm mới</button>
+                </div>
+              </div>
+              <p id="runtimeModeSource" class="text-[10px] text-slate-400 mt-2">Nguồn: …</p>
+            </div>
+            <div class="flex flex-wrap gap-3">
+              <button id="runtimeBtnV1" onclick="setRuntimeMode('v1')" class="flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-extrabold border-2 border-slate-200 bg-white text-slate-600 hover:border-slate-300 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                <span class="text-base">🟢</span> V1 (Hệ thống hiện tại)
+              </button>
+              <button id="runtimeBtnV2" onclick="setRuntimeMode('v2')" class="flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-extrabold border-2 border-slate-200 bg-white text-slate-600 hover:border-slate-300 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                <span class="text-base">🧪</span> V2 (Hệ thống mới)
+              </button>
+            </div>
+            <p id="runtimeModeMsg" class="text-xs font-bold text-amber-600 min-h-[16px] mt-3"></p>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+            <h2 class="text-base font-extrabold text-slate-800">⛔ Kill switch (khẩn cấp)</h2>
+            <p class="text-xs text-slate-500 mt-1 mb-4 leading-relaxed">
+              Bật kill switch để ép hệ thống về V1 ngay lập tức, bất kể chế độ đang cài đặt.
+              Dùng khi V2 bị lỗi và cần dừng khẩn cấp. Tắt lại để quay về chế độ thường.
+            </p>
+            <div class="flex flex-wrap gap-3">
+              <button id="runtimeKillOnBtn" onclick="setRuntimeKillSwitch(true)" class="px-4 py-2.5 rounded-xl text-sm font-bold border-2 border-red-200 bg-red-50 text-red-700 hover:bg-red-100 transition disabled:opacity-50">Bật kill switch (ép V1)</button>
+              <button id="runtimeKillOffBtn" onclick="setRuntimeKillSwitch(false)" class="px-4 py-2.5 rounded-xl text-sm font-bold border-2 border-slate-200 bg-white text-slate-600 hover:border-slate-300 transition disabled:opacity-50">Tắt kill switch</button>
+            </div>
+            <p id="runtimeKillMsg" class="text-xs font-bold text-amber-600 min-h-[16px] mt-3"></p>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+            <h2 class="text-base font-extrabold text-slate-800">Trạng thái flag V2</h2>
+            <p class="text-xs text-slate-500 mt-1 mb-4">
+              <b>configured</b> = flag đang set trên môi trường (raw env). <b>enabled</b> = thực sự hiệu lực sau nút V1/V2.
+              Khi chế độ = V1, mọi flag V2 đều <b>enabled = false</b> dù configured = true.
+            </p>
+            <div id="runtimeFlagGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-xs"></div>
           </div>
         </div>
 
@@ -906,6 +974,155 @@
       }
     }
 
+    // ── Runtime mode (V1/V2 switch) ────────────────────────────────────────
+    // Backed by /api/lms/admin?endpoint=runtime-mode (DB site_config row).
+    // The switch is restrict-only: V1 forces all V2 features off; V2 permits
+    // them (each still gated by its own env flag). See utils/v2-runtime-controller.js.
+    let runtimeModeLoading = false;
+    const RUNTIME_ENDPOINT = "/api/lms/admin?endpoint=runtime-mode";
+
+    function runtimeBadgeClass(active, on) {
+      return on
+        ? "bg-emerald-100 text-emerald-700"
+        : "bg-slate-200 text-slate-600";
+    }
+
+    function renderRuntimeMode(state) {
+      const mode = String(state.activeMode || "v1").toLowerCase();
+      const effective = Boolean(state.effective);
+      const kill = Boolean(state.killSwitch);
+      const badge = document.getElementById("runtimeModeBadge");
+      if (badge) {
+        badge.textContent = mode === "v2" ? "V2" : "V1";
+        badge.className = "text-sm font-extrabold px-3 py-1 rounded-full " + (mode === "v2" ? "bg-indigo-100 text-indigo-700" : "bg-emerald-100 text-emerald-700");
+      }
+      const eff = document.getElementById("runtimeEffectiveBadge");
+      if (eff) {
+        eff.textContent = effective ? "V2 đang hoạt động" : "V1 đang hoạt động";
+        eff.className = "text-xs font-bold px-2.5 py-1 rounded-full " + runtimeBadgeClass(mode === "v2", effective);
+      }
+      const kb = document.getElementById("runtimeKillBadge");
+      if (kb) {
+        kb.textContent = kill ? "BẬT (ép V1)" : "Tắt";
+        kb.className = "text-xs font-bold px-2.5 py-1 rounded-full " + (kill ? "bg-red-100 text-red-700" : "bg-slate-200 text-slate-600");
+      }
+      const src = document.getElementById("runtimeModeSource");
+      if (src) src.textContent = "Nguồn: " + (state.source || "—") + (state.ok === false ? " (lỗi đọc DB — đang ở V1 an toàn)" : "");
+
+      const btnV1 = document.getElementById("runtimeBtnV1");
+      const btnV2 = document.getElementById("runtimeBtnV2");
+      if (btnV1 && btnV2) {
+        const v1Active = mode === "v1" && !kill;
+        const v2Active = mode === "v2" && !kill;
+        btnV1.classList.toggle("border-brandGreen", v1Active);
+        btnV1.classList.toggle("text-brandGreen", v1Active);
+        btnV2.classList.toggle("border-indigo-500", v2Active);
+        btnV2.classList.toggle("text-indigo-600", v2Active);
+      }
+      const killOn = document.getElementById("runtimeKillOnBtn");
+      const killOff = document.getElementById("runtimeKillOffBtn");
+      if (killOn) killOn.classList.toggle("border-red-500", kill);
+      if (killOff) killOff.classList.toggle("border-slate-400", !kill);
+
+      renderRuntimeFlags(state.flags || {});
+    }
+
+    function renderRuntimeFlags(flags) {
+      const grid = document.getElementById("runtimeFlagGrid");
+      if (!grid) return;
+      const entries = Object.entries(flags || {});
+      if (entries.length === 0) {
+        grid.innerHTML = '<div class="text-slate-400 col-span-full">Không có flag V2.</div>';
+        return;
+      }
+      grid.innerHTML = entries.map(([key, info]) => {
+        const cfg = info?.configured ? "✅ configured" : "⚪ configured";
+        const enb = info?.enabled ? "🟢 enabled" : "⚪ enabled";
+        const cfgCls = info?.configured ? "text-emerald-700 bg-emerald-50" : "text-slate-400 bg-slate-50";
+        const enbCls = info?.enabled ? "text-emerald-700 bg-emerald-50" : "text-slate-400 bg-slate-50";
+        return `<div class="rounded-lg border border-slate-200 p-2.5">
+          <div class="font-bold text-slate-700 truncate">${escapeHtml(key)}</div>
+          <div class="text-[10px] text-slate-400 truncate">${escapeHtml(info?.envName || "")}</div>
+          <div class="flex gap-1.5 mt-1.5">
+            <span class="px-1.5 py-0.5 rounded ${cfgCls} font-bold">${cfg}</span>
+            <span class="px-1.5 py-0.5 rounded ${enbCls} font-bold">${enb}</span>
+          </div>
+        </div>`;
+      }).join("");
+    }
+
+    async function loadRuntimeMode() {
+      if (runtimeModeLoading) return;
+      runtimeModeLoading = true;
+      try {
+        const res = await fetch(RUNTIME_ENDPOINT, { method: "GET", headers: authHeaders() });
+        const d = await res.json();
+        if (res.ok && d.success) {
+          renderRuntimeMode(d);
+          const msg = document.getElementById("runtimeModeMsg");
+          if (msg) msg.textContent = "";
+        } else {
+          const msg = document.getElementById("runtimeModeMsg");
+          if (msg) msg.textContent = d.error || "Không tải được trạng thái hệ thống.";
+        }
+      } catch (err) {
+        const msg = document.getElementById("runtimeModeMsg");
+        if (msg) msg.textContent = "Lỗi kết nối đến endpoint chế độ hệ thống.";
+      } finally {
+        runtimeModeLoading = false;
+      }
+    }
+
+    async function setRuntimeMode(mode) {
+      if (!confirm(`Chuyển hệ thống sang ${mode === "v2" ? "V2 (hệ thống mới)" : "V1 (hệ thống hiện tại)"}?\n\nV2 chỉ kích hoạt tính năng khi flag riêng đã bật. V1 rút toàn bộ tính năng V2 ngay lập tức (không mất dữ liệu).`)) return;
+      const msg = document.getElementById("runtimeModeMsg");
+      if (msg) { msg.textContent = "Đang chuyển…"; msg.className = "text-xs font-bold text-amber-600 min-h-[16px] mt-3"; }
+      try {
+        const res = await fetch(RUNTIME_ENDPOINT, {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify({ action: "set_mode", mode })
+        });
+        const d = await res.json();
+        if (res.ok && d.success) {
+          if (msg) { msg.textContent = `Đã chuyển sang ${d.activeMode === "v2" ? "V2" : "V1"}.`; msg.className = "text-xs font-bold text-emerald-600 min-h-[16px] mt-3"; }
+          await loadRuntimeMode();
+          toast(`Hệ thống đã chuyển sang ${d.activeMode === "v2" ? "V2" : "V1"}`, "success");
+        } else {
+          if (msg) { msg.textContent = d.error || "Chuyển chế độ thất bại."; msg.className = "text-xs font-bold text-red-600 min-h-[16px] mt-3"; }
+          toast(d.error || "Chuyển chế độ thất bại", "error");
+        }
+      } catch (err) {
+        if (msg) { msg.textContent = "Lỗi kết nối khi chuyển chế độ."; msg.className = "text-xs font-bold text-red-600 min-h-[16px] mt-3"; }
+        toast("Lỗi kết nối khi chuyển chế độ", "error");
+      }
+    }
+
+    async function setRuntimeKillSwitch(enable) {
+      if (!confirm(enable ? "Bật kill switch? Hệ thống ép về V1 ngay lập tức." : "Tắt kill switch? Hệ thống quay về chế độ thường.")) return;
+      const msg = document.getElementById("runtimeKillMsg");
+      if (msg) msg.textContent = "Đang cập nhật…";
+      try {
+        const res = await fetch(RUNTIME_ENDPOINT, {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify({ action: "set_kill_switch", killSwitch: enable })
+        });
+        const d = await res.json();
+        if (res.ok && d.success) {
+          if (msg) { msg.textContent = `Kill switch: ${d.killSwitch ? "BẬT" : "Tắt"}.`; msg.className = "text-xs font-bold text-emerald-600 min-h-[16px] mt-3"; }
+          await loadRuntimeMode();
+          toast(`Kill switch ${d.killSwitch ? "BẬT (ép V1)" : "Tắt"}`, "success");
+        } else {
+          if (msg) { msg.textContent = d.error || "Cập nhật kill switch thất bại."; msg.className = "text-xs font-bold text-red-600 min-h-[16px] mt-3"; }
+          toast(d.error || "Cập nhật kill switch thất bại", "error");
+        }
+      } catch (err) {
+        if (msg) { msg.textContent = "Lỗi kết nối khi cập nhật kill switch."; msg.className = "text-xs font-bold text-red-600 min-h-[16px] mt-3"; }
+        toast("Lỗi kết nối khi cập nhật kill switch", "error");
+      }
+    }
+
     // ── Global Autocomplete Instances ───────────────────────────────────────
     let enrollCourseFilterAutocomplete = null;
     let bulkEnrollCourseAutocomplete = null;
@@ -976,6 +1193,8 @@
       } else if (tabId === "enrollments") {
         const search = document.getElementById("enrollSearchInput") ? document.getElementById("enrollSearchInput").value.trim() : "";
         loadEnrollments(selectedCourseFilter, search);
+      } else if (tabId === "system") {
+        loadRuntimeMode();
       }
     }
 

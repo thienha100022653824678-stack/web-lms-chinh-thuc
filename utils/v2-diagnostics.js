@@ -1,5 +1,6 @@
 import { supabase } from './supabase.js';
-import { getV2RuntimeMode, isV2FlagEnabled, V2_FLAGS } from './v2-flags.js';
+import { getV2RuntimeMode, isV2FlagConfigured, isV2FlagEnabled, V2_FLAGS } from './v2-flags.js';
+import { getRuntimeSnapshot } from './v2-runtime-controller.js';
 
 const REQUIRED_V2_TABLES = [
   'sync_outbox',
@@ -118,14 +119,22 @@ async function getOutboxHealth() {
   }
 }
 
-function getFlagSnapshot() {
+function getFlagSnapshot(activeMode) {
   return {
     runtimeMode: getV2RuntimeMode(),
+    // The runtime master switch (DB-backed v1/v2). `activeMode` is the
+    // resolved mode ('v1' | 'v2'); `effective` is what the behavioral gate
+    // actually returns (v2 only when mode=v2 AND kill switch off).
+    activeMode,
     flags: Object.fromEntries(
       Object.entries(V2_FLAGS).map(([key, envName]) => [
         key,
         {
           envName,
+          // `configured` = raw env flag (what the operator set), reported
+          // even when the platform is in v1 so the admin can see posture.
+          configured: isV2FlagConfigured(envName),
+          // `enabled` = effective behavioral state after the runtime gate.
           enabled: isV2FlagEnabled(envName),
         },
       ])
@@ -151,6 +160,16 @@ function summarizeMigrationStatus(tableChecks, columnChecks) {
 }
 
 export async function runV2Diagnostics() {
+  // Resolve the runtime master switch once so the flag snapshot reports the
+  // effective mode + per-flag configured/enabled state consistently. Never
+  // throws; degrades to a fail-closed v1 snapshot on DB error.
+  const runtimeSnapshot = await getRuntimeSnapshot().catch(() => ({
+    activeMode: 'v1',
+    killSwitch: false,
+    ok: false,
+    source: 'diagnostics_error',
+  }));
+
   const [tableChecks, columnChecks, outboxHealth] = await Promise.all([
     Promise.all(REQUIRED_V2_TABLES.map(checkTable)),
     Promise.all(REQUIRED_COLUMN_CHECKS.map(checkColumns)),
@@ -163,7 +182,8 @@ export async function runV2Diagnostics() {
     ok: migrationStatus.ok,
     mode: 'read_only',
     generatedAt: new Date().toISOString(),
-    flags: getFlagSnapshot(),
+    runtime: runtimeSnapshot,
+    flags: getFlagSnapshot(runtimeSnapshot.activeMode),
     migrations: {
       ok: migrationStatus.ok,
       tableChecks,
