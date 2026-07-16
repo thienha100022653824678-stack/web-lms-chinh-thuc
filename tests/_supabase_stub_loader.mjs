@@ -63,6 +63,19 @@ function makeChain(result, table) {
       recordWrite(table, "insert", data);
       return Promise.resolve({ data: null, error: null });
     },
+    // `update` returns the chain so callers can chain `.eq().eq()` and
+    // then `await` the chain (thenable → { data, error }). Some write-path
+    // handlers (e.g. verify-entry-token stale-session expiry) fire an
+    // `update().eq().eq()` before returning; without this method the stub
+    // threw "update is not a function" and masked the real 401 under a 500.
+    update(data) {
+      recordWrite(table, "update", data);
+      return chain;
+    },
+    delete() {
+      recordWrite(table, "delete", null);
+      return chain;
+    },
     then(resolve, reject) {
       return Promise.resolve(chain._result).then(resolve, reject);
     }
