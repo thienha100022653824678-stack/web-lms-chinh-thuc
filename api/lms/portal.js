@@ -4,8 +4,15 @@ import publicConfigHandler from "../../utils/lms-handlers/public-config.js";
 import publicLessonHandler from "../../utils/lms-handlers/public-lesson.js";
 import verifyEntryTokenHandler from "../../utils/lms-handlers/verify-entry-token.js";
 import logoutHandler from "../../utils/lms-handlers/logout.js";
+import { warmRuntimeConfig } from "../../utils/v2-runtime-controller.js";
 
 export default async function handler(req, res) {
+  // Warm the V1/V2 runtime master switch once per request so the
+  // synchronous behavioral gate (isV2ActiveCached) is populated for every
+  // downstream handler in this invocation. Fail-open on cold cache; the
+  // warm is best-effort and never throws. See utils/v2-runtime-controller.js.
+  await warmRuntimeConfig();
+
   const { endpoint } = req.query || {};
 
   if (endpoint === "course-data") {
