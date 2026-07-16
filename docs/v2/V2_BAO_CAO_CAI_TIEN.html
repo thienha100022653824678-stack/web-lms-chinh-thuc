@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Báo cáo cải tiến hệ thống — Phiên bản V2</title>
+  <meta name="description" content="Báo cáo dễ hiểu cho đối tác: những thay đổi, cải tiến và lợi ích của phiên bản V2." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brandGreen: '#2A4B2A', brandGreenLight: '#3E6B3E', brandOrange: '#D96B27', brandCream: '#FCF8F2', brandGray: '#F5EFEB',
+          },
+          fontFamily: { sans: ['"Be Vietnam Pro"', 'sans-serif'] }
+        }
+      }
+    }
+  </script>
+  <style>
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Be Vietnam Pro', sans-serif; background: #f8fafc; }
+    .anchor { scroll-margin-top: 88px; }
+    .toc-link { transition: all .12s; }
+    .toc-link:hover { color: #2A4B2A; }
+    .toc-link.active { color: #2A4B2A; font-weight: 700; border-left-color: #2A4B2A; background: #f5efeb; }
+    .callout { border-radius: 14px; padding: 14px 16px; margin: 14px 0; font-size: 14px; line-height: 1.6; }
+    .callout-title { font-weight: 800; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+    .callout-warn { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+    .callout-safe { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }
+    .callout-info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+    .callout-good { background: #f5f3ff; border: 1px solid #ddd6fe; color: #5b21b6; }
+    table { border-collapse: collapse; }
+    .benefit-card { transition: transform .15s, box-shadow .15s; }
+    .benefit-card:hover { transform: translateY(-2px); box-shadow: 0 10px 25px -10px rgba(0,0,0,.15); }
+    @media print {
+      .no-print { display: none !important; }
+      .anchor { scroll-margin-top: 0; }
+      main { margin: 0 !important; max-width: 100% !important; }
+      .callout, .benefit-card { break-inside: avoid; }
+      body { background: white; }
+      .print-title { display: block !important; }
+      .benefit-card:hover { transform: none; box-shadow: none; }
+    }
+    .print-title { display: none; }
+  </style>
+</head>
+<body class="text-slate-800">
+
+  <!-- Sticky top bar -->
+  <header class="no-print sticky top-0 z-40 bg-[#1e293b] text-white h-14 flex items-center justify-between px-4 sm:px-6 shadow-md">
+    <div class="flex items-center gap-2 min-w-0">
+      <span class="text-xl">🍳</span>
+      <span class="font-extrabold tracking-tight text-sm sm:text-base truncate">Báo cáo cải tiến — Phiên bản V2</span>
+    </div>
+    <div class="flex items-center gap-2 shrink-0">
+      <a href="https://www.daubepnho.store/docs/v2/V2_USER_GUIDE_SWITCH.html" target="_blank" rel="noopener" class="bg-brandGreen hover:bg-brandGreenLight text-white text-xs font-bold px-3 py-1.5 rounded-lg transition">Hướng dẫn dùng ↗</a>
+      <button onclick="window.print()" class="bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition">🖨️ In / PDF</button>
+    </div>
+  </header>
+
+  <!-- Print-only title -->
+  <div class="print-title px-6 pt-6">
+    <h1 class="text-2xl font-black text-brandGreen">Báo cáo cải tiến hệ thống — Phiên bản V2</h1>
+    <p class="text-xs text-slate-500">16/07/2026 · Hệ thống học trực tuyến (LMS) · daubepnho.store</p>
+  </div>
+
+  <div class="max-w-6xl mx-auto px-0 flex flex-col lg:flex-row gap-0">
+
+    <!-- Left TOC -->
+    <aside class="no-print lg:w-60 lg:shrink-0 lg:sticky lg:top-14 lg:self-start">
+      <nav class="bg-white lg:bg-transparent border-b lg:border-b-0 lg:border-r border-slate-200 p-4 lg:py-6 lg:px-4">
+        <p class="hidden lg:block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Mục lục</p>
+        <ul class="flex lg:flex-col gap-1 lg:gap-0.5 text-sm overflow-x-auto lg:overflow-visible">
+          <li><a href="#tom-tat" class="toc-link block px-3 py-2 lg:py-1.5 rounded-lg border-l-4 border-transparent text-slate-600 whitespace-nowrap">1. Tóm tắt 30 giây</a></li>
+          <li><a href="#van-de" class="toc-link block px-3 py-2 lg:py-1.5 rounded-lg border-l-4 border-transparent text-slate-600 whitespace-nowrap">2. Vấn đề cũ</a></li>
+          <li><a href="#cai-tien" class="toc-link block px-3 py-2 lg:py-1.5 rounded-lg border-l-4 border-transparent text-slate-600 whitespace-nowrap">3. Cải tiến chính</a></li>
+          <li><a href="#nut-lui" class="toc-link block px-3 py-2 lg:py-1.5 rounded-lg border-l-4 border-transparent text-slate-600 whitespace-nowrap">4. Nút lùi an toàn</a></li>
+          <li><a href="#san-sang" class="toc-link block px-3 py-2 lg:py-1.5 rounded-lg border-l-4 border-transparent text-slate-600 whitespace-nowrap">5. Mức sẵn sàng</a></li>
+          <li><a href="#lo-trinh" class="toc-link block px-3 py-2 lg:py-1.5 rounded-lg border-l-4 border-transparent text-slate-600 whitespace-nowrap">6. Lộ trình đề xuất</a></li>
+          <li><a href="#cam-ket" class="toc-link block px-3 py-2 lg:py-1.5 rounded-lg border-l-4 border-transparent text-slate-600 whitespace-nowrap">7. Cam kết an toàn</a></li>
+          <li><a href="#ket-luan" class="toc-link block px-3 py-2 lg:py-1.5 rounded-lg border-l-4 border-transparent text-slate-600 whitespace-nowrap">8. Kết luận</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <!-- Main -->
+    <main class="flex-1 min-w-0 px-4 sm:px-8 py-6 sm:py-10 max-w-3xl">
+
+      <div class="no-print mb-8">
+        <h1 class="text-2xl sm:text-3xl font-black text-brandGreen">Báo cáo cải tiến hệ thống</h1>
+        <p class="text-base text-slate-500 mt-1">Phiên bản V2 — dành cho đối tác / người dùng</p>
+        <p class="text-xs text-slate-400 mt-2">16/07/2026 · Hệ thống học trực tuyến (LMS) · <code class="inline bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">daubepnho.store</code></p>
+      </div>
+
+      <!-- Hero -->
+      <div class="bg-gradient-to-br from-brandGreen to-brandGreenLight text-white rounded-3xl p-6 sm:p-8 mb-10 shadow-lg">
+        <p class="text-sm font-bold text-emerald-100 uppercase tracking-wider mb-2">Bản tóm tắt trong 30 giây</p>
+        <p class="text-lg sm:text-xl font-bold leading-relaxed mb-4">V2 nâng cấp lớn hệ thống học trực tuyến, tập trung vào <u class="decoration-amber-300 decoration-4 underline-offset-4">bảo mật tài khoản</u>, <u class="decoration-amber-300 decoration-4 underline-offset-4">vận hành tin cậy</u>, và <u class="decoration-amber-300 decoration-4 underline-offset-4">nâng cấp an toàn</u>.</p>
+        <p class="text-sm text-emerald-50 leading-relaxed">Quan trọng nhất: hệ thống cũ (V1) vẫn nguyên vẹn và luôn sẵn sàng — nên việc nâng cấp gần như không có rủi ro.</p>
+      </div>
+
+      <!-- 1. Tóm tắt -->
+      <section id="tom-tat" class="anchor mb-10">
+        <h2 class="text-xl font-extrabold text-slate-800 mb-3">1. Tóm tắt trong 30 giây</h2>
+        <p class="text-sm text-slate-700 mb-3">V2 là bản nâng cấp lớn của hệ thống học trực tuyến, tập trung vào <b>3 điều</b>:</p>
+        <div class="grid sm:grid-cols-3 gap-3">
+          <div class="benefit-card bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <div class="text-2xl mb-1">🔒</div>
+            <p class="font-extrabold text-slate-800 text-sm">Bảo mật chặt hơn</p>
+            <p class="text-xs text-slate-500 mt-1">Chống chia sẻ tài khoản — mỗi học viên chỉ học trên một thiết bị tại một thời điểm.</p>
+          </div>
+          <div class="benefit-card bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <div class="text-2xl mb-1">🔁</div>
+            <p class="font-extrabold text-slate-800 text-sm">Vận hành tin cậy</p>
+            <p class="text-xs text-slate-500 mt-1">Dữ liệu đồng bộ chính xác giữa các hệ thống, không thất lạc.</p>
+          </div>
+          <div class="benefit-card bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <div class="text-2xl mb-1">🛟</div>
+            <p class="font-extrabold text-slate-800 text-sm">Nâng cấp an toàn</p>
+            <p class="text-xs text-slate-500 mt-1">Bật/tắt bằng một nút, quay lại ngay nếu cần, không mất dữ liệu.</p>
+          </div>
+        </div>
+        <div class="callout callout-safe mt-4">
+          <div class="callout-title">✅ Điểm cốt lõi</div>
+          V2 được bật <b>có kiểm soát</b>. Hệ thống cũ (V1) vẫn nguyên vẹn và luôn sẵn sàng, nên việc nâng cấp gần như không có rủi ro.
+        </div>
+      </section>
+
+      <!-- 2. Vấn đề cũ -->
+      <section id="van-de" class="anchor mb-10">
+        <h2 class="text-xl font-extrabold text-slate-800 mb-3">2. Vấn đề của phiên bản cũ (V1)</h2>
+        <p class="text-sm text-slate-700 mb-3">Trước khi có V2, hệ thống gặp một số điểm yếu thường thấy ở các nền tảng khóa học:</p>
+        <div class="overflow-x-auto rounded-2xl border border-slate-200 shadow-sm">
+          <table class="w-full text-left text-sm bg-white">
+            <thead class="bg-slate-50 text-slate-500 text-xs font-bold uppercase">
+              <tr><th class="p-4 w-1/2">Vấn đề</th><th class="p-4">Hậu quả thực tế</th></tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 align-top">
+              <tr><td class="p-4">Một tài khoản đăng nhập được ở nhiều nơi cùng lúc</td><td class="p-4">Học viên <b>chia sẻ tài khoản</b> cho nhiều người → thất thu doanh thu</td></tr>
+              <tr><td class="p-4">Đăng xuất chưa dứt điểm phía máy chủ</td><td class="p-4">Đóng trình duyệt không thực sự thoát → khó kiểm soát phiên học</td></tr>
+              <tr><td class="p-4">Đồng bộ dữ liệu chưa có "lưới an toàn"</td><td class="p-4">Khi có sự cố mạng, một vài đơn/quyền học có thể lệch, khó truy vết</td></tr>
+              <tr><td class="p-4">Nâng cấp là việc "một chiều", khó lùi</td><td class="p-4">Mỗi lần đổi hệ thống đều tiềm ẩn rủi ro gián đoạn</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="text-sm text-slate-600 mt-3">V2 được xây để giải quyết đúng những điểm này.</p>
+      </section>
+
+      <!-- 3. Cải tiến chính -->
+      <section id="cai-tien" class="anchor mb-10">
+        <h2 class="text-xl font-extrabold text-slate-800 mb-3">3. Những cải tiến chính của V2</h2>
+
+        <div class="space-y-4">
+
+          <!-- 3.1 -->
+          <div class="benefit-card bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+            <div class="flex items-start gap-3">
+              <div class="text-2xl shrink-0">📱</div>
+              <div class="min-w-0">
+                <h3 class="font-extrabold text-slate-800">3.1. Khóa "một tài khoản — một thiết bị"</h3>
+                <p class="text-sm text-slate-600 mt-1"><b>Trước:</b> một Gmail mở lớp học trên nhiều máy cùng lúc. <b>Giờ (V2):</b> mỗi Gmail chỉ giữ <b>một phiên học đang hoạt động</b>. Nếu tài khoản đang dùng ở máy A, máy B sẽ <b>bị chặn</b> với thông báo: <i>"Tài khoản đang được sử dụng trên thiết bị khác."</i></p>
+                <div class="callout callout-good mt-2 mb-0">
+                  <div class="callout-title">💎 Lợi ích</div>
+                  Chống chia sẻ tài khoản — bảo vệ doanh thu. Học viên thật không bị phiền: chuyển máy chỉ cần đăng xuất máy cũ. Không "đá" người đang học giữa chừng.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3.2 -->
+          <div class="benefit-card bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+            <div class="flex items-start gap-3">
+              <div class="text-2xl shrink-0">🚪</div>
+              <div class="min-w-0">
+                <h3 class="font-extrabold text-slate-800">3.2. Đăng xuất dứt điểm</h3>
+                <p class="text-sm text-slate-600 mt-1"><b>Trước:</b> đóng tab không thực sự kết thúc phiên phía máy chủ. <b>Giờ (V2):</b> khi bấm đăng xuất, hệ thống <b>thu hồi phiên ngay tại máy chủ</b>. Thiết bị khác đăng nhập lại được ngay.</p>
+                <div class="callout callout-good mt-2 mb-0">
+                  <div class="callout-title">💎 Lợi ích</div>
+                  Kiểm soát phiên học chính xác, hỗ trợ trực tiếp cho tính năng "một thiết bị".
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3.3 -->
+          <div class="benefit-card bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+            <div class="flex items-start gap-3">
+              <div class="text-2xl shrink-0">🧰</div>
+              <div class="min-w-0">
+                <h3 class="font-extrabold text-slate-800">3.3. Hỗ trợ xử lý khi học viên mất thiết bị</h3>
+                <p class="text-sm text-slate-600 mt-1"><b>Giờ (V2):</b> quản trị viên có thể <b>thu hồi phiên của một học viên</b> (khi mất máy, quên đăng xuất, phiên bị treo). Mỗi lần thu hồi <b>bắt buộc ghi lý do</b>, <b>lưu nhật ký đầy đủ</b>, và học viên <b>tự đăng nhập lại</b> trên thiết bị mới.</p>
+                <div class="callout callout-good mt-2 mb-0">
+                  <div class="callout-title">💎 Lợi ích</div>
+                  Xử lý sự cố nhanh, minh bạch, kiểm tra lại được về sau.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3.4 -->
+          <div class="benefit-card bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+            <div class="flex items-start gap-3">
+              <div class="text-2xl shrink-0">👁️</div>
+              <div class="min-w-0">
+                <h3 class="font-extrabold text-slate-800">3.4. Theo dõi dấu hiệu chia sẻ tài khoản</h3>
+                <p class="text-sm text-slate-600 mt-1"><b>Giờ (V2):</b> hệ thống âm thầm ghi nhận dấu hiệu bất thường (đổi thiết bị liên tục, đăng nhập từ nhiều nơi...) và <b>cảnh báo cho quản trị viên</b> để xem xét — <b>không tự động chặn ai</b>.</p>
+                <div class="callout callout-good mt-2 mb-0">
+                  <div class="callout-title">💎 Lợi ích</div>
+                  Phát hiện sớm hành vi chia sẻ tài khoản mà không làm phiền học viên thật.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3.5 -->
+          <div class="benefit-card bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+            <div class="flex items-start gap-3">
+              <div class="text-2xl shrink-0">🔐</div>
+              <div class="min-w-0">
+                <h3 class="font-extrabold text-slate-800">3.5. Bảo mật kết nối chặt hơn</h3>
+                <p class="text-sm text-slate-600 mt-1"><b>Giờ (V2):</b> hệ thống chỉ chấp nhận yêu cầu từ những địa chỉ web đã được phê duyệt (danh sách trắng), và các "chìa khóa" nội bộ được kiểm tra nghiêm ngặt — thiếu cấu hình thì <b>từ chối an toàn</b> thay vì chạy sai.</p>
+                <div class="callout callout-good mt-2 mb-0">
+                  <div class="callout-title">💎 Lợi ích</div>
+                  Giảm rủi ro bị lạm dụng từ bên thứ ba, an toàn hơn cho toàn hệ thống.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3.6 -->
+          <div class="benefit-card bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+            <div class="flex items-start gap-3">
+              <div class="text-2xl shrink-0">📦</div>
+              <div class="min-w-0">
+                <h3 class="font-extrabold text-slate-800">3.6. Đồng bộ dữ liệu có "lưới an toàn"</h3>
+                <p class="text-sm text-slate-600 mt-1"><b>Trước:</b> khi Shop bán khóa học và cấp quyền, dữ liệu đẩy sang hệ thống học — có trục trặc thì khó biết, khó sửa. <b>Giờ (V2):</b> mỗi sự kiện (mở khóa, cấp quyền, thu hồi) được <b>ghi vào "hộp thư đi" (outbox)</b>, xử lý có kiểm soát, <b>tự thử lại khi lỗi</b>, có báo cáo đối soát.</p>
+                <div class="callout callout-good mt-2 mb-0">
+                  <div class="callout-title">💎 Lợi ích</div>
+                  Không thất lạc quyền học đã mua. Có sự cố thì tự thử lại; vẫn lỗi thì đưa vào "cần kiểm tra" — không âm thầm bỏ sót.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3.7 -->
+          <div class="benefit-card bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+            <div class="flex items-start gap-3">
+              <div class="text-2xl shrink-0">🩺</div>
+              <div class="min-w-0">
+                <h3 class="font-extrabold text-slate-800">3.7. Công cụ theo dõi tình trạng hệ thống</h3>
+                <p class="text-sm text-slate-600 mt-1"><b>Giờ (V2):</b> có các trang chẩn đoán nội bộ giúp quản trị viên xem nhanh: hệ thống có khỏe không, dữ liệu có lệch không, tính năng đang bật/tắt ra sao — <b>không lộ thông tin nhạy cảm</b> của học viên.</p>
+                <div class="callout callout-good mt-2 mb-0">
+                  <div class="callout-title">💎 Lợi ích</div>
+                  Vận hành chủ động, phát hiện vấn đề trước khi ảnh hưởng người học.
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- 4. Nút lùi an toàn -->
+      <section id="nut-lui" class="anchor mb-10">
+        <h2 class="text-xl font-extrabold text-slate-800 mb-3">4. Cải tiến quan trọng nhất: Nâng cấp an toàn, có nút lùi</h2>
+        <p class="text-sm text-slate-700 mb-3">Đây là điểm khiến V2 khác biệt với một bản "nâng cấp thông thường".</p>
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm mb-3">
+          <p class="text-sm font-bold text-slate-700 mb-2">Một nút chuyển đổi V1 ↔ V2 ngay trong trang quản trị:</p>
+          <ul class="space-y-1.5 text-sm text-slate-600">
+            <li class="flex gap-2"><span class="text-indigo-600 font-black">→</span> Muốn thử hệ thống mới → bấm <b>V2</b>.</li>
+            <li class="flex gap-2"><span class="text-indigo-600 font-black">→</span> Thấy cần quay lại → bấm <b>V1</b> → mọi thứ trở về như cũ <b>ngay lập tức</b>.</li>
+            <li class="flex gap-2"><span class="text-red-600 font-black">→</span> Có <b>nút dừng khẩn cấp</b> (kill switch) ép về hệ thống cũ trong tình huống bất ngờ.</li>
+          </ul>
+        </div>
+        <div class="callout callout-safe">
+          <div class="callout-title">✅ Vì sao điều này quan trọng với đối tác</div>
+          <ul class="list-disc list-inside space-y-1 mt-1">
+            <li><b>Không rủi ro "một đi không trở lại".</b> Hệ thống cũ luôn còn nguyên và sẵn sàng phục vụ.</li>
+            <li><b>Không mất dữ liệu.</b> Việc chuyển đổi chỉ đổi một thiết lập nhỏ, không xóa/sửa dữ liệu.</li>
+            <li><b>Kiểm thử thật trước khi cam kết.</b> Có thể bật V2 để trải nghiệm, so sánh, rồi mới quyết định.</li>
+            <li><b>Mọi thao tác đều được ghi nhật ký</b> — minh bạch, truy vết được.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- 5. Mức sẵn sàng -->
+      <section id="san-sang" class="anchor mb-10">
+        <h2 class="text-xl font-extrabold text-slate-800 mb-3">5. V2 đã sẵn sàng đến đâu?</h2>
+        <div class="overflow-x-auto rounded-2xl border border-slate-200 shadow-sm">
+          <table class="w-full text-left text-sm bg-white">
+            <thead class="bg-slate-50 text-slate-500 text-xs font-bold uppercase">
+              <tr><th class="p-4">Hạng mục</th><th class="p-4 w-28 text-center">Trạng thái</th></tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr><td class="p-4">Bảo mật (một thiết bị, đăng xuất, thu hồi, theo dõi chia sẻ)</td><td class="p-4 text-center"><span class="inline-block px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">Hoàn thành</span></td></tr>
+              <tr><td class="p-4">Đồng bộ dữ liệu có lưới an toàn (outbox, đối soát, thử lại)</td><td class="p-4 text-center"><span class="inline-block px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">Hoàn thành</span></td></tr>
+              <tr><td class="p-4">Công cụ chẩn đoán & theo dõi</td><td class="p-4 text-center"><span class="inline-block px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">Hoàn thành</span></td></tr>
+              <tr><td class="p-4">Nút chuyển V1 ↔ V2 + dừng khẩn cấp</td><td class="p-4 text-center"><span class="inline-block px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">Hoàn thành, đã lên hệ thống thật</span></td></tr>
+              <tr><td class="p-4">Kiểm thử tự động</td><td class="p-4 text-center"><span class="inline-block px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">Vượt qua (200+ kịch bản)</span></td></tr>
+              <tr><td class="p-4">Chạy thử trên môi trường xem trước (preview)</td><td class="p-4 text-center"><span class="inline-block px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">Đạt</span></td></tr>
+              <tr><td class="p-4">Chuyển toàn bộ người dùng sang V2</td><td class="p-4 text-center"><span class="inline-block px-2 py-1 rounded-full bg-amber-100 text-amber-700 text-xs font-bold">Chờ quyết định</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout callout-info mt-3">
+          <div class="callout-title">ℹ️ Hiện trạng</div>
+          Hệ thống <b>vẫn đang phục vụ bằng V1</b> (ổn định). V2 đã cài đặt xong và <b>chỉ chờ được bật khi bạn sẵn sàng thử</b>.
+        </div>
+      </section>
+
+      <!-- 6. Lộ trình -->
+      <section id="lo-trinh" class="anchor mb-10">
+        <h2 class="text-xl font-extrabold text-slate-800 mb-3">6. Lộ trình đề xuất (nhẹ nhàng, từng bước)</h2>
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+          <ol class="space-y-3 text-sm text-slate-700">
+            <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-brandGreen text-white font-black flex items-center justify-center text-xs">1</span><span><b>Xem thử:</b> bật V2 trong thời gian ngắn để trải nghiệm giao diện và tính năng mới.</span></li>
+            <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-brandGreen text-white font-black flex items-center justify-center text-xs">2</span><span><b>Kiểm chứng:</b> thử tình huống thực tế (đăng nhập 2 máy, đăng xuất, cấp quyền) và so sánh với V1.</span></li>
+            <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-brandGreen text-white font-black flex items-center justify-center text-xs">3</span><span><b>Quan sát:</b> dùng công cụ theo dõi để đảm bảo dữ liệu khớp, không lệch.</span></li>
+            <li class="flex gap-3"><span class="shrink-0 w-7 h-7 rounded-full bg-brandGreen text-white font-black flex items-center justify-center text-xs">4</span><span><b>Quyết định:</b> khi hài lòng, bật V2 cho toàn bộ. Nếu chưa, cứ giữ V1 — không áp lực thời gian.</span></li>
+          </ol>
+        </div>
+        <p class="text-sm text-slate-600 mt-3">Ở mọi bước, nút quay lại V1 luôn sẵn sàng.</p>
+      </section>
+
+      <!-- 7. Cam kết -->
+      <section id="cam-ket" class="anchor mb-10">
+        <h2 class="text-xl font-extrabold text-slate-800 mb-3">7. Cam kết an toàn</h2>
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-2 text-sm">
+          <p class="flex gap-2"><span class="text-emerald-600 font-black">✅</span> <b>Dữ liệu được bảo toàn tuyệt đối</b> — chuyển đổi phiên bản không xóa/sửa dữ liệu.</p>
+          <p class="flex gap-2"><span class="text-emerald-600 font-black">✅</span> <b>Luôn có đường lùi</b> — V1 sẵn sàng bất cứ lúc nào, chỉ một nút bấm.</p>
+          <p class="flex gap-2"><span class="text-emerald-600 font-black">✅</span> <b>Minh bạch</b> — mọi thay đổi phiên bản đều được ghi nhật ký.</p>
+          <p class="flex gap-2"><span class="text-emerald-600 font-black">✅</span> <b>Không làm phiền học viên thật</b> — biện pháp bảo mật hướng vào ngăn lạm dụng, không cản trở người dùng hợp lệ.</p>
+          <p class="flex gap-2"><span class="text-emerald-600 font-black">✅</span> <b>Bật dần, có kiểm soát</b> — từng tính năng V2 bật riêng, không "tất cả hoặc không có gì".</p>
+        </div>
+      </section>
+
+      <!-- 8. Kết luận -->
+      <section id="ket-luan" class="anchor mb-10">
+        <h2 class="text-xl font-extrabold text-slate-800 mb-3">8. Kết luận</h2>
+        <div class="callout callout-good">
+          <p class="leading-relaxed">V2 mang lại <b>bảo mật tốt hơn</b> (chống chia sẻ tài khoản, bảo vệ doanh thu), <b>vận hành tin cậy hơn</b> (dữ liệu không thất lạc, có đối soát), và quan trọng nhất là <b>một con đường nâng cấp an toàn</b> — thử được, lùi được, không mất mát.</p>
+          <p class="mt-2 leading-relaxed">Đây là nền tảng vững chắc để hệ thống phát triển tiếp mà vẫn giữ trải nghiệm mượt mà cho học viên và sự an tâm cho người vận hành.</p>
+        </div>
+      </section>
+
+      <footer class="text-center text-xs text-slate-400 py-6 border-t border-slate-100">
+        <p>Culinary CMS · Báo cáo V2 · 16/07/2026</p>
+        <p class="mt-1">Chi tiết cách thao tác xem tài liệu <a href="https://www.daubepnho.store/docs/v2/V2_USER_GUIDE_SWITCH.html" target="_blank" rel="noopener" class="underline text-slate-500">"Hướng dẫn sử dụng V2"</a>.</p>
+      </footer>
+
+    </main>
+  </div>
+
+  <script>
+    (function () {
+      const links = Array.from(document.querySelectorAll('.toc-link'));
+      const sections = links.map(l => document.querySelector(l.getAttribute('href'))).filter(Boolean);
+      if (!('IntersectionObserver' in window) || sections.length === 0) return;
+      const byId = new Map(links.map(l => [l.getAttribute('href').slice(1), l]));
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            links.forEach(l => l.classList.remove('active'));
+            const link = byId.get(entry.target.id);
+            if (link) link.classList.add('active');
+          }
+        });
+      }, { rootMargin: '-80px 0px -70% 0px', threshold: 0 });
+      sections.forEach(s => observer.observe(s));
+    })();
+  </script>
+</body>
+</html>
