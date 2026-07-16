@@ -1485,6 +1485,8 @@ test("security: V2_GLOBAL_ONE_DEVICE_ENABLED only appears in expected files", as
     "tests/rp2b2-logout.test.mjs",
     "tests/supabase-loader.mjs",
     "tests/_supabase_stub_loader.mjs",
+    "tests/v2-runtime-controller.test.mjs",
+    "tests/v2-runtime-mode-endpoint.test.mjs",
     "docs/v2-new/RP2_B_SESSION_DEVICE_GUARD_PLAN.md",
     "docs/v2-new/RP2_B1_IMPLEMENTATION_RESULT.md",
     "docs/superpowers/specs/2026-07-15-v2-canary-ready-design.md",
