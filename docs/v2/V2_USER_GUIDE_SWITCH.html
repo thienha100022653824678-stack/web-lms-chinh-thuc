@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hướng dẫn sử dụng V2 — Chuyển V1 ↔ V2 để test</title>
+  <meta name="description" content="Hướng dẫn cơ bản cho người dùng: cách chuyển hệ thống giữa V1 và V2, kiểm tra thử, và quay lại V1 an toàn." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brandCream: '#FCF8F2',
+            brandGreen: '#2A4B2A',
+            brandGreenLight: '#3E6B3E',
+            brandBrown: '#2D1914',
+            brandOrange: '#D96B27',
+            brandGray: '#F5EFEB',
+          },
+          fontFamily: { sans: ['"Be Vietnam Pro"', 'sans-serif'] }
+        }
+      }
+    }
+  </script>
+  <style>
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Be Vietnam Pro', sans-serif; background: #f8fafc; }
+    /* Anchor offset so sticky header doesn't cover section titles */
+    .anchor { scroll-margin-top: 84px; }
+    /* Callout boxes */
+    .callout { border-radius: 14px; padding: 14px 16px; margin: 14px 0; font-size: 14px; line-height: 1.6; }
+    .callout-title { font-weight: 800; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+    .callout-warn { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+    .callout-safe { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }
+    .callout-danger { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+    .callout-info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+    /* TOC active link */
+    .toc-link { transition: all .12s; }
+    .toc-link:hover { color: #2A4B2A; }
+    .toc-link.active { color: #2A4B2A; font-weight: 700; border-left-color: #2A4B2A; background: #f5efeb; }
+    /* Code block */
+    pre { background: #1e293b; color: #e2e8f0; border-radius: 10px; padding: 12px 14px; overflow-x: auto; font-size: 13px; }
+    code.inline { background: #f1f5f9; color: #0f172a; padding: 1px 6px; border-radius: 6px; font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    /* Print: hide nav, TOC, expand content */
+    @media print {
+      .no-print { display: none !important; }
+      .anchor { scroll-margin-top: 0; }
+      main { margin: 0 !important; max-width: 100% !important; }
+      .callout { break-inside: avoid; }
+      body { background: white; }
+      .print-title { display: block !important; }
+    }
+    .print-title { display: none; }
+    table { border-collapse: collapse; }
+  </style>
+</head>
+<body class="text-slate-800">
+
+  <!-- Sticky top bar -->
+  <header class="no-print sticky top-0 z-40 bg-[#1e293b] text-white h-14 flex items-center justify-between px-4 sm:px-6 shadow-md">
+    <div class="flex items-center gap-2 min-w-0">
+      <span class="text-xl">🍳</span>
+      <span class="font-extrabold tracking-tight text-sm sm:text-base truncate">Hướng dẫn V2 — Chuyển V1 ↔ V2</span>
+    </div>
+    <div class="flex items-center gap-2 shrink-0">
+      <a href="https://www.daubepnho.store/admin.html" target="_blank" rel="noopener" class="bg-brandGreen hover:bg-brandGreenLight text-white text-xs font-bold px-3 py-1.5 rounded-lg transition">Mở trang Admin ↗</a>
+      <button onclick="window.print()" class="bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition">🖨️ In / PDF</button>
+    </div>
+  </header>
+
+  <!-- Print-only title -->
+  <div class="print-title px-6 pt-6">
+    <h1 class="text-2xl font-black text-brandGreen">Hướng dẫn sử dụng V2 — Chuyển V1 ↔ V2 để test</h1>
+    <p class="text-xs text-slate-500">Cập nhật 2026-07-16 · www.daubepnho.store</p>
+  </div>
+
+  <div class="max-w-6xl mx-auto px-0 flex flex-col lg:flex-row gap-0">
+
+    <!-- Left TOC (desktop) -->
+    <aside class="no-print lg:w-60 lg:shrink-0 lg:sticky lg:top-14 lg:self-start">
+      <nav class="bg-white lg:bg-transparent border-b lg:border-b-0 lg:border-r border-slate-200 p-4 lg:py-6 lg:px-4">
+        <p class="hidden lg:block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-3">Mục lục</p>
+        <ul class="flex lg:flex-col gap-1 lg:gap-0.5 text-sm overflow-x-auto lg:overflow-visible">
+          <li><a href="#tom-tat" class="toc-link block px-3 py-2 lg:py-1.5 rounded-lg border-l-4 border-transparent text-slate-600 whitespace-nowrap">1. Tóm tắt nhanh</a></li>
+          <li><a href="#v1-v2-la-gi" class="toc-link block px-3 py-2 lg:py-1.5 rounded-lg border-l-4 border-transparent text-slate-600 whitespace-nowrap">2. V1 & V2 là gì</a></li>
+          <li><a href="#yeu-cau" class="toc-link block px-3 py-2 lg:py-1.5 rounded-lg border-l-4 border-transparent text-slate-600 whitespace-nowrap">3. Yêu cầu</a></li>
+          <li><a href="#truycap" class="toc-link block px-3 py-2 lg:py-1.5 rounded-lg border-l-4 border-transparent text-slate-600 whitespace-nowrap">4. Truy cập</a></li>
+          <li><a href="#chuyen-v2" class="toc-link block px-3 py-2 lg:py-1.5 rounded-lg border-l-4 border-transparent text-slate-600 whitespace-nowrap">5. Chuyển sang V2</a></li>
+          <li><a href="#chuyen-v1" class="toc-link block px-3 py-2 lg:py-1.5 rounded-lg border-l-4 border-transparent text-slate-600 whitespace-nowrap">6. Quay về V1</a></li>
+          <li><a href="#thay-v2" class="toc-link block px-3 py-2 lg:py-1.5 rounded-lg border-l-4 border-transparent text-slate-600 whitespace-nowrap">7. Thấy V2 chạy</a></li>
+          <li><a href="#kill" class="toc-link block px-3 py-2 lg:py-1.5 rounded-lg border-l-4 border-transparent text-slate-600 whitespace-nowrap">8. Kill switch</a></li>
+          <li><a href="#kiemtra" class="toc-link block px-3 py-2 lg:py-1.5 rounded-lg border-l-4 border-transparent text-slate-600 whitespace-nowrap">9. Kiểm tra</a></li>
+          <li><a href="#kythuat" class="toc-link block px-3 py-2 lg:py-1.5 rounded-lg border-l-4 border-transparent text-slate-600 whitespace-nowrap">10. (Kỹ thuật) Bật flag</a></li>
+          <li><a href="#faq" class="toc-link block px-3 py-2 lg:py-1.5 rounded-lg border-l-4 border-transparent text-slate-600 whitespace-nowrap">11. Câu hỏi thường gặp</a></li>
+          <li><a href="#tongket" class="toc-link block px-3 py-2 lg:py-1.5 rounded-lg border-l-4 border-transparent text-slate-600 whitespace-nowrap">12. Tóm tắt an toàn</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <!-- Main content -->
+    <main class="flex-1 min-w-0 px-4 sm:px-8 py-6 sm:py-10 max-w-3xl">
+
+      <div class="no-print mb-8">
+        <h1 class="text-2xl sm:text-3xl font-black text-brandGreen">Hướng dẫn sử dụng V2</h1>
+        <p class="text-base text-slate-500 mt-1">Chuyển đổi V1 ↔ V2 để test — dành cho người dùng cơ bản</p>
+        <p class="text-xs text-slate-400 mt-2">Cập nhật 2026-07-16 · Áp dụng cho <code class="inline">www.daubepnho.store</code></p>
+      </div>
+
+      <!-- 1. Tóm tắt -->
+      <section id="tom-tat" class="anchor mb-10">
+        <h2 class="text-xl font-extrabold text-slate-800 mb-3">1. Tóm tắt nhanh</h2>
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+          <ol class="list-decimal list-inside space-y-1.5 text-sm text-slate-700">
+            <li>Mở trang quản trị → đăng nhập → tab <b>“⚙️ Hệ Thống”</b>.</li>
+            <li>Bấm nút <b>V1</b> hoặc <b>V2</b> → xác nhận → xong.</li>
+            <li>Muốn quay lại V1: bấm nút <b>V1</b> (hoặc <b>Kill switch</b> nếu khẩn cấp). Không bao giờ mất dữ liệu.</li>
+          </ol>
+        </div>
+        <div class="callout callout-warn">
+          <div class="callout-title">⚠️ Quan trọng</div>
+          V2 chỉ “bật” khi bạn vừa (1) chuyển sang V2 <b>và</b> (2) các tính năng V2 đã được bật trên máy chủ. Nếu bạn chỉ bấm V2 mà tính năng chưa được bật, hệ thống vẫn chạy như V1 — an toàn. Xem mục <a href="#thay-v2" class="underline font-semibold">7</a> nếu muốn bật tính năng V2 đầy đủ.
+        </div>
+      </section>
+
+      <!-- 2. V1 V2 là gì -->
+      <section id="v1-v2-la-gi" class="anchor mb-10">
+        <h2 class="text-xl font-extrabold text-slate-800 mb-3">2. V1 và V2 là gì?</h2>
+        <div class="overflow-x-auto rounded-2xl border border-slate-200 shadow-sm">
+          <table class="w-full text-left text-sm bg-white">
+            <thead class="bg-slate-50 text-slate-500 text-xs font-bold uppercase">
+              <tr><th class="p-4 w-24">Chế độ</th><th class="p-4">Ý nghĩa</th><th class="p-4">Khi nào dùng</th></tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr>
+                <td class="p-4"><span class="font-extrabold text-emerald-700">V1</span></td>
+                <td class="p-4">Hệ thống <b>hiện tại</b> đang phục vụ học viên. Ổn định, đã chạy lâu.</td>
+                <td class="p-4">Mặc định. Dùng hàng ngày. Khi không test thì để V1.</td>
+              </tr>
+              <tr>
+                <td class="p-4"><span class="font-extrabold text-indigo-700">V2</span></td>
+                <td class="p-4">Hệ thống <b>mới</b> (bảo mật tốt hơn: một thiết bị / một phiên, đồng bộ hóa, theo dõi tốt hơn). Đã sẵn sàng để thử.</td>
+                <td class="p-4">Khi bạn muốn <b>kiểm tra thử</b> trải nghiệm mới trước khi chuyển hẳn.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="text-sm text-slate-600 mt-3">Bạn có thể <b>chuyển qua lại V1 ↔ V2 nhiều lần</b> mà không phá vỡ gì. Chuyển về V1 <b>ngay lập tức</b> rút toàn bộ tính năng V2 (nhưng <b>không xóa</b> dữ liệu — dữ liệu học viên, enrollment, bài giảng đều giữ nguyên).</p>
+      </section>
+
+      <!-- 3. Yêu cầu -->
+      <section id="yeu-cau" class="anchor mb-10">
+        <h2 class="text-xl font-extrabold text-slate-800 mb-3">3. Yêu cầu trước khi bắt đầu</h2>
+        <ul class="list-disc list-inside space-y-1.5 text-sm text-slate-700 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+          <li>Có <b>tài khoản Gmail quản trị</b> (đã được đưa vào danh sách <code class="inline">ADMIN_EMAILS</code> của hệ thống).</li>
+          <li>Dùng trình duyệt trên <b>máy tính</b> (Chrome, Edge, Firefox...). Không dùng điện thoại để thao tác chuyển phiên bản.</li>
+          <li>Đảm bảo đang có <b>mạng ổn định</b>.</li>
+        </ul>
+      </section>
+
+      <!-- 4. Truy cập -->
+      <section id="truycap" class="anchor mb-10">
+        <h2 class="text-xl font-extrabold text-slate-800 mb-3">4. Cách truy cập trang chuyển phiên bản</h2>
+        <ol class="list-decimal list-inside space-y-2 text-sm text-slate-700 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+          <li>Mở trình duyệt, vào địa chỉ:
+            <pre>https://www.daubepnho.store/admin.html</pre>
+          </li>
+          <li>Màn hình đăng nhập hiện ra → bấm <b>“Đăng nhập với Google”</b>.</li>
+          <li>Chọn Gmail quản trị của bạn.</li>
+          <li>Nếu Gmail có quyền → vào được trang quản trị. Nếu không → báo “Không có quyền quản trị” (liên hệ người kỹ thuật để thêm Gmail vào <code class="inline">ADMIN_EMAILS</code>).</li>
+        </ol>
+      </section>
+
+      <!-- 5. Chuyển sang V2 -->
+      <section id="chuyen-v2" class="anchor mb-10">
+        <h2 class="text-xl font-extrabold text-slate-800 mb-3">5. Chuyển sang V2 để test</h2>
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+          <ol class="list-decimal list-inside space-y-2 text-sm text-slate-700">
+            <li>Sau khi đăng nhập, nhìn thanh bên trái (menu dọc) → bấm tab <b>“⚙️ Hệ Thống”</b>.</li>
+            <li>Bạn sẽ thấy bảng <b>“Chế độ hệ thống (V1 / V2)”</b> với:
+              <ul class="list-disc list-inside ml-5 mt-1 space-y-0.5">
+                <li>Dòng trạng thái phía trên: <b>Chế độ hiện tại</b>, <b>Hiệu lực</b>, <b>Kill switch</b>.</li>
+                <li>Hai nút lớn phía dưới: <b>🟢 V1 (Hệ thống hiện tại)</b> và <b>🧪 V2 (Hệ thống mới)</b>.</li>
+              </ul>
+            </li>
+            <li>Bấm nút <b>🧪 V2 (Hệ thống mới)</b>.</li>
+            <li>Hộp thoại xác nhận hiện ra → đọc kỹ → bấm <b>OK</b>.</li>
+            <li>Chờ 1–2 giây. Thông báo xanh hiện “Hệ thống đã chuyển sang V2”.</li>
+            <li>Nhìn lại dòng trạng thái: <b>Chế độ hiện tại</b> giờ là “V2”, <b>Hiệu lực</b> là “V2 đang hoạt động”.</li>
+          </ol>
+        </div>
+        <div class="callout callout-safe">
+          <div class="callout-title">✅ Đã xong</div>
+          Hệ thống đã ở chế độ V2. Bạn có thể ra trang học (<code class="inline">lms.html</code>) để kiểm tra trải nghiệm.
+        </div>
+      </section>
+
+      <!-- 6. Quay về V1 -->
+      <section id="chuyen-v1" class="anchor mb-10">
+        <h2 class="text-xl font-extrabold text-slate-800 mb-3">6. Chuyển về V1 (quay lại hệ thống cũ)</h2>
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm text-sm text-slate-700 space-y-2">
+          <p><b>Cách thường:</b> bấm nút <b>🟢 V1 (Hệ thống hiện tại)</b> → xác nhận → xong.</p>
+          <p><b>Cách khẩn cấp</b> (khi V2 bị lỗi và cần dừng ngay): dùng <b>Kill switch</b> — xem mục <a href="#kill" class="underline font-semibold">8</a>.</p>
+          <p>Sau khi về V1, dòng trạng thái sẽ hiện “V1”, “Hiệu lực: V1 đang hoạt động”. Toàn bộ tính năng V2 ngừng hoạt động ngay lập tức. <b>Không học viên nào bị ảnh hưởng dữ liệu.</b></p>
+        </div>
+      </section>
+
+      <!-- 7. Thấy V2 -->
+      <section id="thay-v2" class="anchor mb-10">
+        <h2 class="text-xl font-extrabold text-slate-800 mb-3">7. Làm sao để thực sự “thấy” V2 hoạt động?</h2>
+        <div class="callout callout-warn">
+          <div class="callout-title">⚠️ Phần dễ nhầm nhất — đọc kỹ</div>
+        </div>
+        <p class="text-sm text-slate-700 mb-3">Nút V2 chỉ <b>“cho phép”</b> V2 hoạt động. Để thực sự thấy tính năng mới (ví dụ: một Gmail chỉ được học trên 1 thiết bị cùng lúc), các tính năng đó phải <b>đã được bật trên máy chủ</b> (qua các biến môi trường như <code class="inline">V2_GLOBAL_ONE_DEVICE_ENABLED</code>, <code class="inline">V2_OUTBOX_SHADOW_MODE</code>...).</p>
+
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm mb-3">
+          <p class="text-sm font-bold text-slate-700 mb-2"><b>Cách kiểm tra</b> xem tính năng V2 đang bật hay chưa (không cần kỹ thuật):</p>
+          <ol class="list-decimal list-inside space-y-1.5 text-sm text-slate-700">
+            <li>Ở tab <b>“⚙️ Hệ Thống”</b>, cuộn xuống bảng <b>“Trạng thái flag V2”</b>.</li>
+            <li>Mỗi dòng là một tính năng, có 2 nhãn:
+              <ul class="list-disc list-inside ml-5 mt-1 space-y-0.5">
+                <li><b>configured</b> ✅ = tính năng này <b>đã được set</b> trên máy chủ.</li>
+                <li><b>enabled</b> 🟢 = tính năng này <b>đang thực sự hiệu lực</b>.</li>
+              </ul>
+            </li>
+            <li>Quy tắc:
+              <ul class="list-disc list-inside ml-5 mt-1 space-y-0.5">
+                <li>Chế độ = <b>V1</b> → mọi dòng đều <code class="inline">enabled = false</code> (⚪) dù <code class="inline">configured = true</code>. → bình thường, V1 rút hết.</li>
+                <li>Chế độ = <b>V2</b> → dòng nào <code class="inline">configured = true</code> sẽ thành <code class="inline">enabled = true</code> (🟢). → tính năng đó đang chạy.</li>
+              </ul>
+            </li>
+          </ol>
+        </div>
+
+        <div class="callout callout-info">
+          <div class="callout-title">ℹ️ Nếu bấm V2 mà vẫn thấy mọi tính năng <code class="inline">enabled = false</code></div>
+          Nghĩa là chưa có tính năng V2 nào được bật trên máy chủ. Để bật, cần người kỹ thuật set biến môi trường trên Vercel (xem mục <a href="#kythuat" class="underline font-semibold">10</a>). <b>Bạn không tự làm bước này</b> trừ khi đã được hướng dẫn.
+        </div>
+        <p class="text-sm text-slate-600 mt-3"><b>Tóm lại:</b> để test V2 đầy đủ, cần 2 việc — (a) người kỹ thuật đã bật các flag V2, và (b) bạn bấm switch sang V2. Thiếu 1 trong 2 thì V2 chưa hiện hiệu ứng.</p>
+      </section>
+
+      <!-- 8. Kill switch -->
+      <section id="kill" class="anchor mb-10">
+        <h2 class="text-xl font-extrabold text-slate-800 mb-3">8. Kill switch — nút khẩn cấp</h2>
+        <div class="callout callout-danger">
+          <div class="callout-title">⛔ Dùng khi V2 đang chạy mà thấy lỗi bất thường</div>
+          Học viên báo không vào được lớp, trang trắng... và muốn <b>dừng ngay lập tức</b>, không kịp suy nghĩ.
+        </div>
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+          <ol class="list-decimal list-inside space-y-2 text-sm text-slate-700">
+            <li>Trong tab <b>“⚙️ Hệ Thống”</b>, cuộn xuống bảng <b>“⛔ Kill switch (khẩn cấp)”</b>.</li>
+            <li>Bấm <b>“Bật kill switch (ép V1)”</b> → xác nhận.</li>
+            <li>Hệ thống <b>ép về V1 ngay lập tức</b>, bất kể chế độ đang cài đặt là gì.</li>
+            <li>Dòng trạng thái <b>Kill switch</b> sẽ hiện “BẬT (ép V1)”.</li>
+          </ol>
+        </div>
+        <p class="text-sm text-slate-600 mt-3">Sau khi sự cố qua, để tắt kill switch: bấm <b>“Tắt kill switch”</b> → hệ thống quay về chế độ thường (V1 hay V2 tùy nút bạn đã bấm trước đó; nếu chưa rõ, cứ bấm <b>V1</b> để chắc chắn).</p>
+        <div class="callout callout-warn">
+          <div class="callout-title">💡 Khuyến nghị</div>
+          Chỉ dùng kill switch khi thật sự khẩn. Bình thường cứ dùng nút V1 ở mục <a href="#chuyen-v1" class="underline font-semibold">6</a>.
+        </div>
+      </section>
+
+      <!-- 9. Kiểm tra -->
+      <section id="kiemtra" class="anchor mb-10">
+        <h2 class="text-xl font-extrabold text-slate-800 mb-3">9. Kiểm tra trải nghiệm sau khi chuyển</h2>
+        <p class="text-sm text-slate-700 mb-3">Sau khi bấm V2 (và tính năng đã được bật), mở thử các luồng sau để test:</p>
+        <div class="overflow-x-auto rounded-2xl border border-slate-200 shadow-sm">
+          <table class="w-full text-left text-sm bg-white">
+            <thead class="bg-slate-50 text-slate-500 text-xs font-bold uppercase">
+              <tr><th class="p-4">Thứ cần thử</th><th class="p-4">Cách</th><th class="p-4">Kỳ vọng ở V2 (nếu one-device đã bật)</th></tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 align-top">
+              <tr>
+                <td class="p-4 font-semibold">Vào lớp học</td>
+                <td class="p-4">Mở <code class="inline">lms.html</code> như học viên</td>
+                <td class="p-4">Cần có phiên đăng nhập hợp lệ. Nếu thiếu → báo lỗi <code class="inline">invalid_session</code> thay vì vào được bằng cookie cũ.</td>
+              </tr>
+              <tr>
+                <td class="p-4 font-semibold">Đăng nhập trên 2 thiết bị cùng lúc</td>
+                <td class="p-4">Đăng nhập Gmail A trên máy A, rồi lại đăng nhập A trên máy B</td>
+                <td class="p-4">Máy B bị <b>chặn</b> với thông báo “Tài khoản đang được sử dụng trên thiết bị khác”. Máy A không bị đá.</td>
+              </tr>
+              <tr>
+                <td class="p-4 font-semibold">Đăng xuất</td>
+                <td class="p-4">Bấm nút đăng xuất ở trang học</td>
+                <td class="p-4">Server thu hồi phiên ngay. Thiết bị khác đăng nhập lại được.</td>
+              </tr>
+              <tr>
+                <td class="p-4 font-semibold">Quay lại V1</td>
+                <td class="p-4">Bấm nút V1 ở trang admin</td>
+                <td class="p-4">Tất cả hành vi trên trở về như cũ (cookie cũ đủ vào lớp, không chặn 2 thiết bị...).</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout callout-warn">
+          <div class="callout-title">⚠️ Nếu thấy lỗi lạ</div>
+          Bấm <b>Kill switch</b> (mục <a href="#kill" class="underline font-semibold">8</a>) rồi báo người kỹ thuật.
+        </div>
+      </section>
+
+      <!-- 10. Kỹ thuật -->
+      <section id="kythuat" class="anchor mb-10">
+        <h2 class="text-xl font-extrabold text-slate-800 mb-1">10. <span class="text-slate-500 font-bold text-base">(Dành cho kỹ thuật)</span> Bật tính năng V2 trên máy chủ</h2>
+        <p class="text-sm text-slate-500 mb-3">Phần này chỉ cần làm <b>một lần</b> để chuẩn bị cho việc test. Người dùng cơ bản có thể bỏ qua.</p>
+
+        <p class="text-sm text-slate-700 mb-3">Các biến môi trường cần set trên <b>Vercel</b> (project <code class="inline">web-lms-chinh-thuc</code>, môi trường <code class="inline">Production</code> hoặc <code class="inline">Preview</code>):</p>
+        <div class="overflow-x-auto rounded-2xl border border-slate-200 shadow-sm mb-4">
+          <table class="w-full text-left text-sm bg-white">
+            <thead class="bg-slate-50 text-slate-500 text-xs font-bold uppercase">
+              <tr><th class="p-4">Biến</th><th class="p-4">Khi bật thì tính năng nào chạy</th></tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 align-top">
+              <tr><td class="p-4"><code class="inline">V2_GLOBAL_ONE_DEVICE_ENABLED=true</code></td><td class="p-4">Một Gmail = 1 phiên active toàn hệ thống (chặn 2 thiết bị).</td></tr>
+              <tr><td class="p-4"><code class="inline">V2_CORS_ALLOWLIST_ENABLED=true</code> + <code class="inline">LMS_PORTAL_ORIGINS</code> / <code class="inline">LMS_ADMIN_ORIGINS</code></td><td class="p-4">CORS allowlist (chặn origin lạ).</td></tr>
+              <tr><td class="p-4"><code class="inline">V2_OUTBOX_SHADOW_MODE=true</code></td><td class="p-4">Ghi song song sự kiện sync ra outbox (chỉ quan sát, không gửi).</td></tr>
+              <tr><td class="p-4"><code class="inline">V2_RECONCILIATION_READONLY=true</code></td><td class="p-4">Bật reconciliation read-only.</td></tr>
+              <tr><td class="p-4"><code class="inline">V2_PORTAL_PROJECTION_ENABLED=true</code> (+ <code class="inline">V2_PORTAL_PROJECTION_DRY_RUN=true</code>)</td><td class="p-4">Projection portal (dry-run trước khi live).</td></tr>
+              <tr><td class="p-4"><code class="inline">V2_DELIVERY_HANDLERS_ENABLED=true</code></td><td class="p-4">Bật delivery handlers (live projection). <b>Cẩn thận</b> — chỉ bật khi đã dry-run OK.</td></tr>
+              <tr><td class="p-4"><code class="inline">V2_OUTBOX_WORKER_ENABLED=true</code></td><td class="p-4">Bật worker outbox.</td></tr>
+              <tr><td class="p-4"><code class="inline">V2_DRIVE_WORKER_DRY_RUN=true</code></td><td class="p-4">Giữ Drive ở dry-run (không đổi permission thật).</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="text-sm text-slate-700 mb-2"><b>Thứ tự bật an toàn</b> (xem <code class="inline">docs/v2/V2_CUTOVER_RUNBOOK.md</code> chi tiết):</p>
+        <ol class="list-decimal list-inside space-y-1 text-sm text-slate-700 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm mb-3">
+          <li><code class="inline">V2_CORS_ALLOWLIST_ENABLED</code> (kèm allowlist origin).</li>
+          <li><code class="inline">V2_GLOBAL_ONE_DEVICE_ENABLED</code>.</li>
+          <li><code class="inline">V2_OUTBOX_SHADOW_MODE</code> → quan sát <code class="inline">/api/v2/outbox</code>.</li>
+          <li><code class="inline">V2_RECONCILIATION_READONLY</code>.</li>
+          <li><code class="inline">V2_PORTAL_PROJECTION_ENABLED</code> + <code class="inline">V2_PORTAL_PROJECTION_DRY_RUN=true</code> → xem preview khớp V1.</li>
+          <li>(Sau khi duyệt) <code class="inline">V2_DELIVERY_HANDLERS_ENABLED=true</code>, <code class="inline">V2_PORTAL_PROJECTION_DRY_RUN=false</code>. Giữ <code class="inline">V2_DRIVE_WORKER_DRY_RUN=true</code>.</li>
+        </ol>
+        <p class="text-sm text-slate-700 mb-2">Sau khi set xong → redeploy để bind env mới → vào admin bấm switch sang <b>V2</b>.</p>
+        <div class="callout callout-info">
+          <div class="callout-title">🚪 Escape hatch (không cần UI)</div>
+          Set <code class="inline">V2_RUNTIME_FORCE_MODE=v1</code> (hoặc <code class="inline">v2</code>) trên Vercel env để ép chế độ không qua DB. <code class="inline">V2_RUNTIME_FORCE_KILL=1</code> ép kill switch. Dùng khi muốn ép toàn bộ instance về 1 chế độ mà không cần vào admin.
+        </div>
+      </section>
+
+      <!-- 11. FAQ -->
+      <section id="faq" class="anchor mb-10">
+        <h2 class="text-xl font-extrabold text-slate-800 mb-3">11. Câu hỏi thường gặp</h2>
+        <div class="space-y-3">
+          <details class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm group" open>
+            <summary class="font-bold text-slate-700 cursor-pointer list-none flex justify-between items-center">Bấm V2 xong, học viên có bị ảnh hưởng ngay không? <span class="text-slate-400 group-open:rotate-180 transition">▾</span></summary>
+            <p class="text-sm text-slate-600 mt-2">Chỉ khi tính năng V2 đã được bật (mục <a href="#thay-v2" class="underline font-semibold">7</a>) thì hành vi mới đổi. Nếu chưa bật flag gì → bấm V2 không thay đổi gì với học viên (hệ thống vẫn chạy V1 thực tế). An toàn để thử.</p>
+          </details>
+          <details class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm group">
+            <summary class="font-bold text-slate-700 cursor-pointer list-none flex justify-between items-center">Tôi bấm nhầm V2, làm sao quay lại? <span class="text-slate-400 group-open:rotate-180 transition">▾</span></summary>
+            <p class="text-sm text-slate-600 mt-2">Bấm nút V1 → xác nhận. Hoặc kill switch. 1 giây là về V1.</p>
+          </details>
+          <details class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm group">
+            <summary class="font-bold text-slate-700 cursor-pointer list-none flex justify-between items-center">Chuyển nhiều lần có hỏng dữ liệu không? <span class="text-slate-400 group-open:rotate-180 transition">▾</span></summary>
+            <p class="text-sm text-slate-600 mt-2">Không. Việc chuyển chỉ đổi 1 dòng cấu hình trong DB (<code class="inline">site_config</code>), không xóa/sửa dữ liệu học viên, enrollment, bài giảng.</p>
+          </details>
+          <details class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm group">
+            <summary class="font-bold text-slate-700 cursor-pointer list-none flex justify-between items-center">Làm sao biết chắc đang ở V1 hay V2? <span class="text-slate-400 group-open:rotate-180 transition">▾</span></summary>
+            <p class="text-sm text-slate-600 mt-2">Vào admin → tab “⚙️ Hệ Thống” → xem dòng <b>“Chế độ hiện tại”</b>. Hoặc gọi <code class="inline">/api/lms/admin?endpoint=runtime-mode</code> (cần đăng nhập admin) → xem trường <code class="inline">activeMode</code>.</p>
+          </details>
+          <details class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm group">
+            <summary class="font-bold text-slate-700 cursor-pointer list-none flex justify-between items-center">Kill switch khác gì nút V1? <span class="text-slate-400 group-open:rotate-180 transition">▾</span></summary>
+            <p class="text-sm text-slate-600 mt-2">Nút V1 = về V1 theo ý bạn. Kill switch = ép V1 <b>bất kể</b> mọi thứ (kể cả nếu V2 bị kẹt do DB lỗi). Dùng khẩn cấp.</p>
+          </details>
+          <details class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm group">
+            <summary class="font-bold text-slate-700 cursor-pointer list-none flex justify-between items-center">Tôi không thấy tab “⚙️ Hệ Thống”? <span class="text-slate-400 group-open:rotate-180 transition">▾</span></summary>
+            <p class="text-sm text-slate-600 mt-2">Trang admin chưa được update. Đảm bảo deploy production đã chạy commit <code class="inline">f10c1f7</code> trở lên (deploy <code class="inline">g3zpdnz10</code> trở lên). Nếu vẫn thiếu → báo kỹ thuật redeploy.</p>
+          </details>
+          <details class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm group">
+            <summary class="font-bold text-slate-700 cursor-pointer list-none flex justify-between items-center">Bấm V2 mà báo lỗi 503 <code class="inline">one_device_policy_unavailable</code>? <span class="text-slate-400 group-open:rotate-180 transition">▾</span></summary>
+            <p class="text-sm text-slate-600 mt-2">DB đang không đọc được cấu hình. Hệ thống tự fail-closed về V1 an toàn. Báo kỹ thuật kiểm tra kết nối Supabase. Trong lúc đó học viên vẫn dùng V1 bình thường.</p>
+          </details>
+        </div>
+      </section>
+
+      <!-- 12. Tóm tắt an toàn -->
+      <section id="tongket" class="anchor mb-10">
+        <h2 class="text-xl font-extrabold text-slate-800 mb-3">12. Tóm tắt an toàn</h2>
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-2 text-sm">
+          <p class="flex gap-2"><span class="text-emerald-600 font-black">✅</span> Chuyển V1 ↔ V2 <b>bao nhiêu lần cũng được</b>, không mất dữ liệu.</p>
+          <p class="flex gap-2"><span class="text-emerald-600 font-black">✅</span> V1 là <b>mặc định an toàn</b> — khi không test thì để V1.</p>
+          <p class="flex gap-2"><span class="text-emerald-600 font-black">✅</span> V2 chỉ chạy khi <b>cả</b> switch = V2 <b>và</b> tính năng đã bật. Thiếu 1 → vẫn V1.</p>
+          <p class="flex gap-2"><span class="text-emerald-600 font-black">✅</span> Kill switch ép V1 ngay lập tức, bất kể trạng thái.</p>
+          <p class="flex gap-2"><span class="text-emerald-600 font-black">✅</span> Mọi lần chuyển đều được <b>ghi audit log</b> (biết ai chuyển, lúc nào, sang chế độ nào).</p>
+          <p class="flex gap-2"><span class="text-red-600 font-black">❌</span> Không bao giờ tự xóa dữ liệu khi chuyển. Không cần rollback DB.</p>
+        </div>
+        <div class="callout callout-safe mt-4">
+          <div class="callout-title">🎯 Quy tắc vàng</div>
+          Khi gặp bất thường → <b>Kill switch</b> → báo kỹ thuật. Đơn giản vậy thôi.
+        </div>
+      </section>
+
+      <footer class="text-center text-xs text-slate-400 py-6 border-t border-slate-100">
+        Culinary CMS Panel · Hướng dẫn V2 · 2026-07-16
+      </footer>
+
+    </main>
+  </div>
+
+  <script>
+    // Highlight current TOC link based on scroll position
+    (function () {
+      const links = Array.from(document.querySelectorAll('.toc-link'));
+      const sections = links
+        .map(l => document.querySelector(l.getAttribute('href')))
+        .filter(Boolean);
+      if (!('IntersectionObserver' in window) || sections.length === 0) return;
+      const byId = new Map(links.map(l => [l.getAttribute('href').slice(1), l]));
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            links.forEach(l => l.classList.remove('active'));
+            const link = byId.get(entry.target.id);
+            if (link) link.classList.add('active');
+          }
+        });
+      }, { rootMargin: '-80px 0px -70% 0px', threshold: 0 });
+      sections.forEach(s => observer.observe(s));
+    })();
+  </script>
+</body>
+</html>
