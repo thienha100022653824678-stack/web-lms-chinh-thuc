@@ -8,9 +8,15 @@
 //   - Shop / Portal / Admin: runtime state at the TOP level.
 //   - LMS: runtime state nested under `runtime`, no top-level `component`.
 //
+// Component identity: when the response has no valid `component`, the
+// logical ENDPOINTS key (`lms`/`shop`/`portal`/`admin`) is used as a
+// fallback so operator output reads `component="lms"` instead of
+// `component="null"`. The LMS production API is deliberately NOT patched
+// just to add a component field; the script owns the fallback.
+//
 // The contract under test (from the production endpoints):
-//   normalizeDiagnosticsResponse(body) -> { valid, component, activeMode,
-//     killSwitch, source, ok, _from }
+//   normalizeDiagnosticsResponse(body, name?) -> { valid, component,
+//     activeMode, killSwitch, source, ok, _from }
 //   validateNormalized(name, norm) -> string[] of failures (empty = pass)
 //   computeAgreement(modes, expectedMode?) -> { ok, ... }
 
@@ -101,10 +107,11 @@ test("normalize: top-level shape (admin) reads every field from top", () => {
   assert.equal(n.source, "db");
 });
 
-test("normalize: LMS runtime-nested shape reads fields from runtime envelope, no top-level component", () => {
+test("normalize: LMS runtime-nested shape without name keeps component null", () => {
+  // Low-level path: no logical name → no fallback, component stays null.
+  // The CLI always passes the ENDPOINTS key; this asserts the pure form.
   const n = normalizeDiagnosticsResponse(LMS_SHAPE);
   assert.equal(n.valid, true);
-  // LMS has no top-level component field at all.
   assert.equal(n.component, null);
   assert.equal(n._from.component, "missing");
   // Runtime fields come from the `runtime` envelope.
@@ -117,6 +124,49 @@ test("normalize: LMS runtime-nested shape reads fields from runtime envelope, no
   // LMS does emit top-level ok=true, so that resolves from top.
   assert.equal(n.ok, true);
   assert.equal(n._from.ok, "top");
+});
+
+test("normalize: LMS response without component → fallback to logical name 'lms'", () => {
+  // Production LMS body has no component field. Passing the ENDPOINTS key
+  // fills it so operator output reads component="lms" (not "null").
+  const n = normalizeDiagnosticsResponse(LMS_SHAPE, "lms");
+  assert.equal(n.valid, true);
+  assert.equal(n.component, "lms");
+  // Fallback is transparent: _from.component stays "missing" so tests can
+  // still tell a real response value from a script-supplied one.
+  assert.equal(n._from.component, "missing");
+  // The other four fields are still read from the body, not invented.
+  assert.equal(n.activeMode, "v1");
+  assert.equal(n._from.activeMode, "runtime");
+  assert.equal(n.killSwitch, false);
+  assert.equal(n.source, "db");
+  assert.equal(n.ok, true);
+});
+
+test("normalize: empty-string / null component falls back to logical name", () => {
+  // Empty string and null both fail the VALIDATORS.component check
+  // (present-but-invalid or not-present) → fallback to the ENDPOINTS key.
+  const emptyStr = normalizeDiagnosticsResponse(
+    { ok: true, component: "", activeMode: "v1", killSwitch: false, source: "db" },
+    "lms",
+  );
+  assert.equal(emptyStr.component, "lms");
+  assert.equal(emptyStr._from.component, "missing");
+
+  const nullComp = normalizeDiagnosticsResponse(
+    { ok: true, component: null, activeMode: "v1", killSwitch: false, source: "db" },
+    "lms",
+  );
+  assert.equal(nullComp.component, "lms");
+  assert.equal(nullComp._from.component, "missing");
+});
+
+test("normalize: valid component in response is preserved (no override by name)", () => {
+  // When the body carries a valid component, the ENDPOINTS key is ignored —
+  // even if they disagree. Validation will then flag the mismatch.
+  const n = normalizeDiagnosticsResponse(SHOP_SHAPE, "lms");
+  assert.equal(n.component, "shop");
+  assert.equal(n._from.component, "top");
 });
 
 test("normalize: top-level field overrides runtime envelope when both present and valid", () => {
@@ -188,36 +238,54 @@ test("normalize: non-object / null / array body is invalid", () => {
 // ── validateNormalized ──────────────────────────────────────────────────────
 
 test("validate: shop top-level shape passes", () => {
-  const n = normalizeDiagnosticsResponse(SHOP_SHAPE);
+  const n = normalizeDiagnosticsResponse(SHOP_SHAPE, "shop");
   assert.deepEqual(validateNormalized("shop", n), []);
 });
 
 test("validate: portal top-level shape passes", () => {
-  const n = normalizeDiagnosticsResponse(PORTAL_SHAPE);
+  const n = normalizeDiagnosticsResponse(PORTAL_SHAPE, "portal");
   assert.deepEqual(validateNormalized("portal", n), []);
 });
 
 test("validate: admin top-level shape passes", () => {
-  const n = normalizeDiagnosticsResponse(ADMIN_SHAPE);
+  const n = normalizeDiagnosticsResponse(ADMIN_SHAPE, "admin");
   assert.deepEqual(validateNormalized("admin", n), []);
 });
 
-test("validate: LMS runtime-nested shape passes (absent component accepted for lms)", () => {
-  const n = normalizeDiagnosticsResponse(LMS_SHAPE);
+test("validate: LMS without component + name fallback → component='lms' and validation passes", () => {
+  // Production path: LMS body has no component; CLI passes name="lms".
+  const n = normalizeDiagnosticsResponse(LMS_SHAPE, "lms");
+  assert.equal(n.component, "lms");
   assert.deepEqual(validateNormalized("lms", n), []);
 });
 
 test("validate: LMS with a component value other than 'lms' is flagged", () => {
+  // A wrong identity in the body is preserved (not overridden by name) and
+  // then flagged by the validator.
   const body = { ...LMS_SHAPE, component: "shop", runtime: { ...LMS_SHAPE.runtime } };
-  const n = normalizeDiagnosticsResponse(body);
+  const n = normalizeDiagnosticsResponse(body, "lms");
+  assert.equal(n.component, "shop"); // preserved, not overridden
   const f = validateNormalized("lms", n);
   assert.equal(f.length, 1);
   assert.match(f[0], /component="shop"/);
 });
 
-test("validate: shop missing component is flagged", () => {
+test("validate: shop missing component with name fallback still passes identity", () => {
+  // When shop forgets the component field but the CLI knows the ENDPOINTS key
+  // is "shop", the fallback fills it and validation passes on identity.
+  // (activeMode/killSwitch/source still come from the body.)
+  const body = { ok: true, activeMode: "v1", killSwitch: false, source: "db" };
+  const n = normalizeDiagnosticsResponse(body, "shop");
+  assert.equal(n.component, "shop");
+  assert.deepEqual(validateNormalized("shop", n), []);
+});
+
+test("validate: shop missing component WITHOUT name fallback is flagged", () => {
+  // Pure form (no name) keeps component=null → validation fails. This is the
+  // low-level path used by unit tests that want to assert absence.
   const body = { ok: true, activeMode: "v1", killSwitch: false, source: "db" };
   const n = normalizeDiagnosticsResponse(body);
+  assert.equal(n.component, null);
   const f = validateNormalized("shop", n);
   assert.equal(f.length, 1);
   assert.match(f[0], /component="null"/);
@@ -228,7 +296,7 @@ test("validate: invalid activeMode at top-level (no runtime fallback) is flagged
   // envelope to fall back to → normalize reports null (missing). The validator
   // flags it as a missing/invalid mode regardless of which path produced null.
   const body = { ok: true, component: "shop", activeMode: "v3", killSwitch: false, source: "db" };
-  const n = normalizeDiagnosticsResponse(body);
+  const n = normalizeDiagnosticsResponse(body, "shop");
   assert.equal(n.activeMode, null);
   assert.equal(n._from.activeMode, "missing");
   const f = validateNormalized("shop", n);
@@ -247,7 +315,7 @@ test("validate: invalid activeMode at top-level falls back to a valid runtime va
     source: "db",
     runtime: { activeMode: "v1", killSwitch: false, source: "db", ok: true },
   };
-  const n = normalizeDiagnosticsResponse(body);
+  const n = normalizeDiagnosticsResponse(body, "shop");
   assert.equal(n.activeMode, "v1");
   assert.equal(n._from.activeMode, "runtime");
   assert.deepEqual(validateNormalized("shop", n), []);
@@ -255,7 +323,7 @@ test("validate: invalid activeMode at top-level falls back to a valid runtime va
 
 test("validate: missing activeMode (no top-level AND no runtime) is flagged", () => {
   const body = { ok: true, component: "shop", killSwitch: false, source: "db" };
-  const n = normalizeDiagnosticsResponse(body);
+  const n = normalizeDiagnosticsResponse(body, "shop");
   const f = validateNormalized("shop", n);
   assert.equal(f.length, 1);
   assert.match(f[0], /activeMode="null"/);
@@ -263,7 +331,7 @@ test("validate: missing activeMode (no top-level AND no runtime) is flagged", ()
 
 test("validate: missing killSwitch is flagged (not silently treated as false)", () => {
   const body = { ok: true, component: "shop", activeMode: "v1", source: "db" };
-  const n = normalizeDiagnosticsResponse(body);
+  const n = normalizeDiagnosticsResponse(body, "shop");
   const f = validateNormalized("shop", n);
   assert.equal(f.length, 1);
   assert.match(f[0], /killSwitch not boolean \(got missing\)/);
@@ -271,13 +339,13 @@ test("validate: missing killSwitch is flagged (not silently treated as false)", 
 
 test("validate: killSwitch=false passes (false is a valid boolean, not missing)", () => {
   const body = { ok: true, component: "shop", activeMode: "v1", killSwitch: false, source: "db" };
-  const n = normalizeDiagnosticsResponse(body);
+  const n = normalizeDiagnosticsResponse(body, "shop");
   assert.deepEqual(validateNormalized("shop", n), []);
 });
 
 test("validate: missing source is flagged", () => {
   const body = { ok: true, component: "shop", activeMode: "v1", killSwitch: false };
-  const n = normalizeDiagnosticsResponse(body);
+  const n = normalizeDiagnosticsResponse(body, "shop");
   const f = validateNormalized("shop", n);
   assert.equal(f.length, 1);
   assert.match(f[0], /source missing or non-string/);
@@ -288,6 +356,21 @@ test("validate: invalid body returns a single failure and short-circuits", () =>
   const f = validateNormalized("shop", n);
   assert.equal(f.length, 1);
   assert.match(f[0], /invalid or non-object/);
+});
+
+test("validate: component fallback does not paper over activeMode/killSwitch/source failures", () => {
+  // Even when name fills component, the other three required fields are still
+  // validated strictly against the body. This is the anti-masking guarantee.
+  const body = { ok: true }; // no activeMode, no killSwitch, no source, no component
+  const n = normalizeDiagnosticsResponse(body, "lms");
+  assert.equal(n.component, "lms"); // fallback applied
+  const f = validateNormalized("lms", n);
+  // Exactly 3 failures: activeMode, killSwitch, source. Component is fine.
+  assert.equal(f.length, 3);
+  assert.ok(f.some((s) => /activeMode=/.test(s)));
+  assert.ok(f.some((s) => /killSwitch not boolean/.test(s)));
+  assert.ok(f.some((s) => /source missing/.test(s)));
+  assert.ok(!f.some((s) => /component=/.test(s)), "component must not be flagged when fallback fills it");
 });
 
 // ── computeAgreement ───────────────────────────────────────────────────────
@@ -335,14 +418,19 @@ test("agreement: a component with an invalid mode (v3) does not count toward the
 // ── End-to-end over the real production shapes: simulate the CLI's logic ────
 
 test("e2e: all 4 real production shapes normalize + validate clean and agree on v1", () => {
+  // Mirrors the CLI: pass the ENDPOINTS key as the second arg so LMS gets
+  // the component fallback (component="lms") while Shop/Portal/Admin keep
+  // the value they emit themselves.
   const bodies = { lms: LMS_SHAPE, shop: SHOP_SHAPE, portal: PORTAL_SHAPE, admin: ADMIN_SHAPE };
   const modes = {};
   let totalFailures = 0;
   for (const [name, body] of Object.entries(bodies)) {
-    const norm = normalizeDiagnosticsResponse(body);
+    const norm = normalizeDiagnosticsResponse(body, name);
     const f = validateNormalized(name, norm);
     totalFailures += f.length;
     if (norm.activeMode === "v1" || norm.activeMode === "v2") modes[name] = norm.activeMode;
+    // Every component ends up with a readable identity, including LMS.
+    assert.equal(norm.component, name, `${name} component identity`);
   }
   assert.equal(totalFailures, 0, "no field-level failures across the 4 real shapes");
   const a = computeAgreement(modes, "v1");

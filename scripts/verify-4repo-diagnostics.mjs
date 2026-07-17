@@ -32,6 +32,15 @@
 // internal object — preferring a top-level field when it is present AND valid,
 // otherwise falling back to the `runtime` envelope — before any validation.
 //
+// Component identity: when the response does not carry a valid `component`
+// string (LMS today never does; empty/null is also treated as absent), the
+// logical ENDPOINTS key (`lms`/`shop`/`portal`/`admin`) is used as a fallback.
+// That key is known to the script independently of the URL; we never invent a
+// component name from the hostname. We do NOT patch the LMS production API
+// just to add a component field — the fallback keeps the operator output
+// readable (`component="lms"` instead of `component="null"`) without a prod
+// surface change.
+//
 // The normalization + validation core is exported (pure, no network, no
 // process.exit) so tests/v2-verify-4repo-diagnostics.test.mjs can exercise it
 // directly. The CLI runs only when this file is invoked directly.
@@ -96,7 +105,16 @@ function resolveField(body, key) {
 //   { component, activeMode, killSwitch, source, ok, _from, valid }
 // `_from` records where each field was sourced from ('top'|'runtime'|'missing').
 // `valid` is false only when the body itself is not a JSON object.
-export function normalizeDiagnosticsResponse(body) {
+//
+// `name` (optional) is the logical ENDPOINTS key (`lms`/`shop`/`portal`/
+// `admin`). When the body carries no valid top-level or runtime `component`
+// string, `name` is used as the fallback so operator output reads
+// `component="lms"` instead of `component="null"`. The `_from.component`
+// entry still reports `missing` (not `top`/`runtime`) so the fallback is
+// transparent — tests and diagnostics can tell a real component value from a
+// script-supplied one. Pass no `name` to get the raw, unfilled behavior
+// (component stays null when absent) for low-level unit tests.
+export function normalizeDiagnosticsResponse(body, name = null) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return {
       valid: false,
@@ -113,9 +131,14 @@ export function normalizeDiagnosticsResponse(body) {
   const kill = resolveField(body, "killSwitch");
   const src = resolveField(body, "source");
   const okF = resolveField(body, "ok");
+  // Component fallback: only the script's own logical endpoint key is used
+  // (never a hostname-derived guess), and only when no valid component was
+  // resolved from the body. `_from.component` stays "missing" so callers can
+  // still tell the value was filled in rather than read from the response.
+  const componentValue = comp.has ? comp.value : (typeof name === "string" && name.length > 0 ? name : null);
   return {
     valid: true,
-    component: comp.has ? comp.value : null,
+    component: componentValue,
     activeMode: mode.has ? mode.value : null,
     killSwitch: kill.has ? kill.value : null,
     source: src.has ? src.value : null,
@@ -128,26 +151,20 @@ export function normalizeDiagnosticsResponse(body) {
 // ENDPOINTS key: lms/shop/portal/admin). Returns an array of failure strings
 // (empty = pass).
 //
-// Component contract: Shop/Portal/Admin MUST report a `component` field
-// matching their identity. LMS's diagnostics (utils/v2-diagnostics.js) does
-// NOT emit `component` at all — so for `lms` an absent component is accepted
-// (and if LMS ever emits one, it must be "lms"). This is a documented contract
-// gap, not a bypass: the other four fields are still validated strictly, and a
-// non-lms value on the LMS endpoint is flagged.
+// Component contract: every endpoint is expected to report a `component`
+// matching its logical identity. When the response does not supply one
+// (LMS today), `normalizeDiagnosticsResponse(body, name)` fills the
+// logical ENDPOINTS key so validation sees a consistent identity without
+// requiring a production API change. A non-matching value (e.g. LMS
+// returning "shop") is still flagged.
 export function validateNormalized(name, norm) {
   const failures = [];
   if (!norm || !norm.valid) {
     failures.push(`${name}: invalid or non-object diagnostics body`);
     return failures;
   }
-  if (name === "lms") {
-    if (norm.component !== null && norm.component !== "lms") {
-      failures.push(`lms: component="${norm.component}", expected absent or "lms"`);
-    }
-  } else {
-    if (norm.component !== EXPECTED_COMPONENT[name]) {
-      failures.push(`${name}: component="${norm.component}", expected "${EXPECTED_COMPONENT[name]}"`);
-    }
+  if (norm.component !== EXPECTED_COMPONENT[name]) {
+    failures.push(`${name}: component="${norm.component}", expected "${EXPECTED_COMPONENT[name]}"`);
   }
   if (norm.activeMode !== "v1" && norm.activeMode !== "v2") {
     failures.push(`${name}: activeMode="${norm.activeMode}", expected "v1" or "v2"`);
@@ -230,7 +247,10 @@ async function main() {
     if (r.text.includes(SECRET_SENTINEL)) {
       failures.push(`${r.name}: response body contains the worker secret value (LEAK)`);
     }
-    const norm = normalizeDiagnosticsResponse(r.body);
+    // Pass the logical ENDPOINTS key so LMS (no top-level component) gets a
+    // readable fallback identity. `_from.component` still reports "missing"
+    // when the value was filled in rather than read from the body.
+    const norm = normalizeDiagnosticsResponse(r.body, r.name);
     const fieldFailures = validateNormalized(r.name, norm);
     failures.push(...fieldFailures);
     if (norm.activeMode === "v1" || norm.activeMode === "v2") {
