@@ -201,6 +201,65 @@ function recipePublicDownloadUrls(recipeUrl) {
   ].filter(Boolean);
 }
 
+// ── Plan B: module-level caches for recipe text + Drive metadata ─────────
+// Vercel Functions reuse an instance across concurrent requests (Fluid
+// Compute), so a short-TTL in-process cache cuts the Google Drive/Docs
+// round-trip on repeated lesson loads without leaking per-student data:
+// recipe text and Drive metadata are course content, identical for every
+// viewer of the same lesson. TTL is short so admin content edits appear
+// within a minute.
+const RECIPE_CACHE_TTL_MS = 60_000;
+const DRIVE_META_CACHE_TTL_MS = 120_000;
+const RECIPE_CACHE_MAX = 200;
+const recipeTextCache = new Map(); // key: recipeUrl -> { text, fetchedAt }
+const driveMetaCache = new Map();  // key: fileId -> { meta, fetchedAt }
+
+function recipeCacheGet(url) {
+  if (!url) return null;
+  const e = recipeTextCache.get(url);
+  if (!e) return null;
+  if (Date.now() - e.fetchedAt > RECIPE_CACHE_TTL_MS) {
+    recipeTextCache.delete(url);
+    return null;
+  }
+  return e.text;
+}
+function recipeCacheSet(url, text) {
+  if (!url || text == null) return;
+  if (recipeTextCache.size > RECIPE_CACHE_MAX) {
+    const oldest = recipeTextCache.keys().next().value;
+    if (oldest) recipeTextCache.delete(oldest);
+  }
+  recipeTextCache.set(url, { text, fetchedAt: Date.now() });
+}
+
+function driveMetaCacheGet(fileId) {
+  if (!fileId) return null;
+  const e = driveMetaCache.get(fileId);
+  if (!e) return null;
+  if (Date.now() - e.fetchedAt > DRIVE_META_CACHE_TTL_MS) {
+    driveMetaCache.delete(fileId);
+    return null;
+  }
+  return e.meta;
+}
+function driveMetaCacheSet(fileId, meta) {
+  if (!fileId || meta == null) return;
+  if (driveMetaCache.size > RECIPE_CACHE_MAX) {
+    const oldest = driveMetaCache.keys().next().value;
+    if (oldest) driveMetaCache.delete(oldest);
+  }
+  driveMetaCache.set(fileId, { meta, fetchedAt: Date.now() });
+}
+
+async function getDriveFileMetadataCached(fileId) {
+  const cached = driveMetaCacheGet(fileId);
+  if (cached) return cached;
+  const meta = await getDriveFileMetadata(fileId);
+  driveMetaCacheSet(fileId, meta);
+  return meta;
+}
+
 async function fetchRecipeTextFromGoogleApi(recipeUrl) {
   const docId = getGoogleDocId(recipeUrl);
   let fileId = docId || getGoogleDriveFileId(recipeUrl);
@@ -296,14 +355,24 @@ async function fetchRecipeText(recipeUrl) {
   if (!/^https?:\/\//i.test(trimmed)) {
     return trimmed;
   }
+  // Plan B: serve from in-process cache when fresh. Only the cache miss path
+  // below pays the Google Drive/Docs round-trip.
+  const cached = recipeCacheGet(trimmed);
+  if (cached != null) return cached;
+  let text = "";
   try {
-    const text = await fetchRecipeTextFromGoogleApi(trimmed);
-    if (text) return text;
+    text = await fetchRecipeTextFromGoogleApi(trimmed);
+    if (text) {
+      recipeCacheSet(trimmed, text);
+      return text;
+    }
   } catch (err) {
     console.warn("[lesson] Google API recipe fetch failed, trying public fallback:", err.message);
   }
   try {
-    return await fetchRecipeTextFromPublicUrl(trimmed);
+    text = await fetchRecipeTextFromPublicUrl(trimmed);
+    if (text) recipeCacheSet(trimmed, text);
+    return text;
   } catch (err) {
     console.error("[lesson] Public recipe fetch failed:", err.message);
     return "";
@@ -478,11 +547,13 @@ export default async function handler(req, res) {
     // 5. Secure Video URL & Media URLs
     const securedVideo = signBunnyEmbedUrl(lessonResolved.video_url || "");
     const securedMedia = signMediaUrls(lessonResolved.media_urls || "");
+    // Plan B: resolve main media via the cached Drive-metadata helper so the
+    // google drive.files.get round-trip is skipped when metadata is fresh.
     const mainMediaInfo = Boolean(lessonResolved.is_section)
       ? { mainMediaType: "none", mainMediaMimeType: "", mainMediaName: "" }
-      : await resolveMainMediaInfo(lessonResolved.video_url || "", getDriveFileMetadata);
+      : await resolveMainMediaInfo(lessonResolved.video_url || "", getDriveFileMetadataCached);
 
-    // 6. Fetch recipe text
+    // 6. Fetch recipe text (cached; see fetchRecipeText)
     const recipeText = await fetchRecipeText(lessonResolved.recipe_url);
 
     // Formatted lesson output

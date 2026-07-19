@@ -506,6 +506,15 @@
     // edits to lesson ordering/content made between visits.
     const SPA_NAVIGATION_ENABLED = true;
     const SPA_COURSE_CACHE_TTL_MS = 30_000;
+    // Plan A — per-lesson payload cache so a prefetched (or already-visited)
+    // lesson paints instantly on click without any network round-trip.
+    // Keyed by lessonId; value = { data, fetchedAt }. Short TTL keeps it
+    // safe against admin content edits between visits.
+    const SPA_LESSON_CACHE_TTL_MS = 60_000;
+    const spaLessonCache = new Map();
+    // In-flight lesson API requests, deduped by lessonId so a prefetch and a
+    // real click on the same lesson share one fetch.
+    const spaLessonInflight = new Map();
     let spaState = {
       courseSlug: null,
       lessons: null,            // last lessons array from course-data
@@ -514,6 +523,74 @@
       prevFetch: null,          // last course-data Promise (dedupe)
     };
     let inflightLessonId = null; // race guard for overlapping nav clicks
+
+    // ── Plan A: lesson payload cache + prefetch ───────────────────────────
+    function spaLessonCacheGet(id) {
+      if (!id) return null;
+      const entry = spaLessonCache.get(id);
+      if (!entry) return null;
+      if (Date.now() - entry.fetchedAt > SPA_LESSON_CACHE_TTL_MS) {
+        spaLessonCache.delete(id);
+        return null;
+      }
+      return entry.data;
+    }
+    function spaLessonCacheSet(id, data) {
+      if (!id || !data) return;
+      // Bounded cache: drop oldest entries if it grows past a sane limit so a
+      // very long course cannot leak memory across many SPA navigations.
+      if (spaLessonCache.size > 40) {
+        const oldest = spaLessonCache.keys().next().value;
+        if (oldest) spaLessonCache.delete(oldest);
+      }
+      spaLessonCache.set(id, { data, fetchedAt: Date.now() });
+    }
+
+    // Single shared fetch per lessonId. Returns the parsed { ok, lesson, email }
+    // payload (same shape as the lesson endpoint), deduping concurrent callers.
+    async function fetchLessonPayload(lessonId) {
+      const cached = spaLessonCacheGet(lessonId);
+      if (cached) return cached;
+      const existing = spaLessonInflight.get(lessonId);
+      if (existing) return existing;
+      const p = (async () => {
+        const response = await fetch(`/api/lms/portal?endpoint=lesson&id=${encodeURIComponent(lessonId)}`, {
+          method: "GET",
+          credentials: "same-origin",
+          headers: getSavedLmsSessionHeaders()
+        });
+        const data = await response.json();
+        if (!response.ok || !data.lesson) {
+          throw Object.assign(new Error("lesson_fetch_failed"), { status: response.status, data });
+        }
+        spaLessonCacheSet(lessonId, data);
+        return data;
+      })();
+      spaLessonInflight.set(lessonId, p);
+      try { return await p; }
+      finally { spaLessonInflight.delete(lessonId); }
+    }
+
+    // Prefetch prev/next lesson payloads in the background once the sidebar is
+    // ready, so the most likely next click paints instantly. Best-effort: any
+    // error is swallowed because prefetch must never block the UI.
+    function prefetchAdjacentLessons() {
+      try {
+        const real = (courseLessonsList || []).filter(l => !l.isSection);
+        const idx = real.findIndex(l => l.id === LESSON_ID);
+        const targets = [];
+        if (idx > 0) targets.push(real[idx - 1].id);
+        if (idx !== -1 && idx < real.length - 1) targets.push(real[idx + 1].id);
+        for (const id of targets) {
+          if (id && !spaLessonCacheGet(id) && !spaLessonInflight.has(id)) {
+            // fire-and-forget; errors are expected and ignored
+            fetchLessonPayload(id).catch(() => {});
+          }
+        }
+      } catch (err) {
+        // prefetch is best-effort; never surface
+      }
+    }
 
     // ── Helper functions ───────────────────────────────────────────────────
     function escapeHtml(text) {
@@ -1400,7 +1477,15 @@
 
         // Load siblings, prev/next, sidebar, and chapter metadata after first
         // paint. Fire-and-forget so the lesson itself is visible immediately.
-        loadSiblingsAndSidebar(currentLesson.course).catch((err) => {
+        loadSiblingsAndSidebar(currentLesson.course).then(() => {
+          // Plan A: once the sidebar list is ready, prefetch the prev/next
+          // lesson payloads in the background so the first nav click is
+          // instant. Best-effort; errors are swallowed inside.
+          prefetchAdjacentLessons();
+          // Also cache the lesson we just loaded so a back-navigation to it
+          // paints instantly without a refetch.
+          try { spaLessonCacheSet(LESSON_ID, { lesson: currentLesson, email: studentEmail }); } catch {}
+        }).catch((err) => {
           console.warn("[spa] sidebar load failed:", err);
         });
 
@@ -1768,20 +1853,32 @@
       // Optimistic: capture scroll + disabled state so user can move on.
       const prevScrollY = window.scrollY;
       inflightLessonId = lessonId;
+
+      // Plan A fast path: if this lesson was already prefetched/visited and is
+      // still fresh, paint immediately with zero network. setInnerLoading is
+      // skipped so the user never sees a spinner for a cached lesson.
+      const cached = spaLessonCacheGet(lessonId);
+      if (cached && cached.lesson) {
+        LESSON_ID = lessonId;
+        if (cached.email) studentEmail = cached.email;
+        paintLesson(cached.lesson);
+        refreshPrevNextAfterSwap();
+        const newUrl = `/lesson.html?id=${encodeURIComponent(lessonId)}`;
+        if (window.location.pathname + window.location.search !== newUrl) {
+          window.history.pushState({ lessonId, via }, "", newUrl);
+        }
+        window.scrollTo({ top: 0, behavior: "instant" in window.scrollTo ? "instant" : "auto" });
+        inflightLessonId = null;
+        void prevScrollY;
+        // Re-prefetch the new neighbors so the NEXT click is also instant.
+        prefetchAdjacentLessons();
+        return;
+      }
+
       setInnerLoading(true);
 
       try {
-        const response = await fetch(`/api/lms/portal?endpoint=lesson&id=${encodeURIComponent(lessonId)}`, {
-          method: "GET",
-          credentials: "same-origin",
-          headers: getSavedLmsSessionHeaders()
-        });
-        const data = await response.json();
-        if (!response.ok || !data.lesson) {
-          // Fallback to a full reload so the user is not stranded.
-          window.location.href = `/lesson.html?id=${encodeURIComponent(lessonId)}`;
-          return;
-        }
+        const data = await fetchLessonPayload(lessonId);
         // Race guard: drop the response if the user has already navigated
         // elsewhere since this request started.
         if (inflightLessonId !== lessonId) return;
@@ -1802,7 +1899,11 @@
         // lesson header rather than the previous lesson's recipe bottom.
         window.scrollTo({ top: 0, behavior: "instant" in window.scrollTo ? "instant" : "auto" });
         void prevScrollY; // captured for analytics potential, currently unused
+        // Re-prefetch neighbors of the new current lesson.
+        prefetchAdjacentLessons();
       } catch (err) {
+        // fetchLessonPayload throws on non-ok; if data was attached, check for
+        // auth errors so we fall back to a full reload (which re-runs auth).
         console.warn("[spa] navigateToLesson fetch failed, falling back to reload:", err);
         window.location.href = `/lesson.html?id=${encodeURIComponent(lessonId)}`;
       } finally {
