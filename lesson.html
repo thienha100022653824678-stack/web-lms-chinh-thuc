@@ -189,6 +189,21 @@
         border-left-width: 19px;
       }
     }
+    .supplemental-video-label {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 34px;
+      height: 24px;
+      padding: 0 10px;
+      border-radius: 9999px;
+      background: rgba(42, 75, 42, 0.1);
+      color: #2A4B2A;
+      font-size: 12px;
+      font-weight: 900;
+      line-height: 1;
+      letter-spacing: 0;
+    }
 
     /* Recipe text content rendering tags styling */
     .recipe-render h3 {
@@ -513,6 +528,18 @@
           onclick="openGoogleDrivePlayer(this.dataset.playerUrl, this.dataset.returnUrl)">
           <span class="gdrive-play-icon" aria-hidden="true"></span>
         </button>
+      `;
+    }
+
+    function formatSupplementalVideoNumber(index) {
+      return String(index + 1).padStart(2, "0");
+    }
+
+    function getSupplementalVideoLabelHtml(index) {
+      return `
+        <div class="px-4 pt-3 pb-2">
+          <span class="supplemental-video-label">${formatSupplementalVideoNumber(index)}</span>
+        </div>
       `;
     }
 
@@ -1036,6 +1063,7 @@
         return;
       }
 
+      let supplementalVideoIndex = 0;
       const html = parsedItems.map(item => {
         const safeTitle = escapeHtml(item.title || "");
         if (item.type === "video") {
@@ -1043,11 +1071,12 @@
           if (url.startsWith("error:")) {
             return `<div class="bg-red-50 text-red-700 border border-red-200 rounded-2xl p-4 mb-4 font-semibold text-sm">⚠️ ${escapeHtml(url.replace("error:", ""))}</div>`;
           }
+          const videoLabelHtml = getSupplementalVideoLabelHtml(supplementalVideoIndex++);
           const ytId = getYouTubeVideoId(url);
           if (ytId) {
             return `
               <div class="bg-white border border-brandBrown/5 rounded-2xl overflow-hidden shadow-sm mb-4">
-                ${safeTitle ? `<div class="px-4 pt-4 font-bold text-sm text-brandBrown">${safeTitle}</div>` : ""}
+                ${videoLabelHtml}
                 <div class="aspect-video relative">
                   <iframe class="absolute inset-0 w-full h-full border-0" src="https://www.youtube.com/embed/${ytId}?rel=0" allowfullscreen></iframe>
                 </div>
@@ -1060,7 +1089,7 @@
             const thumbUrl = `https://drive.google.com/thumbnail?id=${driveId}&sz=w1000`;
             return `
               <div class="bg-white border border-brandBrown/5 rounded-2xl overflow-hidden shadow-sm mb-4">
-                ${safeTitle ? `<div class="px-4 pt-4 font-bold text-sm text-brandBrown">${safeTitle}</div>` : ""}
+                ${videoLabelHtml}
                 <div class="aspect-video relative bg-black flex items-center justify-center">
                   <img src="${escapeHtml(thumbUrl)}" alt="" class="absolute inset-0 w-full h-full object-cover opacity-60" loading="lazy">
                   ${getGoogleDrivePlayButtonHtml(playerUrl, returnUrl)}
@@ -1072,7 +1101,7 @@
             const containerId = "bunny_media_" + Math.random().toString(36).substr(2, 9);
             return `
               <div class="bg-white border border-brandBrown/5 rounded-2xl overflow-hidden shadow-sm mb-4">
-                ${safeTitle ? `<div class="px-4 pt-4 font-bold text-sm text-brandBrown">${safeTitle}</div>` : ""}
+                ${videoLabelHtml}
                 <div id="${containerId}" class="aspect-video relative" data-bunny-media-container>
                   <iframe class="absolute inset-0 w-full h-full border-0" src="${escapeHtml(url)}" allowfullscreen referrerpolicy="origin"></iframe>
                 </div>
@@ -1082,27 +1111,25 @@
           if (isImage) {
             return `
               <div class="bg-white border border-brandBrown/5 rounded-2xl overflow-hidden shadow-sm mb-4">
-                ${safeTitle ? `<div class="px-4 pt-4 font-bold text-sm text-brandBrown">${safeTitle}</div>` : ""}
+                ${videoLabelHtml}
                 <div class="p-4">
-                  <img src="${escapeHtml(url)}" alt="${safeTitle}" class="w-full rounded-xl object-contain max-h-[400px]" loading="lazy"/>
+                  <img src="${escapeHtml(url)}" alt="" class="w-full rounded-xl object-contain max-h-[400px]" loading="lazy"/>
                 </div>
               </div>`;
           }
           return `
             <div class="bg-white border border-brandBrown/5 rounded-2xl overflow-hidden shadow-sm p-4 mb-4 flex items-center justify-between gap-3">
-              <div>
-                <div class="font-bold text-sm text-brandBrown">${safeTitle || "Tài liệu đính kèm"}</div>
-                <div class="text-xs text-brandBrown/50 truncate max-w-[200px] mt-0.5">${escapeHtml(url)}</div>
-              </div>
-              <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="px-4 py-2 bg-brandGreen hover:bg-brandGreen/90 text-white font-bold text-xs rounded-xl">Mở ↗</a>
+              ${videoLabelHtml}
+              <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="px-4 py-2 bg-brandGreen hover:bg-brandGreen/90 text-white font-bold text-xs rounded-xl">Mở video ↗</a>
             </div>`;
         }
         if (item.type === "youtube") {
           const ytId = getYouTubeVideoId(item.url);
           if (!ytId) return "";
+          const videoLabelHtml = getSupplementalVideoLabelHtml(supplementalVideoIndex++);
           return `
             <div class="bg-white border border-brandBrown/5 rounded-2xl overflow-hidden shadow-sm mb-4">
-              ${safeTitle ? `<div class="px-4 pt-4 font-bold text-sm text-brandBrown">${safeTitle}</div>` : ""}
+              ${videoLabelHtml}
               <div class="aspect-video relative">
                 <iframe class="absolute inset-0 w-full h-full border-0" src="https://www.youtube.com/embed/${ytId}?rel=0" allowfullscreen></iframe>
               </div>
