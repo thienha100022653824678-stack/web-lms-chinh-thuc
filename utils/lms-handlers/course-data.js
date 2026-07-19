@@ -45,6 +45,31 @@ function isActiveEnrollment(status) {
   return ACTIVE_ENROLLMENT_STATUSES.has(normalizeEnrollmentStatus(status));
 }
 
+// Plan C: normalize lesson materials so course-data returns the same shape
+// the lesson endpoint returns, letting the SPA paint a lesson fully from the
+// cached course list without a per-click round-trip. Mirrors the helper in
+// lesson.js so the wire contract stays identical between the two endpoints.
+function normalizeMaterials(value) {
+  const raw = Array.isArray(value) ? value : [];
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const name = String(item.name || item.fileName || "").trim();
+      const url = String(item.url || item.webViewLink || item.downloadUrl || "").trim();
+      if (!name || !url) return null;
+      return {
+        id: String(item.id || item.fileId || url),
+        name,
+        url,
+        downloadUrl: String(item.downloadUrl || url),
+        mimeType: String(item.mimeType || ""),
+        size: Number(item.size || 0),
+        source: String(item.source || "google_drive")
+      };
+    })
+    .filter(Boolean);
+}
+
 function getLmsSessionHeaders(req) {
   return {
     lmsSessionId: String(req.headers["x-lms-session-id"] || "").trim(),
@@ -538,6 +563,9 @@ export default async function handler(req, res) {
         recipeUrl: l.recipe_url || "",
         mediaUrls: securedMedia,
         ...mainMediaInfo,
+        // Plan C: include materials so the SPA can paint a lesson fully from
+        // the cached course list. Sections never carry materials.
+        materials: isSec ? [] : normalizeMaterials(l.materials),
         isSection: isSec,
         views: l.views || 0,
         status: l.status || "active",

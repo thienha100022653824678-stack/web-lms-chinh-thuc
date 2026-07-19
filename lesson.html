@@ -1854,6 +1854,29 @@
       const prevScrollY = window.scrollY;
       inflightLessonId = lessonId;
 
+      // Plan C PRIMARY path: the course list (loaded once by course-data,
+      // now including materials) already holds every sibling lesson with the
+      // same fields the lesson endpoint returns. Paint directly from it with
+      // zero network and zero spinner. This is the common case for prev/next
+      // and sidebar clicks once the course has loaded.
+      const fromCourseList = (courseLessonsList || []).find(l => l.id === lessonId);
+      if (fromCourseList && !fromCourseList.isSection) {
+        LESSON_ID = lessonId;
+        paintLesson(fromCourseList);
+        refreshPrevNextAfterSwap();
+        const newUrl = `/lesson.html?id=${encodeURIComponent(lessonId)}`;
+        if (window.location.pathname + window.location.search !== newUrl) {
+          window.history.pushState({ lessonId, via }, "", newUrl);
+        }
+        window.scrollTo({ top: 0, behavior: "instant" in window.scrollTo ? "instant" : "auto" });
+        inflightLessonId = null;
+        void prevScrollY;
+        // Keep the per-lesson cache warm for back-nav and deep-links.
+        try { spaLessonCacheSet(lessonId, { lesson: fromCourseList, email: studentEmail }); } catch {}
+        prefetchAdjacentLessons();
+        return;
+      }
+
       // Plan A fast path: if this lesson was already prefetched/visited and is
       // still fresh, paint immediately with zero network. setInnerLoading is
       // skipped so the user never sees a spinner for a cached lesson.
