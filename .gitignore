@@ -21,3 +21,10 @@ scratch/
 .claude/
 review-dossier-*/
 .superpowers/
+
+# Session artifacts (added by C1 SPA-lite deploy on 2026-07-19)
+.omc/
+docs/.omc/
+backups/
+# Microsoft Word lock file (transient)
+~$*.docx

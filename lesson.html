@@ -499,6 +499,22 @@
     const LMS_SESSION_KEY = "lms_verified_session_id";
     const LMS_SESSION_ALIAS_KEY = "lms_session_id";
 
+    // ── SPA-lite navigation state (C1 of LESSON_NAVIGATION_PERFORMANCE_INVESTIGATION) ──
+    // When true, prev/next/sidebar clicks swap the lesson in-place instead of
+    // reloading lesson.html. Falls back to a full reload only if the cached
+    // course/data is missing or stale. Cache TTL is short to respect any admin
+    // edits to lesson ordering/content made between visits.
+    const SPA_NAVIGATION_ENABLED = true;
+    const SPA_COURSE_CACHE_TTL_MS = 30_000;
+    let spaState = {
+      courseSlug: null,
+      lessons: null,            // last lessons array from course-data
+      courseInfo: null,         // last courseInfo from course-data
+      fetchedAt: 0,             // Date.now() of last course-data fetch
+      prevFetch: null,          // last course-data Promise (dedupe)
+    };
+    let inflightLessonId = null; // race guard for overlapping nav clicks
+
     // ── Helper functions ───────────────────────────────────────────────────
     function escapeHtml(text) {
       return String(text || "")
@@ -1264,7 +1280,6 @@
 
         currentLesson = data.lesson;
         studentEmail = data.email || "Học viên";
-
         // Show student badges
         document.getElementById("studentEmailBadge").innerText = studentEmail;
         document.getElementById("studentAvatar").innerText = studentEmail.charAt(0).toUpperCase();
@@ -1377,12 +1392,17 @@
         renderMediaItems(currentLesson);
         renderLessonMaterials(currentLesson);
 
-        // Load siblings, prev/next, sidebar, and chapter metadata before first paint.
-        await loadSiblingsAndSidebar(currentLesson.course);
-
-        // Transition states after all visible lesson metadata is ready.
+        // C1 SPA-lite: hide spinner + reveal main layout as soon as the
+        // current lesson paints. Sidebar/preview was the longest pole before
+        // and is now loaded in parallel with a race-safe cache.
         document.getElementById("loadingState").classList.add("hidden");
         document.getElementById("mainLayout").classList.remove("hidden");
+
+        // Load siblings, prev/next, sidebar, and chapter metadata after first
+        // paint. Fire-and-forget so the lesson itself is visible immediately.
+        loadSiblingsAndSidebar(currentLesson.course).catch((err) => {
+          console.warn("[spa] sidebar load failed:", err);
+        });
 
       } catch (err) {
         console.error("Failed to load lesson:", err);
@@ -1397,14 +1417,8 @@
     // ── Sidebar & Siblings List ───────────────────────────────────────────
     async function loadSiblingsAndSidebar(courseSlug) {
       try {
-        const response = await fetch("/api/lms/portal?endpoint=course-data", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...getSavedLmsSessionHeaders() },
-          body: JSON.stringify({ course: courseSlug })
-        });
-
-        const data = await response.json();
-        if (!response.ok || !data.allowed) return;
+        const data = await loadCourseDataShared(courseSlug);
+        if (!data || !data.allowed) return;
         updateCourseHomeHeader(courseSlug, resolveCourseHomeTitle(data.courseInfo, courseSlug));
 
         courseLessonsList = data.lessons || [];
@@ -1464,24 +1478,39 @@
 
           const isActive = l.id === LESSON_ID;
           const a = document.createElement("a");
+          // C1 SPA-lite: sidebar links navigate via router so prev/next and
+          // back/forward keep history without reloading the page. Real URL is
+          // preserved in the href for share/copy/middle-click.
           a.href = `/lesson.html?id=${l.id}`;
           a.className = `block p-3 rounded-xl transition font-medium text-xs flex gap-3 items-center border ${
             isActive
               ? "bg-brandGreen/10 border-brandGreen/25 text-brandGreen font-extrabold"
               : "bg-transparent border-transparent hover:bg-brandGray text-brandBrown/80"
           } ${hasSection ? "ml-2" : ""}`;
+          a.addEventListener("click", (ev) => {
+            // Honor modifier keys + non-primary buttons so external open etc.
+            if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+            if (ev.button !== 0) return;
+            if (l.id === LESSON_ID) {
+              ev.preventDefault();
+              return;
+            }
+            ev.preventDefault();
+            navigateToLesson(l.id, { via: "sidebar" });
+          });
 
           const thumb = normalizeGoogleDriveImageUrl(l.thumbnailUrl || HERO_PLACEHOLDER_IMAGE);
           a.innerHTML = `
             <div class="w-12 aspect-video rounded overflow-hidden flex-shrink-0 border border-brandBrown/5 bg-brandGray relative">
               <img class="w-full h-full object-cover" src="${thumb}" alt="thumb">
-              ${isActive ? '<div class="absolute inset-0 bg-brandGreen/40 flex items-center justify-center text-white text-[10px]">▶</div>' : ''}
+              <div data-active-marker class="absolute inset-0 bg-brandGreen/40 items-center justify-center text-white text-[10px]" style="display:${isActive ? 'flex' : 'none'}">▶</div>
             </div>
             <div class="min-w-0 flex-grow">
               <div class="text-[9px] uppercase tracking-wider text-brandBrown/40">Bài ${displayLessonNo}</div>
               <div class="truncate text-xs leading-normal mt-0.5">${escapeHtml(l.title)}</div>
             </div>
           `;
+          a.dataset.lessonId = l.id;
           sidebar.appendChild(a);
         });
 
@@ -1495,7 +1524,7 @@
 
         if (realCurrentIdx > 0) {
           prevBtn.disabled = false;
-          prevBtn.onclick = () => window.location.href = `/lesson.html?id=${realLessonsList[realCurrentIdx - 1].id}`;
+          prevBtn.onclick = () => navigateToLesson(realLessonsList[realCurrentIdx - 1].id, { via: "prev" });
         } else {
           prevBtn.disabled = true;
           prevBtn.onclick = null;
@@ -1503,7 +1532,7 @@
 
         if (realCurrentIdx !== -1 && realCurrentIdx < realLessonsList.length - 1) {
           nextBtn.disabled = false;
-          nextBtn.onclick = () => window.location.href = `/lesson.html?id=${realLessonsList[realCurrentIdx + 1].id}`;
+          nextBtn.onclick = () => navigateToLesson(realLessonsList[realCurrentIdx + 1].id, { via: "next" });
         } else {
           nextBtn.disabled = true;
           nextBtn.onclick = null;
@@ -1512,6 +1541,308 @@
       } catch (err) {
         console.warn("Failed to load sidebar siblings:", err);
       }
+    }
+
+    // ── SPA-lite navigation (C1) ──────────────────────────────────────────
+    // Course-data fetch with dedupe + short-lived in-memory cache. Same
+    // payload is reused when navigating among sibling lessons so we do not
+    // hit the heavy backend endpoint on every prev/next click.
+    async function loadCourseDataShared(courseSlug) {
+      const fresh = spaState.lessons
+        && spaState.courseSlug === courseSlug
+        && (Date.now() - spaState.fetchedAt) < SPA_COURSE_CACHE_TTL_MS;
+      if (fresh) {
+        return {
+          allowed: true,
+          courseInfo: spaState.courseInfo,
+          lessons: spaState.lessons
+        };
+      }
+      if (spaState.prevFetch && spaState.courseSlug === courseSlug) {
+        return spaState.prevFetch;
+      }
+      const fetchPromise = (async () => {
+        try {
+          const response = await fetch("/api/lms/portal?endpoint=course-data", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...getSavedLmsSessionHeaders() },
+            body: JSON.stringify({ course: courseSlug })
+          });
+          const data = await response.json();
+          if (!response.ok || !data.allowed) return data;
+          spaState.courseSlug = courseSlug;
+          spaState.lessons = data.lessons || [];
+          spaState.courseInfo = data.courseInfo || null;
+          spaState.fetchedAt = Date.now();
+          return data;
+        } finally {
+          spaState.prevFetch = null;
+        }
+      })();
+      spaState.prevFetch = fetchPromise;
+      return fetchPromise;
+    }
+
+    // Show a small "loading" hint on prev/next without covering the whole
+    // screen like the initial SPA boot loader. Used only during in-place
+    // navigation; the first paint keeps its own full-screen spinner.
+    function setInnerLoading(on) {
+      const nav = document.querySelector("main");
+      if (!nav) return;
+      let host = document.getElementById("spaInnerLoader");
+      if (on) {
+        if (host) return;
+        host = document.createElement("div");
+        host.id = "spaInnerLoader";
+        host.className = "sticky top-20 z-30 -mx-4 sm:mx-0 mb-3 px-4 py-2 rounded-xl bg-brandGreen/10 border border-brandGreen/25 text-brandGreen text-xs font-extrabold flex items-center gap-2";
+        host.innerHTML = '<span class="w-3 h-3 border-2 border-brandGreen border-t-transparent rounded-full animate-spin"></span><span>Đang tải bài tiếp theo…</span>';
+        nav.insertBefore(host, nav.firstChild);
+        document.getElementById("prevBtn")?.setAttribute("disabled", "true");
+        document.getElementById("nextBtn")?.setAttribute("disabled", "true");
+      } else if (host) {
+        host.remove();
+      }
+    }
+
+    // Apply a fetched lesson payload to the existing DOM in-place.
+    function paintLesson(lesson) {
+      if (!lesson) return;
+      currentLesson = lesson;
+
+      // Stop any in-flight <iframe> video + watermark before swap so the
+      // bunny embed does not leak into the next lesson.
+      const videoWrapper = document.getElementById("videoWrapper");
+      if (videoWrapper) {
+        clearWatermarkFrom(videoWrapper);
+        videoWrapper.innerHTML = "";
+      }
+      const videoThumb = document.getElementById("videoThumb");
+      const playBtn = document.getElementById("playBtn");
+      if (videoThumb) videoThumb.src = "";
+      if (playBtn) playBtn.onclick = null;
+
+      // Header + meta
+      document.title = `${lesson.title} - Culinary Academy`;
+      const titleEl = document.getElementById("lessonTitle");
+      if (titleEl) titleEl.innerText = lesson.title;
+      const badge = document.getElementById("lessonNumberBadge");
+      if (badge) badge.innerText = `BÀI ${lesson.displayLesson || lesson.lesson}`;
+
+      const durationEl = document.getElementById("lessonDuration");
+      if (durationEl) {
+        if (lesson.duration && lesson.duration !== "N/A") {
+          durationEl.innerText = `⏱ ${lesson.duration}`;
+          durationEl.classList.remove("hidden");
+        } else {
+          durationEl.classList.add("hidden");
+        }
+      }
+      const levelEl = document.getElementById("lessonLevel");
+      if (levelEl) {
+        if (lesson.level) {
+          levelEl.innerText = `▥ ${lesson.level}`;
+          levelEl.classList.remove("hidden");
+        } else {
+          levelEl.classList.add("hidden");
+        }
+      }
+      const viewsEl = document.getElementById("lessonViews");
+      if (viewsEl) viewsEl.innerText = `👁 ${lesson.views || 0}`;
+
+      const descBox = document.getElementById("lessonDescriptionBox");
+      const descText = (lesson.description || "").trim();
+      if (descBox) {
+        if (descText && descText !== "Chưa có mô tả ngắn.") {
+          document.getElementById("lessonDescription").innerText = descText;
+          descBox.classList.remove("hidden");
+        } else {
+          descBox.classList.add("hidden");
+        }
+      }
+
+      // Back-link uses the course of the loaded lesson.
+      updateCourseHomeHeader(lesson.course, lesson.course);
+
+      // Video / image area
+      const videoBox = document.getElementById("videoBox");
+      const hasMainImage = isMainMediaImage(lesson);
+      const hasVideo = Boolean(lessonVideoUrl(lesson));
+      if (videoBox) {
+        if (hasMainImage) {
+          videoBox.classList.remove("hidden");
+          if (videoWrapper) {
+            videoWrapper.innerHTML = getMainImageHtml(lesson);
+          }
+        } else if (hasVideo) {
+          videoBox.classList.remove("hidden");
+          if (videoThumb) {
+            videoThumb.src = normalizeGoogleDriveImageUrl(lesson.thumbnailUrl || HERO_PLACEHOLDER_IMAGE);
+          }
+          if (playBtn) {
+            playBtn.onclick = () => {
+              if (isCocCocBrowser()) {
+                videoWrapper.innerHTML = getCocCocBlockedHtml();
+                return;
+              }
+              if (!isMobileDevice()) {
+                videoWrapper.innerHTML = getPCBlockedHtml();
+                return;
+              }
+              const videoUrl = lessonVideoUrl(currentLesson);
+              if (!videoUrl) return;
+              videoWrapper.innerHTML = getIframePlayerHtml(videoUrl);
+              if (currentLesson.videoProvider === "bunny_embed") {
+                createWatermark(videoWrapper, studentEmail);
+              }
+            };
+          }
+        } else {
+          videoBox.classList.add("hidden");
+        }
+      }
+
+      // Recipe
+      const recipeSection = document.getElementById("recipeSectionBox");
+      const recipeContent = document.getElementById("recipeContent");
+      const hasRecipe = Boolean(lesson.recipeText && lesson.recipeText.trim());
+      if (recipeSection) {
+        if (hasRecipe) {
+          recipeSection.classList.remove("hidden");
+          if (recipeContent) {
+            recipeContent.innerHTML = `<div class="recipe-content-html">${recipeTextToHtml(lesson.recipeText)}</div>`;
+          }
+        } else {
+          recipeSection.classList.add("hidden");
+        }
+      }
+
+      renderMediaItems(lesson);
+      renderLessonMaterials(lesson);
+
+      // Refresh sidebar active state + chapter header without rebuilding list
+      refreshSidebarActiveState(lesson.id);
+    }
+
+    // Re-apply the active-link highlight on the existing sidebar so we don't
+    // rebuild the whole list (which would reset thumbnails, scroll position,
+    // and trigger reflow on a long course).
+    function refreshSidebarActiveState(activeId) {
+      const sidebar = document.getElementById("sidebarLessonList");
+      if (!sidebar) return;
+      sidebar.querySelectorAll("a[data-lesson-id]").forEach(a => {
+        const id = a.dataset.lessonId;
+        const isActive = id === activeId;
+        a.className = `block p-3 rounded-xl transition font-medium text-xs flex gap-3 items-center border ${
+          isActive
+            ? "bg-brandGreen/10 border-brandGreen/25 text-brandGreen font-extrabold"
+            : "bg-transparent border-transparent hover:bg-brandGray text-brandBrown/80"
+        } ${(courseLessonsList.some(l => l.isSection)) ? "ml-2" : ""}`;
+        const marker = a.querySelector("[data-active-marker]");
+        if (marker) marker.style.display = isActive ? "flex" : "none";
+      });
+    }
+
+    // Annotate sidebar links with data-lesson-id so refreshSidebarActiveState
+    // and event delegation can find them without rebuilding the DOM.
+    function tagSidebarLinks() {
+      const sidebar = document.getElementById("sidebarLessonList");
+      if (!sidebar) return;
+      sidebar.querySelectorAll("a").forEach((a) => {
+        const m = a.getAttribute("href")?.match(/[?&]id=([^&]+)/);
+        if (m) a.dataset.lessonId = decodeURIComponent(m[1]);
+      });
+    }
+
+    // Activate prev/next/sidebar navigation without a full reload.
+    // Falls back to a hard navigation when course-lesson data isn't
+    // available yet, when the lesson API fails, or when the user opens
+    // a deep link directly (handled naturally — loadLessonDetails runs).
+    async function navigateToLesson(lessonId, { via = "prev" } = {}) {
+      if (!lessonId || lessonId === LESSON_ID) return;
+      if (inflightLessonId && inflightLessonId !== LESSON_ID) {
+        // Another nav click is in flight; let the latest one win by ignoring
+        // duplicate clicks but always permitting a fresh navigation to a
+        // different lesson.
+      }
+
+      // Optimistic: capture scroll + disabled state so user can move on.
+      const prevScrollY = window.scrollY;
+      inflightLessonId = lessonId;
+      setInnerLoading(true);
+
+      try {
+        const response = await fetch(`/api/lms/portal?endpoint=lesson&id=${encodeURIComponent(lessonId)}`, {
+          method: "GET",
+          credentials: "same-origin",
+          headers: getSavedLmsSessionHeaders()
+        });
+        const data = await response.json();
+        if (!response.ok || !data.lesson) {
+          // Fallback to a full reload so the user is not stranded.
+          window.location.href = `/lesson.html?id=${encodeURIComponent(lessonId)}`;
+          return;
+        }
+        // Race guard: drop the response if the user has already navigated
+        // elsewhere since this request started.
+        if (inflightLessonId !== lessonId) return;
+
+        LESSON_ID = lessonId;
+        if (data.email) studentEmail = data.email;
+        paintLesson(data.lesson);
+        refreshPrevNextAfterSwap();
+
+        // Update URL without reload. pushState so the back button returns to
+        // the previous lesson (instead of stepping out of the lesson viewer).
+        const newUrl = `/lesson.html?id=${encodeURIComponent(lessonId)}`;
+        if (window.location.pathname + window.location.search !== newUrl) {
+          window.history.pushState({ lessonId, via }, "", newUrl);
+        }
+
+        // Restore scroll to top of main content so the user sees the new
+        // lesson header rather than the previous lesson's recipe bottom.
+        window.scrollTo({ top: 0, behavior: "instant" in window.scrollTo ? "instant" : "auto" });
+        void prevScrollY; // captured for analytics potential, currently unused
+      } catch (err) {
+        console.warn("[spa] navigateToLesson fetch failed, falling back to reload:", err);
+        window.location.href = `/lesson.html?id=${encodeURIComponent(lessonId)}`;
+      } finally {
+        if (inflightLessonId === lessonId) inflightLessonId = null;
+        setInnerLoading(false);
+      }
+    }
+
+    function refreshPrevNextAfterSwap() {
+      const realLessonsList = courseLessonsList.filter(l => !l.isSection);
+      const realCurrentIdx = realLessonsList.findIndex(l => l.id === LESSON_ID);
+      const prevBtn = document.getElementById("prevBtn");
+      const nextBtn = document.getElementById("nextBtn");
+      if (prevBtn) {
+        if (realCurrentIdx > 0) {
+          prevBtn.disabled = false;
+          prevBtn.onclick = () => navigateToLesson(realLessonsList[realCurrentIdx - 1].id, { via: "prev" });
+        } else {
+          prevBtn.disabled = true;
+          prevBtn.onclick = null;
+        }
+      }
+      if (nextBtn) {
+        if (realCurrentIdx !== -1 && realCurrentIdx < realLessonsList.length - 1) {
+          nextBtn.disabled = false;
+          nextBtn.onclick = () => navigateToLesson(realLessonsList[realCurrentIdx + 1].id, { via: "next" });
+        } else {
+          nextBtn.disabled = true;
+          nextBtn.onclick = null;
+        }
+      }
+    }
+
+    // Hook sidebar-link tagging into the existing builder so we don't
+    // duplicate the render. loadSiblingsAndSidebar is invoked both at boot
+    // and after each course-data fetch in SPA mode; this lets both paths
+    // mark up the active state without code duplication.
+    function markSidebarAfterRender() {
+      tagSidebarLinks();
+      refreshSidebarActiveState(LESSON_ID);
     }
 
     // Initial load
@@ -1545,6 +1876,28 @@
       });
 
       loadLessonDetails();
+
+      // C1 SPA-lite: handle back/forward navigation by re-loading from the
+      // real URL via the lesson API. Without this listener the browser would
+      // restore the cached bfcache and skip our render entirely, showing
+      // stale chrome.
+      window.addEventListener("popstate", (ev) => {
+        try {
+          const params = new URLSearchParams(window.location.search);
+          const id = params.get("id");
+          if (id && id !== currentLesson?.id) {
+            // Use the SPA router directly to keep UI consistent.
+            navigateToLesson(id, { via: "popstate" });
+          }
+        } catch {}
+      });
+
+      // Replace current history entry with a state object so popstate has
+      // meaningful data and so any pushState from navigateToLesson stacks
+      // correctly.
+      try {
+        window.history.replaceState({ lessonId: LESSON_ID }, "", window.location.href);
+      } catch {}
     };
   </script>
 </body>
