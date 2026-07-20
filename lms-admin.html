@@ -8,6 +8,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Canonical mediaUrls parser (4-field, caption-aware). Loaded BEFORE the inline
+       app script so parseMediaUrls/parseMediaLine/decodeMediaCaption/encodeMediaCaption
+       are globals. Single source of truth — admin's parseMediaLineForAdmin wraps parseMediaLine. -->
+  <script src="/vendor/lms-media.js"></script>
   <script src="https://accounts.google.com/gsi/client" async></script>
 
   <script>
@@ -2049,33 +2053,16 @@
     let blockIdCounter = 0;
     const MEDIA_CAPTION_MAX_LENGTH = 250;
 
-    function decodeMediaCaption(value) {
-      const raw = String(value || "");
-      if (!raw) return "";
-      try {
-        return decodeURIComponent(raw);
-      } catch {
-        return raw;
-      }
-    }
-
-    function encodeMediaCaption(value) {
-      return encodeURIComponent(String(value || "").trim().slice(0, MEDIA_CAPTION_MAX_LENGTH));
-    }
+    // decodeMediaCaption + encodeMediaCaption + parseMediaLine + parseMediaUrls are
+    // canonical globals from /vendor/lms-media.js. Keep MEDIA_CAPTION_MAX_LENGTH here
+    // as a local alias for the admin UI (counter/maxlength/textarea) — it MUST stay
+    // in sync with LMS_MEDIA_CAPTION_MAX_LENGTH in /vendor/lms-media.js (both = 250).
+    // parseMediaLineForAdmin wraps the canonical parseMediaLine (same {type,title,url,caption}).
 
     function parseMediaLineForAdmin(line) {
-      const trimmed = String(line || "").trim();
-      if (!trimmed) return null;
-      const firstPipe = trimmed.indexOf("|");
-      const secondPipe = trimmed.indexOf("|", firstPipe + 1);
-      if (firstPipe === -1 || secondPipe === -1) return null;
-      const thirdPipe = trimmed.indexOf("|", secondPipe + 1);
-      const type = trimmed.slice(0, firstPipe).trim();
-      const title = trimmed.slice(firstPipe + 1, secondPipe).trim();
-      const url = (thirdPipe === -1 ? trimmed.slice(secondPipe + 1) : trimmed.slice(secondPipe + 1, thirdPipe)).trim();
-      const caption = thirdPipe === -1 ? "" : decodeMediaCaption(trimmed.slice(thirdPipe + 1).trim());
-      if (!type || !url) return null;
-      return { type, title, url, caption };
+      // Delegate to the canonical single-line parser. Returns null on invalid lines,
+      // { type, title, url, caption } otherwise — identical to the previous inline impl.
+      return parseMediaLine(line);
     }
 
     function updateMediaCaptionCount(id) {

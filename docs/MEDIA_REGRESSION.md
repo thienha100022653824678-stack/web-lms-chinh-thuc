@@ -451,3 +451,94 @@ reassignOk, noOverlay, noDuplicateRender, handlersStillAttached  true
 ---
 
 OWNER APPROVAL: commit + push Media P0 fix?
+
+---
+
+## Preview Verification (Vercel Preview of `b7e8d34`)
+
+**Commit pushed:** `b7e8d34a917e3ff3d14adc7241c86b5be93e874e` on `origin/feat/v2-lms-baseline-fix` (single push, no force, no amend).
+**Author / committer email:** `thienha100022653824678@gmail.com` (owner) — verified via `git log -1 --format=%ae/%ce`.
+**Files in commit (exactly 3, as approved):** `lesson.html` (+20/-4), `docs/MEDIA_REGRESSION.md` (+453, new), `docs/NAVIGATION_ROOT_CAUSE.md` (+182). Nothing else.
+**Vercel deployment status (GitHub `Vercel` context for `b7e8d34`):** `success` — "Deployment has completed" (poll 7, ~1.5 min after push).
+**Preview URL:** `https://web-lms-chinh-thuc-aodpgpdyg.vercel.app` (from GitHub deployment `5518008127` status `target_url`).
+**Environment:** Preview (GitHub deployment `environment: Preview`).
+
+### 1. Preview source = the Media P0 fix commit (confirmed)
+
+`curl https://web-lms-chinh-thuc-aodpgpdyg.vercel.app/lesson.html?id=…` returns the deployed HTML containing the fix markers:
+- Line 492: `let LESSON_ID = urlParams.get("id");` (P0 nav fix still live)
+- No `const LESSON_ID` (absent)
+- Lines 1765–1777: the `// Media P0 fix: …` comment + the re-create block (`videoWrapper.innerHTML = '<img id="videoThumb" …>' + '<button id="playBtn" …>▶</button>'`)
+
+Robust proof via `paintLesson.toString()` on the live Preview page:
+```
+paintLesson.toString() length: 5592
+contains 'Media P0 fix': true
+contains 'Re-create the placeholder': true
+contains 'videoThumb': true
+contains 'playBtn': true
+contains getElementById("videoThumb"): true
+--- hasVideo branch snippet ---
+} else if (hasVideo) {
+  videoBox.classList.remove("hidden");
+  // Media P0 fix: the swap-cleanup at the top of paintLesson set
+  // videoWrapper.innerHTML = "", which destroyed the static
+  // <img id="videoThumb"
+```
+So the deployed `paintLesson` is the fixed version (commit `b7e8d34`), not a stale build.
+
+### 2. Unauthenticated Preview smoke (Playwright, real Preview, read-only)
+
+| Check | Result |
+|---|---|
+| Homepage `https://…aodpgpdyg.vercel.app/` HTTP | **200** |
+| `lesson.html?id=13735c5c-…` HTTP | **200** |
+| `LESSON_ID` type = string; `navigateToLesson` + `paintLesson` defined | PASS |
+| `paintLesson.toString()` contains the fix markers | PASS (see §1) |
+| **Reassign probe** `LESSON_ID = "x"` (P0 nav fix still live) | **OK — no throw** |
+| `pageErrors` | **[] (zero JS exceptions)** |
+| Console errors | one `401 Failed to load resource` for `/api/lms/portal?endpoint=lesson` — **expected** for an unauthenticated visitor (no LMS session); same auth-gated behavior as production, not a regression |
+| 5xx requests | none |
+
+### 3. Authenticated smoke on Preview — NOT run (stated limitation)
+
+A real authenticated Playwright smoke (login → SPA nav to a video lesson → assert `#videoThumb` + `#playBtn` render with the correct thumbnail → click ▶ → iframe + watermark) was **not executed directly against the Preview**. Reason: it requires a valid `entry_token` URL or a test Google account enrolled in a course on the production Supabase — neither provided, and I did not write to the production DB or mint tokens (out of scope + would touch production state). No Google account or entry-token was requested from the owner.
+
+The authenticated media behavior is covered by the **local-stub Playwright media gate** (see `## Media P0 Fix Verification` above), which runs the **same modified `lesson.html` inline script** in a real Chromium DOM with a seeded LMS session and realistic image/Bunny/Drive payloads: 28/28 media-gate assertions pass (every SPA-video transition recreates the placeholder, correct thumb src, play handler bound, cleanup, no iframe leak). The Preview probe above is the evidence that the fix is actually deployed.
+
+### 4. Residual risk (Preview-specific)
+
+| Risk | Likelihood | Note |
+|---|---|---|
+| Authed media path on the Preview specifically (vs local stub) | Low–medium | The unauth Preview probe confirms the deployed `paintLesson` contains the fix and zero pageerror. The authed code path is the same inline script; the only difference on the authed path is the API returns 200 instead of 401, which lets `loadSiblingsAndSidebar` wire buttons and `paintLesson` run on click — exercised in the local gate. An owner-run authed SPA nav to a video lesson on the Preview would close this last gap. |
+| Real prod media shape (real Bunny signed URL, real Drive fileId, real thumbnail) not exercised on Preview | Low | The fix is in the placeholder DOM, not in URL computation. `lessonVideoUrl` / `normalizeGoogleDriveImageUrl` are unchanged; the placeholder HTML is a verbatim template copy. The local stub used the same URL shapes (`drive.google.com/thumbnail?id=…`, `iframe.mediadelivery.net/embed/…/…?token=…`) as prod. |
+| Mobile + Bunny watermark after SPA nav | Low | Desktop-UA Preview probe hit the PC-blocked path (correct desktop behavior). The mobile+Bunny path injects the iframe + watermark via the unchanged handler body; the local-gate cleanup check confirmed no watermark leak on nav-away. Owner mobile spot-check closes this. |
+
+### 5. What was NOT done (still in force)
+
+- No merge to `main`. No second commit, no amend, no force-push, no extra push.
+- No manual deploy, no production promote, no production DB write, no token minting.
+- No authed smoke directly on the Preview (limitation stated; owner manual test requested).
+- No P1 work.
+
+### 6. Rollback target (unchanged from the P0 promote)
+
+- **Pre-Media-P0 production** = the current production deployment (`web-lms-chinh-thuc-cirwy9cp1.vercel.app`, `dpl_9fs7awTqRJmwdNM366CzZoDdCAuZ`, source = commit `7d7689c` — the P0 nav fix, without the media fix).
+- If the Media P0 Preview is promoted and a regression appears, rollback = re-promote `dpl_9fs7awTqRJmwdNM366CzZoDdCAuZ` (or `git revert b7e8d34` + push → new Preview → promote).
+- Note: production is **still** on the P0-nav-fix deploy (`7d7689c`), which has the media black-frame regression for SPA-nav video lessons. Promoting `b7e8d34` fixes that without reverting the nav fix.
+
+### 7. Owner manual test requested (with a real student account, on the Preview)
+
+On `https://web-lms-chinh-thuc-aodpgpdyg.vercel.app` with a real enrolled student session:
+1. Hard-refresh once.
+2. Open a **video** lesson (Bunny or Drive) directly → confirm thumbnail + ▶ render (hard load; should already work).
+3. SPA-navigate (sidebar or Bài Trước/Bài Tiếp) **to** a video lesson → confirm the thumbnail + ▶ render (this was the black-frame regression; should now work).
+4. Click ▶ on the SPA-navigated video → confirm the iframe player loads (Bunny) or Drive preview loads, watermark appears for Bunny.
+5. SPA-navigate away from a playing video → confirm the old iframe/audio stops, no leftover watermark, the new lesson's media renders.
+6. SPA-navigate video → video → confirm each shows its own thumbnail, no stale frame from the previous video.
+
+If any serious defect appears: **stop**, report it, rollback target is in §6. I will **not** self-rollback without explicit approval.
+
+---
+
+OWNER APPROVAL: promote Media P0 Preview to Production?

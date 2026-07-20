@@ -61,6 +61,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,600;0,700;0,800;1,600&display=swap" rel="stylesheet">
   <script src="/vendor/tailwind-jit.js"></script>
+  <!-- Canonical mediaUrls parser (4-field, caption-aware). Loaded BEFORE the inline
+       app script so parseMediaUrls/decodeMediaCaption/encodeMediaCaption are globals.
+       Single source of truth — do NOT redeclare inside this file. -->
+  <script src="/vendor/lms-media.js"></script>
 
   <!-- Tailwind Configuration for Theme Colors -->
   <script>
@@ -840,7 +844,7 @@
       const text = extractIframeSrc(String(input || "")).trim();
       let match = text.match(/drive\.google\.com\/file\/d\/([^/?#]+)/);
       if (match) return match[1];
-      match = text.match(/[?&]id=([^&#]+)/);
+      match = text.match(/[?&]id=([^&#|]+)/);
       if (match) return match[1];
       return "";
     }
@@ -995,24 +999,8 @@
       return secure || raw;
     }
 
-    function parseMediaUrls(raw) {
-      if (!raw || typeof raw !== "string") return [];
-      return raw.split("\n")
-        .map(line => {
-          const trimmed = line.trim();
-          if (!trimmed) return null;
-          const firstPipe = trimmed.indexOf("|");
-          if (firstPipe === -1) return null;
-          const secondPipe = trimmed.indexOf("|", firstPipe + 1);
-          if (secondPipe === -1) return null;
-          const type  = trimmed.slice(0, firstPipe).trim();
-          const title = trimmed.slice(firstPipe + 1, secondPipe).trim();
-          const url   = trimmed.slice(secondPipe + 1).trim();
-          if (!type || !url) return null;
-          return { type, title, url };
-        })
-        .filter(Boolean);
-    }
+    // parseMediaUrls / decodeMediaCaption / encodeMediaCaption live in /vendor/lms-media.js
+    // (canonical 4-field parser, shared by lesson/lms/index/admin/photo). Do NOT redeclare here.
 
     // ── Watermark system ───────────────────────────────────────────────────
     function createWatermark(containerEl, userEmail) {
