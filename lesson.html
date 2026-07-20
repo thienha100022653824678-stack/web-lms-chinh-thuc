@@ -1132,6 +1132,56 @@
       }
     }
 
+    // ── Supplemental video thumbnail fallback (P0) ─────────────────────────
+    // Supplementary videos have no per-item thumbnail field in the mediaUrls
+    // schema, and the Drive video file is not public (so thumbnail?id=<videoId>
+    // returns a non-image → broken <img> → black box). Mirror the MAIN video's
+    // behavior: use the canonical course cover (lesson.thumbnailUrl, normalized)
+    // as the thumbnail, with a one-time onerror fallback to HERO_PLACEHOLDER_IMAGE.
+    // See docs/SUPPLEMENTARY_VIDEO_THUMBNAIL_INVESTIGATION.md §P0 Fix.
+
+    // onerror fallback for a cover <img>: swap to the hero placeholder exactly
+    // once (data-fb guard prevents loops / broken-image icon / tall white frame).
+    function swapToHeroPlaceholder(imgEl) {
+      if (imgEl && !imgEl.dataset.fb) {
+        imgEl.dataset.fb = "1";
+        imgEl.src = HERO_PLACEHOLDER_IMAGE;
+      }
+    }
+
+    // Cover <img> for a supplemental video card. Same source/normalizer as the
+    // main #videoThumb (lesson.thumbnailUrl → normalizeGoogleDriveImageUrl).
+    function getSupplementalVideoCoverImgHtml(lesson) {
+      const coverSrc = normalizeGoogleDriveImageUrl(lesson?.thumbnailUrl || HERO_PLACEHOLDER_IMAGE);
+      return `<img src="${escapeHtml(coverSrc)}" alt="" class="absolute inset-0 w-full h-full object-cover opacity-60" loading="lazy" onerror="swapToHeroPlaceholder(this)">`;
+    }
+
+    // Play button reused across supplemental video providers (same .gdrive-play-button
+    // visual as the main Drive play button). onclickJs is provider-specific.
+    function getSupplementalPlayButtonHtml(onclickJs) {
+      return `<button type="button" class="gdrive-play-button" aria-label="Mở video" onclick="${onclickJs}"><span class="gdrive-play-icon" aria-hidden="true"></span></button>`;
+    }
+
+    // Lazy Bunny: on play click, replace the cover with the Bunny embed iframe
+    // and attach the watermark (deferred from the render-time loop).
+    function playSupplementalBunny(containerId) {
+      const c = document.getElementById(containerId);
+      if (!c || c.dataset.played) return;
+      c.dataset.played = "1";
+      const u = c.dataset.bunnyUrl || "";
+      c.innerHTML = `<iframe class="absolute inset-0 w-full h-full border-0" src="${u}" allowfullscreen referrerpolicy="origin"></iframe>`;
+      createWatermark(c, studentEmail);
+    }
+
+    // Lazy YouTube: on play click, replace the cover with the YouTube embed iframe.
+    function playSupplementalYouTube(containerId) {
+      const c = document.getElementById(containerId);
+      if (!c || c.dataset.played) return;
+      c.dataset.played = "1";
+      const ytId = c.dataset.ytId || "";
+      c.innerHTML = `<iframe class="absolute inset-0 w-full h-full border-0" src="https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0" allowfullscreen></iframe>`;
+    }
+
     function renderMediaItems(lesson) {
       const section = document.getElementById("mediaItemsSection");
       if (!section) return;
@@ -1155,13 +1205,16 @@
             return `<div class="bg-red-50 text-red-700 border border-red-200 rounded-2xl p-4 mb-4 font-semibold text-sm">⚠️ ${escapeHtml(url.replace("error:", ""))}</div>`;
           }
           const videoLabelHtml = getSupplementalVideoLabelHtml(supplementalVideoIndex++);
+          const coverImg = getSupplementalVideoCoverImgHtml(lesson);
           const ytId = getYouTubeVideoId(url);
           if (ytId) {
+            const containerId = "yt_media_" + Math.random().toString(36).substr(2, 9);
             return `
               <div class="bg-white border border-brandBrown/5 rounded-2xl overflow-hidden shadow-sm mb-4">
                 ${videoLabelHtml}
-                <div class="aspect-video relative">
-                  <iframe class="absolute inset-0 w-full h-full border-0" src="https://www.youtube.com/embed/${ytId}?rel=0" allowfullscreen></iframe>
+                <div id="${containerId}" class="aspect-video relative bg-black flex items-center justify-center" data-yt-id="${escapeHtml(ytId)}">
+                  ${coverImg}
+                  ${getSupplementalPlayButtonHtml(`playSupplementalYouTube('${containerId}')`)}
                 </div>
               </div>`;
           }
@@ -1169,12 +1222,11 @@
           if (driveId) {
             const returnUrl = window.location.href;
             const playerUrl = `/gdrive-player.html?id=${driveId}&returnUrl=${encodeURIComponent(returnUrl)}`;
-            const thumbUrl = `https://drive.google.com/thumbnail?id=${driveId}&sz=w1000`;
             return `
               <div class="bg-white border border-brandBrown/5 rounded-2xl overflow-hidden shadow-sm mb-4">
                 ${videoLabelHtml}
                 <div class="aspect-video relative bg-black flex items-center justify-center">
-                  <img src="${escapeHtml(thumbUrl)}" alt="" class="absolute inset-0 w-full h-full object-cover opacity-60" loading="lazy">
+                  ${coverImg}
                   ${getGoogleDrivePlayButtonHtml(playerUrl, returnUrl)}
                 </div>
               </div>`;
@@ -1185,8 +1237,9 @@
             return `
               <div class="bg-white border border-brandBrown/5 rounded-2xl overflow-hidden shadow-sm mb-4">
                 ${videoLabelHtml}
-                <div id="${containerId}" class="aspect-video relative" data-bunny-media-container>
-                  <iframe class="absolute inset-0 w-full h-full border-0" src="${escapeHtml(url)}" allowfullscreen referrerpolicy="origin"></iframe>
+                <div id="${containerId}" class="aspect-video relative bg-black flex items-center justify-center" data-bunny-media-container data-bunny-url="${escapeHtml(url)}">
+                  ${coverImg}
+                  ${getSupplementalPlayButtonHtml(`playSupplementalBunny('${containerId}')`)}
                 </div>
               </div>`;
           }
@@ -1210,11 +1263,14 @@
           const ytId = getYouTubeVideoId(item.url);
           if (!ytId) return "";
           const videoLabelHtml = getSupplementalVideoLabelHtml(supplementalVideoIndex++);
+          const containerId = "yt_media_" + Math.random().toString(36).substr(2, 9);
+          const coverImg = getSupplementalVideoCoverImgHtml(lesson);
           return `
             <div class="bg-white border border-brandBrown/5 rounded-2xl overflow-hidden shadow-sm mb-4">
               ${videoLabelHtml}
-              <div class="aspect-video relative">
-                <iframe class="absolute inset-0 w-full h-full border-0" src="https://www.youtube.com/embed/${ytId}?rel=0" allowfullscreen></iframe>
+              <div id="${containerId}" class="aspect-video relative bg-black flex items-center justify-center" data-yt-id="${escapeHtml(ytId)}">
+                ${coverImg}
+                ${getSupplementalPlayButtonHtml(`playSupplementalYouTube('${containerId}')`)}
               </div>
             </div>`;
         }
@@ -1246,8 +1302,12 @@
       `;
       section.classList.remove("hidden");
 
+      // Lazy Bunny: the iframe + watermark are created on play click
+      // (playSupplementalBunny), not at render time. Only watermark containers
+      // that already have an iframe (e.g. a pre-played one restored by a prior
+      // render) — freshly-rendered lazy containers have only the cover img.
       section.querySelectorAll("[data-bunny-media-container]").forEach(container => {
-        createWatermark(container, studentEmail);
+        if (container.querySelector("iframe")) createWatermark(container, studentEmail);
       });
     }
 

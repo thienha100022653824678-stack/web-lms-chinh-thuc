@@ -457,3 +457,93 @@ noPageErrorPhoto              true
 ---
 
 OWNER APPROVAL: commit + push Caption P0 fix?
+
+---
+
+## Preview Verification (Vercel Preview of `5992212`)
+
+**Commit pushed:** `599221275a8ab077e5219c7f6d1e3057b9415b27` on `origin/feat/v2-lms-baseline-fix` (single push `b7e8d34..5992212`, no force, no amend).
+**Author / committer email:** `thienha100022653824678@gmail.com` (owner) — verified via `git log -1 --format=%ae/%ce`.
+**Files in commit (exactly 8, as approved):** `vendor/lms-media.js` (new, +80), `lesson.html` (+26/-... ), `photo.html`, `lms.html`, `index.html`, `lms-admin.html`, `docs/SUPPLEMENTARY_MEDIA_CAPTION_IMAGE_BUG_INVESTIGATION.md` (new, +459), `docs/MEDIA_REGRESSION.md` (+91). `8 files changed, 667 insertions(+), 122 deletions(-)`. No build/temp/artifact.
+**Vercel deployment status (GitHub `Vercel` context for `5992212`):** `success` — "Deployment has completed" (poll 1, immediate).
+**Preview URL:** `https://web-lms-chinh-thuc-o6ux5e65b.vercel.app` (GitHub deployment `5520412969`, env Preview).
+
+### 1. `/vendor/lms-media.js` served correctly on Preview
+```
+HTTP/1.1 200 OK
+Content-Length: 4130
+Content-Type: application/javascript; charset=utf-8
+```
+**HTTP 200, MIME `application/javascript; charset=utf-8`** (correct — served as JS, not text/html).
+
+### 2. Preview source = commit `5992212` (the Caption P0 fix)
+`curl $PREVIEW/lesson.html?id=…` returns the deployed HTML containing:
+- Line 67: `<script src="/vendor/lms-media.js"></script>`
+- Line 496: `let LESSON_ID = urlParams.get("id");` (P0 nav fix + Media P0 fix still live)
+- Line 847: `match = text.match(/[?&]id=([^&#|]+)/);` (Option B regex — the caption fix)
+- Line 1002: `// parseMediaUrls / decodeMediaCaption / encodeMediaCaption live in /vendor/lms-media.js` (no local parser)
+- Line 1753: `// Media P0 fix: …` (media-placeholder fix still live)
+
+`parseMediaUrls.toString()` on the live Preview:
+```
+function parseMediaUrls(raw) { if (!raw || typeof raw !== "string") return []; return raw.split("\n") .map(function (line) { return parseMediaLine(line); }) .fi...
+```
+**Delegates to `parseMediaLine`** (the canonical vendor impl) — confirms the deployed parser is the vendor one, not a 3-field local copy.
+
+### 3. Helper load order on all 5 pages (Preview)
+Each page's `<script src="/vendor/lms-media.js">` is in `<head>` BEFORE the inline app `<script>`; no `async`/`defer` (synchronous classic script). Confirmed on Preview by the globals probe below (globals exist by the time the inline script runs).
+
+### 4. Unauth read-only smoke on Preview (5 pages, Playwright)
+
+| Page | HTTP | helperTag in DOM | parseMediaUrls | parseMediaLine | decodeMediaCaption | encodeMediaCaption |
+|---|---|---|---|---|---|---|
+| `/` (homepage) | 200 | true | ✅ | ✅ | ✅ | ✅ |
+| `/lesson.html?id=…` | 200 | true | ✅ | ✅ | ✅ | ✅ |
+| `/photo.html?id=…` | 200 | true | ✅ | ✅ | ✅ | ✅ |
+| `/lms.html?course=banh-mi` | 200 | true | ✅ | ✅ | ✅ | ✅ |
+| `/lms-admin.html` | 200 | true | ✅ | ✅ | ✅ | ✅ |
+
+- **`pageErrors: 0`** across all 5 pages.
+- **No `ReferenceError: parseMediaUrls is not defined`** (or `parseMediaLine` / `decodeMediaCaption` / `encodeMediaCaption`) on any page — the helper loads before every call site, so the globals are defined when the inline scripts run.
+- All 5 pages HTTP 200, all 5 have the helper `<script>` tag in the DOM, all 4 globals present.
+
+### 5. Parser marker present on Preview
+`parseMediaUrls.toString()` on the Preview lesson page contains `parseMediaLine` (delegation) and does **not** contain the 3-field `slice(secondPipe + 1).trim()` bug. The deployed parser is the canonical vendor implementation.
+
+### 6. Authenticated smoke on Preview — NOT run (stated limitation)
+A real authenticated smoke (admin saves a captioned image → student opens the lesson → confirms the image renders) was **not executed directly against the Preview**. It requires either an admin session (to save) + a student session (to view), or writing to the production Supabase — neither provided, and I did not mint tokens or write to prod. No Google account or entry-token was requested from the owner.
+
+The authenticated behavior is covered by the **local-stub Playwright caption gate** (see `## Caption P0 Fix Verification` above): 18/18 assertions pass — the exact reported payload (`image|Ảnh 2|<url>|<encoded "Thịt được hút chân không">`) parses to a clean url + decoded caption; the rendered `<img src>` is `thumbnail?id=FILE2&sz=w1000` (no `|`). The Preview probe above confirms the canonical parser is deployed and all 4 globals are present with 0 pageerror.
+
+### 7. Residual risk (Preview-specific)
+| Risk | Likelihood | Note |
+|---|---|---|
+| Authed admin-save → student-view round-trip on Preview (real course, real Drive file) | Low–medium | Unauth probe confirms deployed parser + 0 pageerror. The local-stub gate covers the parse + render. An owner-run admin save of a captioned image + student open on the Preview would close the last gap. |
+| Real Drive thumbnail with captioned fileId on Preview | Low | Option B regex `[^&#|]` + canonical 4-field parser together guarantee a clean fileId even if a url were polluted; the local gate used the same Drive URL shapes as prod. |
+| `/vendor/lms-media.js` 404 on a page | None | Confirmed HTTP 200 + correct MIME on Preview; all 5 pages load it; globals present on all 5. |
+
+### 8. Rollback target (unchanged)
+- **Pre-Caption-P0 production** = current production deployment (`dpl_9fs7awTqRJmwdNM366CzZoDdCAuZ` / `web-lms-chinh-thuc-cirwy9cp1.vercel.app`, source = commit `b7e8d34` — the Media P0 fix, without the caption centralization).
+- If the Caption P0 Preview is promoted and a regression appears, rollback = re-promote `dpl_9fs7awTqRJmwdNM366CzZoDdCAuZ` (or `git revert 5992212` + push → new Preview → promote).
+- Note: production is **still** on the Media P0 deploy (`b7e8d34`), which has the caption black-frame/broken-image regression for captioned supplementary media. Promoting `5992212` fixes that without reverting the nav or media-placeholder fixes.
+
+### 9. Owner manual test requested (on the Preview, with real admin + student sessions)
+On `https://web-lms-chinh-thuc-o6ux5e65b.vercel.app`:
+1. Admin: open `lms-admin.html`, pick a lesson, add a supplementary **image** with a non-empty **Chú thích** (e.g. "Thịt được hút chân không"), save.
+2. Student: hard-refresh, open that lesson.
+3. Confirm the captioned image renders (not a broken image / tall white frame).
+4. Confirm no extra "Ảnh N" alt-text line below the title.
+5. Add a **captioned video** supplementary → confirm it still plays (Bunny/Drive/YouTube).
+6. Confirm uncaptioned supplementary media still renders (no regression).
+
+If any serious defect appears: **stop**, report it, rollback target is in §8. I will **not** self-rollback without explicit approval.
+
+### 10. What was NOT done (still in force)
+- No merge to `main`. No second commit, no amend, no force-push, no extra push.
+- No manual deploy, no production promote, no production DB write, no token minting.
+- No authed smoke directly on the Preview (limitation stated; owner manual test requested).
+- No P1, no Option C (render caption on lesson/photo — not added; `renderMediaCaption` stays only in lms.html/index.html as before).
+
+---
+
+OWNER APPROVAL: promote Caption P0 Preview to Production?
