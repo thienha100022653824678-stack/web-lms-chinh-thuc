@@ -1762,11 +1762,27 @@
           }
         } else if (hasVideo) {
           videoBox.classList.remove("hidden");
-          if (videoThumb) {
-            videoThumb.src = normalizeGoogleDriveImageUrl(lesson.thumbnailUrl || HERO_PLACEHOLDER_IMAGE);
+          // Media P0 fix: the swap-cleanup at the top of paintLesson set
+          // videoWrapper.innerHTML = "", which destroyed the static
+          // <img id="videoThumb"> + <button id="playBtn"> placeholder that
+          // this branch populates (the outer videoThumb/playBtn consts are
+          // null because of that cleanup). Re-create the placeholder
+          // byte-for-byte matching the hard-load template (lines 370-373),
+          // then re-query so SPA-nav video lessons paint their thumbnail +
+          // play button instead of a black frame. See docs/MEDIA_REGRESSION.md.
+          if (videoWrapper) {
+            videoWrapper.innerHTML =
+              '<!-- Play placeholder -->' +
+              '<img id="videoThumb" class="absolute inset-0 w-full h-full object-cover opacity-70" src="" alt="Thumbnail">' +
+              '<button id="playBtn" class="relative z-10 w-16 h-16 rounded-full bg-brandGreen/90 hover:bg-brandGreen text-white text-2xl flex items-center justify-center shadow-lg transition transform active:scale-95">▶</button>';
           }
-          if (playBtn) {
-            playBtn.onclick = () => {
+          const vt = document.getElementById("videoThumb");
+          const pb = document.getElementById("playBtn");
+          if (vt) {
+            vt.src = normalizeGoogleDriveImageUrl(lesson.thumbnailUrl || HERO_PLACEHOLDER_IMAGE);
+          }
+          if (pb) {
+            pb.onclick = () => {
               if (isCocCocBrowser()) {
                 videoWrapper.innerHTML = getCocCocBlockedHtml();
                 return;

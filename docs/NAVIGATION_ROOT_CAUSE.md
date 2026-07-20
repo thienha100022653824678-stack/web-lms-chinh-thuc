@@ -483,3 +483,185 @@ No `TypeError`, no `Assignment to constant variable`, no "Failed to load resourc
 ---
 
 OWNER APPROVAL: commit + push P0 fix?
+
+---
+
+## Preview Verification (Vercel Preview of `7d7689c`)
+
+**Commit pushed:** `7d7689ca99a9b05daa640c9207aec375cd472c3d` on `origin/feat/v2-lms-baseline-fix` (single push, no force, no amend).
+**Author / committer email:** `thienha100022653824678@gmail.com` (owner) — verified via `git log -1 --format=%ae/%ce`.
+**Files in commit:** `lesson.html` (+3/-1), `docs/NAVIGATION_ROOT_CAUSE.md` (+485, new). Nothing else.
+**Vercel deployment status (GitHub `Vercel` context for `7d7689c`):** `success` — "Deployment has completed".
+**Preview URL:** `https://web-lms-chinh-thuc-f4dh77e7z.vercel.app` (from the GitHub deployment-status `target_url`).
+**Deployment dashboard:** `https://vercel.com/thienha100022653824678-stacks-projects/web-lms-chinh-thuc/Gdws24Sj8FmNRFb8dbBGeuQz8mqV`.
+
+### 1. Preview source = the fix commit (confirmed)
+
+`curl https://web-lms-chinh-thuc-f4dh77e7z.vercel.app/lesson.html?id=L3` returns the deployed HTML containing:
+- Line 490: `// \`let\` (not \`const\`): navigateToLesson reassigns this on every prev/next/sidebar nav.`
+- Line 491: `// See docs/NAVIGATION_ROOT_CAUSE.md §6 — a \`const\` here threw TypeError and killed the SPA layer.`
+- Line 492: `let LESSON_ID = urlParams.get("id");`
+- `navigateToLesson` defined; prev/next handlers call `navigateToLesson(...)`.
+
+So the Preview is serving commit `7d7689c` (the fix), not a stale build.
+
+### 2. Unauthenticated Preview probe (Playwright, real Preview)
+
+Opened `…/lesson.html?id=13735c5c-1245-460f-bf0f-e57d69311e9b` headless on the Preview:
+- `LESSON_ID` type = `string`, value = the URL id; `navigateToLesson` is a function.
+- **Reassign probe:** `try { const s = LESSON_ID; LESSON_ID = "x"; LESSON_ID = s; }` → **`OK` (no throw)**. This is the direct negative test for the root cause: on the pre-fix prod build this threw `TypeError: Assignment to constant variable`; on the Preview it does not. The deployed binding is `let`, not `const`.
+- **`pageErrors: []`** — zero JS exceptions on the unauth path.
+- `console` errors: one `401 Failed to load resource` for `/api/lms/portal?endpoint=lesson` — **expected and correct** for an unauthenticated visitor (no LMS session); `loadLessonDetails` shows `#errorState`. This is the same auth-gated behavior as production for a logged-out user, not a regression.
+
+### 3. Authenticated smoke on Preview — NOT run (stated limitation)
+
+A real authenticated Playwright smoke (login → Bài Tiếp → Bài Trước → sequence → Back/Forward → count `endpoint=lesson` requests → measure click→content) was **not executed directly against the Preview**. Reason: doing so requires either (a) a valid `entry_token` URL minted from the production admin/DB, or (b) a test Google account enrolled in a course on the production Supabase — neither was provided, and I did not write to the production DB or mint tokens (out of scope + would touch production state).
+
+Instead, the authenticated behavior is covered by the **local-stub authenticated Playwright gate** (see `## P0 Fix Verification` above), which runs the **same modified `lesson.html` inline script** in a real Chromium DOM with a seeded LMS session and a `navigateToLesson`/`fetchLessonPayload` spy. That gate is the evidence for the authed code path; the Preview probe above is the evidence that the fix is actually deployed.
+
+### 4. Combined evidence summary
+
+| Evidence layer | What it proves | Result |
+|---|---|---|
+| Production incident (pre-fix) | Root cause = `const LESSON_ID` reassign throws `TypeError` at `lesson.html:1864` inside `navigateToLesson` | `pageerrors.log` stack frame; reproduced |
+| Local authed Playwright gate (modified `lesson.html`, 20 navs) | Fix makes prev/next/sequence/back/forward work; 0 pageerror; 0 full reload; Plan C 19/19 clicks = 0 `endpoint=lesson` calls; network fallback 1/1 fetches correctly; handlers stay attached; no overlay; no duplicate render; no race | **ALL assertions PASS** |
+| Local gate timing (click→content, 17 navs) | Pure SPA swap cost ceiling | min 28.1 ms, median 38.0 ms, p95 65.0 ms, max 65.0 ms |
+| Test suite | No backend regression | 264/264 pass |
+| Preview deployment | Fix is live on Vercel Preview; `let` deployed; reassign probe PASS; 0 pageerror on unauth path; deploy status success | Confirmed |
+| Git hygiene | Single commit, owner author, no force/amend, only 2 approved files | Confirmed |
+
+### 5. Residual risk
+
+| Risk | Likelihood | Mitigation / note |
+|---|---|---|
+| A production course shape (many lessons, real media, real recipe text) triggers a path the local 6-lesson stub didn't exercise | Low | The fix is one token (`const`→`let`) at the declaration site; it cannot introduce new logic. The only thing it changes is whether `LESSON_ID = lessonId` throws. All downstream code (paint, history, prefetch, cache, refreshPrevNextAfterSwap) is byte-identical to the pre-fix deploy. The local gate exercised sections-skip (L2→L3 across a section header), back/forward, rapid sequence, and forced network fallback. |
+| First-paint backend latency on prod (1.1–1.3 s warm, 3.8 s cold) still makes the *initial* lesson load slow | Certain (pre-existing) | This is P1, intentionally out of scope. The P0 fix only restores SPA nav (prev/next/sidebar); first-paint perf is unchanged from the pre-fix prod. |
+| `popstate` / bfcache interaction on real prod | Low | Local gate tested back/forward via `page.goBack()`/`goForward()` (real `popstate`); `via=popstate` entries in nav log painted correctly. |
+| Authed path on the Preview specifically (vs local stub) | Low–medium | The unauth Preview probe confirms the deployed `let` and zero pageerror. The authed code path is the same inline script; the only difference on the authed path is the API returns 200 instead of 401, which gates whether `loadSiblingsAndSidebar` attaches handlers — exercised in the local gate. An owner-run authed click on the Preview would close this last gap. |
+| Plan C regression on real prod course-data payload | Low | `courseLessonsList` is populated from the real `course-data` response in production; the local stub returned the same shape. Plan C's branch condition is `fromCourseList && !fromCourseList.isSection`, which depends only on the payload shape — stable. |
+
+**Overall confidence in the P0 fix on production: ~95%.** The 5% residual is the unrun authed smoke directly on the Preview (owner can close it with one manual click of Bài Tiếp on the Preview while logged in).
+
+### 6. Rollback target (confirmed)
+
+If promote surfaces any regression:
+- **Rollback commit (P0's parent):** `3c306b8cec7aeedec5233b665248002706affeec` — `perf(lms): self-host Tailwind Play bundle` (2026-07-19, owner author).
+- **Rollback mechanism:** redeploy `3c306b8` on Vercel (or `git revert 7d7689c` + push → new Preview → promote). This restores the **pre-fix** behavior: the `const` bug returns, prev/next are dead again, but the self-host Tailwind + SPA infrastructure remain. (Rolling back to the pre-SPA `backups/pre-spavite-20260719/lesson.html` is a deeper fallback only if the whole SPA layer is unwanted — not needed for this one-token fix.)
+- **Note on production branch:** `www.daubepnho.store` production currently tracks `origin/main` (`f9220e8`), **not** `feat/v2-lms-baseline-fix`. The P0 commit is on `feat/v2-lms-baseline-fix` only. "Promote to production" therefore means **merging `feat/v2-lms-baseline-fix` into `main`** (or however the owner's Vercel prod promotion flow works for this repo) — and is the owner's explicit decision, not something this session will do.
+
+### 7. What was NOT done (still in force)
+
+- No P1 changes. No `course-data.js`, `vercel.json`, Tailwind, or cache changes.
+- No second commit, no amend, no force-push, no extra push.
+- No manual deploy, no production promote, no production DB write, no token minting.
+- No authed smoke directly on the Preview (limitation stated above).
+
+---
+
+OWNER APPROVAL: promote P0 Preview to Production?
+
+---
+
+## Production Promotion Report (P0)
+
+**Date promoted:** 2026-07-20
+**Approve scope:** promote the Vercel deployment containing commit `7d7689c` to `www.daubepnho.store`. No merge to `main`, no git commit/push, no amend/force, no `vercel deploy`, no code change, no P1, no self-rollback.
+
+### Pre-promote gates (all PASS, read-only)
+
+| Gate | Check | Result |
+|---|---|---|
+| G1 | Vercel project = `web-lms-chinh-thuc` | PASS (`.vercel/repo.json`: `prj_TimQqrVhrOLW8y1KI464JBvajwlz`, name `web-lms-chinh-thuc`, org `team_cAthcmyw4079BDgelX0YjG9i`) |
+| G2 | Deployment status = Ready/success | PASS (GitHub `Vercel` context for `7d7689c` = `success`, "Deployment has completed") |
+| G3 | Environment = Preview | PASS (GitHub deployment `5516823786`, `environment: Preview`) |
+| G4 | Source commit = `7d7689c` | PASS (local HEAD = origin HEAD = `7d7689ca99a9b05daa640c9207aec375cd472c3d`) |
+| G5 | Preview `lesson.html` contains `let LESSON_ID = urlParams.get("id");` | PASS (line 492) |
+| G6 | Preview `lesson.html` does NOT contain `const LESSON_ID = urlParams.get("id");` | PASS (absent) |
+| G7 | Deployment has no source changes outside `7d7689c` | PASS — `diff prod→preview` = only the 3 expected lines (`const`→`let` + 2 comment lines) plus the Vercel-auto-injected `vercel.live` feedback `<script>` (Preview-only, not in repo). `diff preview_lesson.html↔local HEAD lesson.html` = only that same vercel.live tag. No other source drift. |
+| G8 | Current production deployment recorded as rollback target | PASS (see Rollback target below) |
+
+### Promote action (single run)
+
+Command:
+```
+vercel promote https://web-lms-chinh-thuc-f4dh77e7z.vercel.app --yes
+```
+Result (exit 0):
+```
+> Successfully created new deployment of web-lms-chinh-thuc at
+  https://vercel.com/thienha100022653824678-stacks-projects/web-lms-chinh-thuc/9fs7awTqRJmwdNM366CzZoDdCAuZ
+```
+
+> **Note on promote behavior:** `vercel promote` on this project **rebuilt and aliasing** the deployment rather than re-aliasing the Preview URL. The CLI created a **new Production-target deployment** (`web-lms-chinh-thuc-cirwy9cp1.vercel.app`, id `dpl_9fs7awTqRJmwdNM366CzZoDdCAuZ`) from the same source and assigned the production aliases to it. This is the expected Vercel behavior for this project configuration. The new prod deployment went `Building → Ready` in ~60 s.
+
+### Post-promote verification
+
+| Check | Result |
+|---|---|
+| New prod deployment status | **Ready** (`dpl_9fs7awTqRJmwdNM366CzZoDdCAuZ`, target=production, created 2026-07-20 11:52:52 +0700) |
+| `www.daubepnho.store` alias assignment | **PASS** — `vercel inspect https://www.daubepnho.store` now resolves to `web-lms-chinh-thuc-cirwy9cp1.vercel.app` (the new deployment). Aliases: `www.daubepnho.store`, `web-lms-chinh-thuc.vercel.app`, `daubepnho.store`, `web-lms-chinh-thuc-thienha100022653824678-stacks-projects.vercel.app`, `web-lms-chinh-git-c3f9fa-...vercel.app` |
+| Production `lesson.html` serves `let LESSON_ID` | **PASS** — `curl https://www.daubepnho.store/lesson.html?id=…&_cb=<ts>` line 492: `let LESSON_ID = urlParams.get("id");` |
+| Production `lesson.html` does NOT serve `const LESSON_ID` | **PASS** — `const LESSON_ID = urlParams.get` absent |
+| Fix comment present on prod | **PASS** — lines 490–491 (`// \`let\` (not \`const\`)…` / `// See docs/NAVIGATION_ROOT_CAUSE.md §6…`) |
+| Prod `lesson.html` == local HEAD `lesson.html` (commit 7d7689c) | **PASS** — byte-identical modulo the Vercel-injected `vercel.live` feedback tag (which Vercel adds to live deployments, not a source change) |
+| Prod `lesson.html` == Preview `lesson.html` (same fix) | **PASS** — identical fix lines on both |
+
+### Post-promote unauth smoke test (Playwright, real production, read-only)
+
+Opened `https://www.daubepnho.store/` and `https://www.daubepnho.store/lesson.html?id=13735c5c-1245-460f-bf0f-e57d69311e9b` headless:
+
+| Assertion | Result |
+|---|---|
+| Homepage HTTP status | **200** |
+| `lesson.html` HTTP status | **200** |
+| `LESSON_ID` type = string, `navigateToLesson` defined | PASS |
+| **Reassign probe** `LESSON_ID = "x"` (the direct negative test for the root cause) | **OK — no throw** (pre-fix prod threw `TypeError: Assignment to constant variable` here) |
+| `pageErrors` | **[] (zero JS exceptions)** |
+| Console errors | one `401 Failed to load resource` for `/api/lms/portal?endpoint=lesson` — **expected** for an unauthenticated visitor (no LMS session); same auth-gated behavior as before, not a regression |
+| 5xx requests | **none** |
+
+### Deployment IDs
+
+| Role | Deployment URL | Deployment ID |
+|---|---|---|
+| **Before promote** (rollback target) | `https://web-lms-chinh-thuc-kzo8fv1q5.vercel.app` | `dpl_3K7xUVcTE1DGxApLBdrwpHLucrGV` |
+| **After promote** (current prod) | `https://web-lms-chinh-thuc-cirwy9cp1.vercel.app` | `dpl_9fs7awTqRJmwdNM366CzZoDdCAuZ` |
+| Source commit | `7d7689ca99a9b05daa640c9207aec375cd472c3d` | `fix(lms): restore SPA lesson navigation` |
+| Domain assignment | `www.daubepnho.store` → `web-lms-chinh-thuc-cirwy9cp1.vercel.app` | (aliases also include `daubepnho.store`, `web-lms-chinh-thuc.vercel.app`) |
+
+### Limitation (stated)
+
+**Automated authenticated smoke was not run on production.** The unauth probe above confirms the deployed `let` binding and zero pageerror. The authenticated prev/next/sequence/back-forward behavior is covered by the **local-stub Playwright gate** (20 navs, 0 pageerror, 0 full reload, Plan C 19/19 = 0 `endpoint=lesson` calls, fallback 1/1, back/forward OK — see `## P0 Fix Verification`). The prod authed path needs a real student session, which the owner must test manually (next section).
+
+### Owner manual test required (with a real student account)
+
+Please, on `https://www.daubepnho.store` with a real enrolled student session:
+1. Hard-refresh once (Ctrl+Shift+R) to bypass any cached `const` HTML.
+2. Open a lesson that has **both** Bài Trước and Bài Tiếp.
+3. Click **Bài Tiếp** → confirm URL changes to the next lesson id, title/content changes, no full-page reload.
+4. Click **Bài Trước** → confirm URL + content change back, no reload.
+5. Click **Next → Next → Previous → Previous** → confirm each step paints the correct lesson, no race, buttons never wrongly disabled.
+6. Use browser **Back** and **Forward** → confirm each restores the correct lesson (URL + content).
+7. Confirm URL and content change **together** (SPA swap, not a reload).
+8. Note the perceived speed of lesson switching (should be near-instant for Plan C hits; the first paint of a fresh lesson still pays the backend cost — that's P1, out of scope here).
+
+If any serious defect appears: **stop**, report it, and the rollback target is below. I will **not** self-rollback without your explicit approval.
+
+### Rollback target (confirmed)
+
+- **Rollback = re-promote the pre-promote production deployment:**
+  ```
+  vercel promote https://web-lms-chinh-thuc-kzo8fv1q5.vercel.app --yes
+  ```
+  (`dpl_3K7xUVcTE1DGxApLBdrwpHLucrGV`, Ready, source = commit `3c306b8` — the P0 fix's parent, `perf(lms): self-host Tailwind Play bundle`.)
+- That restores the pre-fix production state (the `const` bug returns; prev/next go back to dead; self-host Tailwind + SPA infrastructure remain).
+
+### What was NOT done (still in force)
+
+- No merge to `main`. No git commit, no push, no amend, no force-push.
+- No `vercel deploy` / `vercel deploy --prod` (promote rebuilt from the existing Preview source — no new code).
+- No code change, no P1 work.
+- No self-rollback. No production DB write. No token minting.
+- No automated authed smoke on production (limitation stated; owner manual test requested).
+
+P0 production promotion complete. Stopping here per instructions.
