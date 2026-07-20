@@ -487,7 +487,9 @@
     })();
 
     const urlParams = new URLSearchParams(window.location.search);
-    const LESSON_ID = urlParams.get("id");
+    // `let` (not `const`): navigateToLesson reassigns this on every prev/next/sidebar nav.
+    // See docs/NAVIGATION_ROOT_CAUSE.md §6 — a `const` here threw TypeError and killed the SPA layer.
+    let LESSON_ID = urlParams.get("id");
     const SESSION_COOKIE = "course_session_token";
     const HERO_PLACEHOLDER_IMAGE = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 600'%3E%3Cdefs%3E%3ClinearGradient id='bg' x1='0' x2='1' y1='0' y2='1'%3E%3Cstop offset='0' stop-color='%23FCF8F2'/%3E%3Cstop offset='1' stop-color='%23DCE8D8'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='800' height='600' fill='url(%23bg)'/%3E%3Ccircle cx='650' cy='120' r='150' fill='%232A4B2A' opacity='.08'/%3E%3Ccircle cx='140' cy='500' r='190' fill='%23D96B27' opacity='.08'/%3E%3C/svg%3E";
 
