@@ -500,6 +500,9 @@
 
     let currentLesson = null;
     let courseLessonsList = [];
+    const LESSON_NAV_HANDOFF_KEY = "lms_lesson_nav_handoff_v1";
+    let bootNavigationList = [];
+    let bootNavigationCourse = "";
     let studentEmail = "";
     const MY_COURSES_URL = "https://www.yeunauan.live/my-courses";
     const LMS_DEVICE_KEY = "lms_device_id";
@@ -539,6 +542,47 @@
     // Token for the inner-loading spinner so a superseded Plan B's finally can
     // never clear a newer navigation's spinner (loadingOwner !== token → skip).
     let loadingOwner = null;
+
+    function readBootNavigationHandoff() {
+      try {
+        const raw = sessionStorage.getItem(LESSON_NAV_HANDOFF_KEY);
+        sessionStorage.removeItem(LESSON_NAV_HANDOFF_KEY);
+        if (!raw) return null;
+        const handoff = JSON.parse(raw);
+        if (!handoff || Number(handoff.expiresAt || 0) < Date.now() || !Array.isArray(handoff.lessons)) return null;
+        const lessons = handoff.lessons
+          .map(lesson => ({ id: String(lesson?.id || "").trim(), isSection: Boolean(lesson?.isSection) }))
+          .filter(lesson => lesson.id);
+        if (!lessons.some(lesson => lesson.id === LESSON_ID)) return null;
+        return { course: String(handoff.course || "").trim(), lessons };
+      } catch (err) {
+        return null;
+      }
+    }
+
+    const bootNavigationHandoff = readBootNavigationHandoff();
+    bootNavigationList = bootNavigationHandoff?.lessons || [];
+    bootNavigationCourse = bootNavigationHandoff?.course || "";
+
+    function wireBootPrevNext() {
+      if (!bootNavigationList.length) return;
+      if (!bootNavigationCourse || bootNavigationCourse !== String(currentLesson?.course || "").trim()) return;
+      const realLessons = bootNavigationList.filter(lesson => !lesson.isSection);
+      const currentIdx = realLessons.findIndex(lesson => lesson.id === LESSON_ID);
+      const prevBtn = document.getElementById("prevBtn");
+      const nextBtn = document.getElementById("nextBtn");
+
+      if (prevBtn && currentIdx > 0) {
+        const targetId = realLessons[currentIdx - 1].id;
+        prevBtn.onclick = () => { window.location.href = `/lesson.html?id=${encodeURIComponent(targetId)}`; };
+        prevBtn.disabled = false;
+      }
+      if (nextBtn && currentIdx !== -1 && currentIdx < realLessons.length - 1) {
+        const targetId = realLessons[currentIdx + 1].id;
+        nextBtn.onclick = () => { window.location.href = `/lesson.html?id=${encodeURIComponent(targetId)}`; };
+        nextBtn.disabled = false;
+      }
+    }
 
     // ── Plan A: lesson payload cache + prefetch ───────────────────────────
     function spaLessonCacheGet(id) {
@@ -1534,6 +1578,10 @@
         // and is now loaded in parallel with a race-safe cache.
         document.getElementById("loadingState").classList.add("hidden");
         document.getElementById("mainLayout").classList.remove("hidden");
+        // The course page already knew the ordered lesson IDs. Use that short-lived
+        // handoff as soon as the lesson is visible; course-data will replace these
+        // full-navigation handlers with SPA handlers when its richer payload arrives.
+        wireBootPrevNext();
 
         // Load siblings, prev/next, sidebar, and chapter metadata after first
         // paint. Fire-and-forget so the lesson itself is visible immediately.
@@ -2095,7 +2143,7 @@
     }
 
     // Initial load
-    window.onload = () => {
+    function initLessonPage() {
       // Chặn chuột phải (contextmenu) trên toàn bộ trang
       document.addEventListener("contextmenu", (event) => {
         if (event.target.tagName !== "INPUT" && event.target.tagName !== "TEXTAREA") {
@@ -2147,7 +2195,15 @@
       try {
         window.history.replaceState({ lessonId: LESSON_ID }, "", window.location.href);
       } catch {}
-    };
+    }
+
+    // The app script is at the end of <body>, so DOMContentLoaded is sufficient.
+    // Starting here avoids delaying the lesson API until fonts/images finish loading.
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", initLessonPage, { once: true });
+    } else {
+      initLessonPage();
+    }
   </script>
 </body>
 </html>
