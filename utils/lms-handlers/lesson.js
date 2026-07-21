@@ -17,6 +17,11 @@ import {
 import { isV2GlobalOneDeviceEnabled } from "../v2-flags.js";
 import { applyCors } from "../cors.js";
 import { resolveMainMediaInfo } from "../lms-media.js";
+import {
+  installLmsTimingResponseHooks,
+  timeLmsAsync,
+  timeLmsSync
+} from "../lms-server-timing.js";
 
 const SESSION_COOKIE = "course_session_token";
 const ACTIVE_ENROLLMENT_STATUSES = new Set([
@@ -106,13 +111,13 @@ async function getDocsClient() {
   return google.docs({ version: "v1", auth });
 }
 
-async function getDriveFileMetadata(fileId) {
+async function getDriveFileMetadata(fileId, timing = null) {
   const drive = await getDriveClient();
-  const metadata = await drive.files.get({
+  const metadata = await timeLmsAsync(timing, "drive", () => drive.files.get({
     fileId,
     fields: "id,name,mimeType,shortcutDetails",
     supportsAllDrives: true
-  });
+  }));
   return metadata.data || {};
 }
 
@@ -252,15 +257,15 @@ function driveMetaCacheSet(fileId, meta) {
   driveMetaCache.set(fileId, { meta, fetchedAt: Date.now() });
 }
 
-async function getDriveFileMetadataCached(fileId) {
+async function getDriveFileMetadataCached(fileId, timing = null) {
   const cached = driveMetaCacheGet(fileId);
   if (cached) return cached;
-  const meta = await getDriveFileMetadata(fileId);
+  const meta = await getDriveFileMetadata(fileId, timing);
   driveMetaCacheSet(fileId, meta);
   return meta;
 }
 
-async function fetchRecipeTextFromGoogleApi(recipeUrl) {
+async function fetchRecipeTextFromGoogleApi(recipeUrl, timing = null) {
   const docId = getGoogleDocId(recipeUrl);
   let fileId = docId || getGoogleDriveFileId(recipeUrl);
   if (!fileId) return "";
@@ -268,11 +273,11 @@ async function fetchRecipeTextFromGoogleApi(recipeUrl) {
   const drive = await getDriveClient();
   let metadata;
   try {
-    metadata = await drive.files.get({
+    metadata = await timeLmsAsync(timing, "drive", () => drive.files.get({
       fileId,
       fields: "id,name,mimeType,shortcutDetails,capabilities",
       supportsAllDrives: true
-    });
+    }));
   } catch (err) {
     return "";
   }
@@ -280,11 +285,11 @@ async function fetchRecipeTextFromGoogleApi(recipeUrl) {
   if (metadata.data.mimeType === "application/vnd.google-apps.shortcut" && metadata.data.shortcutDetails?.targetId) {
     fileId = metadata.data.shortcutDetails.targetId;
     try {
-      metadata = await drive.files.get({
+      metadata = await timeLmsAsync(timing, "drive", () => drive.files.get({
         fileId,
         fields: "id,name,mimeType,shortcutDetails,capabilities",
         supportsAllDrives: true
-      });
+      }));
     } catch {
       return "";
     }
@@ -293,15 +298,15 @@ async function fetchRecipeTextFromGoogleApi(recipeUrl) {
   const mimeType = metadata.data.mimeType || "";
   if (mimeType.startsWith("application/vnd.google-apps.")) {
     try {
-      const result = await drive.files.export(
+      const result = await timeLmsAsync(timing, "drive", () => drive.files.export(
         { fileId, mimeType: "text/plain" },
         { responseType: "text" }
-      );
+      ));
       return String(result.data || "").trim();
     } catch (err) {
       if (mimeType === "application/vnd.google-apps.document") {
         const docs = await getDocsClient();
-        const result = await docs.documents.get({ documentId: fileId });
+        const result = await timeLmsAsync(timing, "drive", () => docs.documents.get({ documentId: fileId }));
         return googleDocBodyToText(result.data);
       }
       throw err;
@@ -310,14 +315,14 @@ async function fetchRecipeTextFromGoogleApi(recipeUrl) {
 
   if (docId) {
     const docs = await getDocsClient();
-    const result = await docs.documents.get({ documentId: docId });
+    const result = await timeLmsAsync(timing, "drive", () => docs.documents.get({ documentId: docId }));
     return googleDocBodyToText(result.data);
   }
 
-  const result = await drive.files.get(
+  const result = await timeLmsAsync(timing, "drive", () => drive.files.get(
     { fileId, alt: "media", supportsAllDrives: true, acknowledgeAbuse: true },
     { responseType: "arraybuffer" }
-  );
+  ));
   return Buffer.from(result.data || "").toString("utf8").trim();
 }
 
@@ -349,7 +354,7 @@ async function fetchRecipeTextFromPublicUrl(recipeUrl) {
   throw lastError || new Error("Public fetch failed");
 }
 
-async function fetchRecipeText(recipeUrl) {
+async function fetchRecipeText(recipeUrl, timing = null) {
   if (!recipeUrl) return "";
   const trimmed = recipeUrl.trim();
   if (!/^https?:\/\//i.test(trimmed)) {
@@ -361,7 +366,7 @@ async function fetchRecipeText(recipeUrl) {
   if (cached != null) return cached;
   let text = "";
   try {
-    text = await fetchRecipeTextFromGoogleApi(trimmed);
+    text = await fetchRecipeTextFromGoogleApi(trimmed, timing);
     if (text) {
       recipeCacheSet(trimmed, text);
       return text;
@@ -380,6 +385,7 @@ async function fetchRecipeText(recipeUrl) {
 }
 
 export default async function handler(req, res) {
+  const timing = installLmsTimingResponseHooks(req, res);
   const cors = applyCors(req, res, {
     mode: "portal",
     methods: "GET, OPTIONS",
@@ -415,9 +421,9 @@ export default async function handler(req, res) {
     let lmsSessionFailureReason = "";
 
     if (hasLmsSessionHeaders) {
-      const access = globalThis.__RP2B1_LMS_SESSION_STUB__
+      const access = await timeLmsAsync(timing, "auth", () => globalThis.__RP2B1_LMS_SESSION_STUB__
         ? globalThis.__RP2B1_LMS_SESSION_STUB__
-        : await verifyLmsVerifiedSessionAccess(supabase, lmsHeaders);
+        : verifyLmsVerifiedSessionAccess(supabase, lmsHeaders, timing));
       if (access.ok) {
         email = access.email;
         lmsSessionAccess = access;
@@ -452,13 +458,13 @@ export default async function handler(req, res) {
     }
 
     // 2. Fetch lesson record
-    const { data: lesson, error: fetchError } = globalThis.__RP2B1_LESSONS_STUB__
+    const { data: lesson, error: fetchError } = await timeLmsAsync(timing, "lesson_lookup", () => globalThis.__RP2B1_LESSONS_STUB__
       ? globalThis.__RP2B1_LESSONS_STUB__
-      : await supabase
+      : supabase
       .from("lessons")
       .select("*")
       .eq("id", id)
-      .maybeSingle();
+      .maybeSingle());
 
     // RP2-B1 stub shim: when the production code path runs through the
     // sentinels, the returned `data` is an object (not an array). The
@@ -495,14 +501,14 @@ export default async function handler(req, res) {
     }
 
     // 3. Verify student enrollment for the course that this lesson belongs to
-    const { data: enrollment, error: enrollError } = globalThis.__RP2B1_ENROLLMENTS_STUB__
+    const { data: enrollment, error: enrollError } = await timeLmsAsync(timing, "enrollment_check", () => globalThis.__RP2B1_ENROLLMENTS_STUB__
       ? globalThis.__RP2B1_ENROLLMENTS_STUB__
-      : await supabase
+      : supabase
       .from("student_enrollments")
       .select("id, status")
       .eq("email", email)
       .eq("course_slug", lessonResolved.course_slug)
-      .limit(10);
+      .limit(10));
 
     if (enrollError) throw enrollError;
     const activeEnrollment = (enrollment || []).find(e => isActiveEnrollment(e.status));
@@ -516,14 +522,14 @@ export default async function handler(req, res) {
     }
 
     // 4. Calculate exact displayLesson by querying all non-hidden lessons of this course ordered by lesson_no
-    const { data: siblingLessons } = globalThis.__RP2B1_SIBLING_LESSONS_STUB__
+    const { data: siblingLessons } = await timeLmsAsync(timing, "sibling_lookup", () => globalThis.__RP2B1_SIBLING_LESSONS_STUB__
       ? globalThis.__RP2B1_SIBLING_LESSONS_STUB__
-      : await supabase
+      : supabase
       .from("lessons")
       .select("id, is_section")
       .eq("course_slug", lessonResolved.course_slug)
       .neq("status", "hidden")
-      .order("lesson_no", { ascending: true });
+      .order("lesson_no", { ascending: true }));
 
     const hasSection = (siblingLessons || []).some(l => Boolean(l.is_section));
     let displayLesson = lessonResolved.lesson_no;
@@ -545,45 +551,53 @@ export default async function handler(req, res) {
     }
 
     // 5. Secure Video URL & Media URLs
-    const securedVideo = signBunnyEmbedUrl(lessonResolved.video_url || "");
-    const securedMedia = signMediaUrls(lessonResolved.media_urls || "");
+    const { securedVideo, securedMedia } = timeLmsSync(timing, "bunny", () => ({
+      securedVideo: signBunnyEmbedUrl(lessonResolved.video_url || ""),
+      securedMedia: signMediaUrls(lessonResolved.media_urls || "")
+    }));
     // Plan B: resolve main media via the cached Drive-metadata helper so the
     // google drive.files.get round-trip is skipped when metadata is fresh.
-    const mainMediaInfo = Boolean(lessonResolved.is_section)
+    const mainMediaInfo = await timeLmsAsync(timing, "media", () => Boolean(lessonResolved.is_section)
       ? { mainMediaType: "none", mainMediaMimeType: "", mainMediaName: "" }
-      : await resolveMainMediaInfo(lessonResolved.video_url || "", getDriveFileMetadataCached);
+      : resolveMainMediaInfo(
+        lessonResolved.video_url || "",
+        (fileId) => getDriveFileMetadataCached(fileId, timing)
+      ));
 
     // 6. Fetch recipe text (cached; see fetchRecipeText)
-    const recipeText = await fetchRecipeText(lessonResolved.recipe_url);
+    const recipeText = await timeLmsAsync(timing, "recipe", () => fetchRecipeText(lessonResolved.recipe_url, timing));
 
     // Formatted lesson output
-    const formattedLesson = {
-      id: lessonResolved.id,
-      course: lessonResolved.course_slug,
-      lesson: lessonResolved.lesson_no,
-      displayLesson: displayLesson,
-      title: lessonResolved.title,
-      description: lessonResolved.description || "",
-      duration: lessonResolved.duration_text || "",
-      level: lessonResolved.level || "",
-      thumbnailUrl: lessonResolved.thumbnail_url || "",
-      videoUrl: lessonResolved.video_url || "",
-      recipeUrl: lessonResolved.recipe_url || "",
-      mediaUrls: securedMedia,
-      ...mainMediaInfo,
-      materials: Boolean(lessonResolved.is_section) ? [] : normalizeMaterials(lessonResolved.materials),
-      isSection: Boolean(lessonResolved.is_section),
-      views: lessonResolved.views || 0,
-      status: lessonResolved.status || "active",
-      recipeText,
-      ...securedVideo
-    };
-
-    return res.status(200).json({
-      success: true,
-      email,
-      lesson: formattedLesson
+    const payload = timeLmsSync(timing, "response_build", () => {
+      const formattedLesson = {
+        id: lessonResolved.id,
+        course: lessonResolved.course_slug,
+        lesson: lessonResolved.lesson_no,
+        displayLesson: displayLesson,
+        title: lessonResolved.title,
+        description: lessonResolved.description || "",
+        duration: lessonResolved.duration_text || "",
+        level: lessonResolved.level || "",
+        thumbnailUrl: lessonResolved.thumbnail_url || "",
+        videoUrl: lessonResolved.video_url || "",
+        recipeUrl: lessonResolved.recipe_url || "",
+        mediaUrls: securedMedia,
+        ...mainMediaInfo,
+        materials: Boolean(lessonResolved.is_section) ? [] : normalizeMaterials(lessonResolved.materials),
+        isSection: Boolean(lessonResolved.is_section),
+        views: lessonResolved.views || 0,
+        status: lessonResolved.status || "active",
+        recipeText,
+        ...securedVideo
+      };
+      return {
+        success: true,
+        email,
+        lesson: formattedLesson
+      };
     });
+
+    return res.status(200).json(payload);
 
   } catch (err) {
     // RP2-B1 fail-closed: when the flag is on we never leak the raw

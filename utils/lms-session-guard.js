@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { getAccountEventHashSecret, AuthSecretError } from "./lms-secrets.js";
 import { isV2GlobalOneDeviceEnabled } from "./v2-flags.js";
+import { timeLmsAsync } from "./lms-server-timing.js";
 
 export const STUDENT_SESSION_STATUSES = Object.freeze({
   ACTIVE: "active",
@@ -774,16 +775,16 @@ export async function verifyLmsVerifiedSessionAccess(supabase, {
   courseSlug = null,
   lmsIdleHours = getLmsSessionIdleHours(),
   studentIdleHours = getStudentSessionIdleHours()
-}) {
+}, timing = null) {
   if (!lmsSessionId || !lmsDeviceId) {
     return { ok: false, reason: "missing_lms_session", session: null };
   }
 
-  const session = await throwIfSupabaseError(await supabase
+  const session = await timeLmsAsync(timing, "auth_session_db", async () => throwIfSupabaseError(await supabase
     .from("lms_verified_sessions")
     .select("*")
     .eq("lms_session_id", lmsSessionId)
-    .maybeSingle());
+    .maybeSingle()));
 
   if (!session) {
     return { ok: false, reason: "invalid_lms_session", session: null };
@@ -797,9 +798,9 @@ export async function verifyLmsVerifiedSessionAccess(supabase, {
     return { ok: false, reason: `lms_session_${session.status}`, session };
   }
 
-  const control = await getStudentSessionControl(supabase, session.email);
+  const control = await timeLmsAsync(timing, "auth_control_db", () => getStudentSessionControl(supabase, session.email));
   if (isRevokedBySessionControl(session, control)) {
-    await supabase
+    await timeLmsAsync(timing, "auth_touch_db", () => supabase
       .from("lms_verified_sessions")
       .update({
         status: LMS_SESSION_STATUSES.ADMIN_RESET,
@@ -807,19 +808,19 @@ export async function verifyLmsVerifiedSessionAccess(supabase, {
         updated_at: nowIso()
       })
       .eq("id", session.id)
-      .eq("status", LMS_SESSION_STATUSES.ACTIVE);
+      .eq("status", LMS_SESSION_STATUSES.ACTIVE));
     return { ok: false, reason: "lms_session_revoked_by_reset", session };
   }
 
   if (isOlderThan(session.last_seen_at, lmsIdleHours)) {
-    await supabase
+    await timeLmsAsync(timing, "auth_touch_db", () => supabase
       .from("lms_verified_sessions")
       .update({
         status: LMS_SESSION_STATUSES.EXPIRED,
         updated_at: nowIso()
       })
       .eq("id", session.id)
-      .eq("status", LMS_SESSION_STATUSES.ACTIVE);
+      .eq("status", LMS_SESSION_STATUSES.ACTIVE));
     return { ok: false, reason: "lms_session_expired", session };
   }
 
@@ -829,12 +830,12 @@ export async function verifyLmsVerifiedSessionAccess(supabase, {
     return { ok: false, reason: "course_mismatch", session };
   }
 
-  const { data: studentSession, error: studentError } = await supabase
+  const { data: studentSession, error: studentError } = await timeLmsAsync(timing, "auth_student_db", () => supabase
     .from("student_active_sessions")
     .select("*")
     .eq("student_session_id", session.student_session_id)
     .eq("email", normalizeEmail(session.email))
-    .maybeSingle();
+    .maybeSingle());
 
   if (studentError) throw studentError;
   if (!studentSession) {
@@ -845,7 +846,7 @@ export async function verifyLmsVerifiedSessionAccess(supabase, {
   }
 
   if (isRevokedBySessionControl(studentSession, control)) {
-    await supabase
+    await timeLmsAsync(timing, "auth_touch_db", () => supabase
       .from("student_active_sessions")
       .update({
         status: STUDENT_SESSION_STATUSES.ADMIN_RESET,
@@ -853,28 +854,28 @@ export async function verifyLmsVerifiedSessionAccess(supabase, {
         updated_at: nowIso()
       })
       .eq("student_session_id", session.student_session_id)
-      .eq("status", STUDENT_SESSION_STATUSES.ACTIVE);
+      .eq("status", STUDENT_SESSION_STATUSES.ACTIVE));
     return { ok: false, reason: "student_session_revoked_by_reset", session };
   }
 
   if (isOlderThan(studentSession.last_seen_at, studentIdleHours)) {
-    await supabase
+    await timeLmsAsync(timing, "auth_touch_db", () => supabase
       .from("student_active_sessions")
       .update({
         status: STUDENT_SESSION_STATUSES.EXPIRED,
         updated_at: nowIso()
       })
       .eq("student_session_id", session.student_session_id)
-      .eq("status", STUDENT_SESSION_STATUSES.ACTIVE);
+      .eq("status", STUDENT_SESSION_STATUSES.ACTIVE));
     return { ok: false, reason: "student_session_expired", session };
   }
 
-  const { data: enrollments, error: enrollError } = await supabase
+  const { data: enrollments, error: enrollError } = await timeLmsAsync(timing, "auth_enrollment_db", () => supabase
     .from("student_enrollments")
     .select("id,status")
     .eq("email", normalizeEmail(session.email))
     .eq("course_slug", sessionCourseSlug)
-    .limit(10);
+    .limit(10));
 
   if (enrollError) throw enrollError;
   const activeEnrollment = (enrollments || []).find(enrollment => isActiveEnrollment(enrollment.status));
@@ -882,10 +883,10 @@ export async function verifyLmsVerifiedSessionAccess(supabase, {
     return { ok: false, reason: "enrollment_inactive", session };
   }
 
-  await Promise.all([
+  await timeLmsAsync(timing, "auth_touch_db", () => Promise.all([
     touchLmsVerifiedSession(supabase, lmsSessionId),
     touchStudentSession(supabase, session.student_session_id)
-  ]);
+  ]));
 
   return {
     ok: true,
