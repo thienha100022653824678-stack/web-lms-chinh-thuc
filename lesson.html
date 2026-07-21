@@ -420,11 +420,12 @@
       </div>
 
       <!-- Footer Nav controls -->
+      <!-- Disabled until previous/next lesson handlers are ready. -->
       <div class="bg-white border-t border-brandBrown/5 py-4 px-4 sticky bottom-0 z-30 flex items-center justify-between gap-4 -mx-4 sm:mx-0 sm:rounded-2xl shadow-lg mb-6">
-        <button id="prevBtn" class="flex-1 py-3 border border-brandGreen/35 hover:bg-brandCream text-brandGreen font-bold text-sm rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed">
+        <button id="prevBtn" disabled class="flex-1 py-3 border border-brandGreen/35 hover:bg-brandCream text-brandGreen font-bold text-sm rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed">
           ← Bài Trước
         </button>
-        <button id="nextBtn" class="flex-1 py-3 bg-brandGreen hover:bg-brandGreenLight text-white font-bold text-sm rounded-xl shadow-md shadow-brandGreen/10 transition disabled:opacity-40 disabled:cursor-not-allowed">
+        <button id="nextBtn" disabled class="flex-1 py-3 bg-brandGreen hover:bg-brandGreenLight text-white font-bold text-sm rounded-xl shadow-md shadow-brandGreen/10 transition disabled:opacity-40 disabled:cursor-not-allowed">
           Bài Tiếp Theo →
         </button>
       </div>
@@ -1654,20 +1655,23 @@
         const realCurrentIdx = realLessonsList.findIndex(l => l.id === LESSON_ID);
 
         // Setup bottom nav buttons
+        // Order invariant: assign onclick BEFORE disabled=false (so there is never
+        // a state with disabled===false && onclick===null). For the no-sibling
+        // branch, disabled=true BEFORE onclick=null (button unclickable first).
         const prevBtn = document.getElementById("prevBtn");
         const nextBtn = document.getElementById("nextBtn");
 
         if (realCurrentIdx > 0) {
-          prevBtn.disabled = false;
           prevBtn.onclick = () => navigateToLesson(realLessonsList[realCurrentIdx - 1].id, { via: "prev" });
+          prevBtn.disabled = false;
         } else {
           prevBtn.disabled = true;
           prevBtn.onclick = null;
         }
 
         if (realCurrentIdx !== -1 && realCurrentIdx < realLessonsList.length - 1) {
-          nextBtn.disabled = false;
           nextBtn.onclick = () => navigateToLesson(realLessonsList[realCurrentIdx + 1].id, { via: "next" });
+          nextBtn.disabled = false;
         } else {
           nextBtn.disabled = true;
           nextBtn.onclick = null;
@@ -2008,8 +2012,8 @@
       const nextBtn = document.getElementById("nextBtn");
       if (prevBtn) {
         if (realCurrentIdx > 0) {
-          prevBtn.disabled = false;
           prevBtn.onclick = () => navigateToLesson(realLessonsList[realCurrentIdx - 1].id, { via: "prev" });
+          prevBtn.disabled = false;
         } else {
           prevBtn.disabled = true;
           prevBtn.onclick = null;
@@ -2017,8 +2021,8 @@
       }
       if (nextBtn) {
         if (realCurrentIdx !== -1 && realCurrentIdx < realLessonsList.length - 1) {
-          nextBtn.disabled = false;
           nextBtn.onclick = () => navigateToLesson(realLessonsList[realCurrentIdx + 1].id, { via: "next" });
+          nextBtn.disabled = false;
         } else {
           nextBtn.disabled = true;
           nextBtn.onclick = null;
