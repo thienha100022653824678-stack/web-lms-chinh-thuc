@@ -43,6 +43,19 @@ function isEnabled() {
   }
 }
 
+function utf8ByteLength(value) {
+  const text = String(value || "");
+  try {
+    if (typeof Buffer !== "undefined" && typeof Buffer.byteLength === "function") {
+      return Buffer.byteLength(text, "utf8");
+    }
+  } catch {}
+  try {
+    if (typeof TextEncoder !== "undefined") return new TextEncoder().encode(text).length;
+  } catch {}
+  return encodeURIComponent(text).replace(/%[0-9A-F]{2}|./gi, "x").length;
+}
+
 export function getOrCreateLmsServerTiming(req) {
   if (!isEnabled() || !req || (typeof req !== "object" && typeof req !== "function")) return null;
   try {
@@ -110,7 +123,7 @@ function finalizeHeaders(res, context) {
       .filter(Boolean)
       .join(", ");
 
-    if (Buffer.byteLength(header, "utf8") <= MAX_HEADER_BYTES) {
+    if (utf8ByteLength(header) <= MAX_HEADER_BYTES) {
       res.setHeader("Server-Timing", header);
     }
   } catch {}

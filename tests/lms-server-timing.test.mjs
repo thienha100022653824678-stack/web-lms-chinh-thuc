@@ -153,6 +153,23 @@ test("env on emits only fixed finite non-negative metrics under 1 KB without PII
   });
 });
 
+test("header generation works when the Node Buffer global is unavailable", async () => {
+  await withTimingEnv("1", async () => {
+    const originalBuffer = globalThis.Buffer;
+    try {
+      globalThis.Buffer = undefined;
+      const req = {};
+      const res = makeRes();
+      installLmsTimingResponseHooks(req, res);
+      res.json({ ok: true });
+      assert.ok(res.headers["server-timing"]);
+      assert.ok(res.headers["server-timing"].length < 1024);
+    } finally {
+      globalThis.Buffer = originalBuffer;
+    }
+  });
+});
+
 test("operation throw preserves the existing lesson error response", async () => {
   await withTimingEnv("1", async () => {
     setSuccessfulLessonStubs();
