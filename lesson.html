@@ -529,7 +529,16 @@
       fetchedAt: 0,             // Date.now() of last course-data fetch
       prevFetch: null,          // last course-data Promise (dedupe)
     };
-    let inflightLessonId = null; // race guard for overlapping nav clicks
+    // ── Navigation state machine (IDLE / NAVIGATING) ──────────────────────
+    // navState = gate ("IDLE" | "NAVIGATING"); navTargetId = in-flight identity.
+    // Supersede (logical cancellation): a popstate retargets navTargetId; the
+    // superseded nav self-skips side-effects on `navTargetId !== myTarget` —
+    // its fetch is NOT aborted, only its result is ignored.
+    let navState = "IDLE";
+    let navTargetId = null;
+    // Token for the inner-loading spinner so a superseded Plan B's finally can
+    // never clear a newer navigation's spinner (loadingOwner !== token → skip).
+    let loadingOwner = null;
 
     // ── Plan A: lesson payload cache + prefetch ───────────────────────────
     function spaLessonCacheGet(id) {
@@ -1725,22 +1734,64 @@
     // Show a small "loading" hint on prev/next without covering the whole
     // screen like the initial SPA boot loader. Used only during in-place
     // navigation; the first paint keeps its own full-screen spinner.
-    function setInnerLoading(on) {
+    // Token-aware: setInnerLoading(true, T) records loadingOwner=T (always,
+    // even when the spinner DOM already exists — supersede transfers
+    // ownership of the SAME spinner node). setInnerLoading(false, T) only
+    // clears when loadingOwner===T (or already null), so a superseded nav's
+    // finally can never remove a newer nav's spinner.
+    function setInnerLoading(on, token) {
       const nav = document.querySelector("main");
       if (!nav) return;
       let host = document.getElementById("spaInnerLoader");
       if (on) {
-        if (host) return;
-        host = document.createElement("div");
-        host.id = "spaInnerLoader";
-        host.className = "sticky top-20 z-30 -mx-4 sm:mx-0 mb-3 px-4 py-2 rounded-xl bg-brandGreen/10 border border-brandGreen/25 text-brandGreen text-xs font-extrabold flex items-center gap-2";
-        host.innerHTML = '<span class="w-3 h-3 border-2 border-brandGreen border-t-transparent rounded-full animate-spin"></span><span>Đang tải bài tiếp theo…</span>';
-        nav.insertBefore(host, nav.firstChild);
-        document.getElementById("prevBtn")?.setAttribute("disabled", "true");
-        document.getElementById("nextBtn")?.setAttribute("disabled", "true");
-      } else if (host) {
-        host.remove();
+        if (!host) {
+          host = document.createElement("div");
+          host.id = "spaInnerLoader";
+          host.className = "sticky top-20 z-30 -mx-4 sm:mx-0 mb-3 px-4 py-2 rounded-xl bg-brandGreen/10 border border-brandGreen/25 text-brandGreen text-xs font-extrabold flex items-center gap-2";
+          host.innerHTML = '<span class="w-3 h-3 border-2 border-brandGreen border-t-transparent rounded-full animate-spin"></span><span>Đang tải bài tiếp theo…</span>';
+          nav.insertBefore(host, nav.firstChild);
+          document.getElementById("prevBtn")?.setAttribute("disabled", "true");
+          document.getElementById("nextBtn")?.setAttribute("disabled", "true");
+        }
+        loadingOwner = token;
+      } else {
+        if (loadingOwner !== null && loadingOwner !== token) return;
+        if (host) host.remove();
+        loadingOwner = null;
       }
+    }
+
+    // Gesture-boundary yield: rAF in the foreground (deterministic boundary
+    // so a same-gesture 2nd click is dispatched before the callback fires),
+    // setTimeout(0) when the tab is hidden or rAF is unavailable (liveness —
+    // never deadlock the state machine in a background tab).
+    function navYield(cb) {
+      if (typeof requestAnimationFrame === "function" && !document.hidden) requestAnimationFrame(cb);
+      else setTimeout(cb, 0);
+    }
+
+    // Single point of history control. popstate never pushes a new entry
+    // (the browser already moved the URL); every other nav does, guarded by
+    // URL-equality so a repeated call to the same id is a no-op.
+    function pushNavHistory(lessonId, via) {
+      if (via === "popstate") return;
+      const newUrl = `/lesson.html?id=${encodeURIComponent(lessonId)}`;
+      if (window.location.pathname + window.location.search !== newUrl) {
+        window.history.pushState({ lessonId, via }, "", newUrl);
+      }
+    }
+
+    // Publish the new navigation state to the input controls AFTER the gesture
+    // boundary, then release the gate. Self-skips when superseded
+    // (navTargetId !== targetId). Also clears any stale spinner left by a
+    // superseded Plan B before re-enabling the buttons.
+    async function navFinalize(targetId) {
+      await new Promise(navYield);
+      if (navTargetId !== targetId) return;
+      if (loadingOwner !== null && loadingOwner !== targetId) setInnerLoading(false, loadingOwner);
+      refreshPrevNextAfterSwap();
+      navState = "IDLE";
+      navTargetId = null;
     }
 
     // Apply a fetched lesson payload to the existing DOM in-place.
@@ -1914,94 +1965,98 @@
     // a deep link directly (handled naturally — loadLessonDetails runs).
     async function navigateToLesson(lessonId, { via = "prev" } = {}) {
       if (!lessonId || lessonId === LESSON_ID) return;
-      if (inflightLessonId && inflightLessonId !== LESSON_ID) {
-        // Another nav click is in flight; let the latest one win by ignoring
-        // duplicate clicks but always permitting a fresh navigation to a
-        // different lesson.
-      }
 
-      // Optimistic: capture scroll + disabled state so user can move on.
-      const prevScrollY = window.scrollY;
-      inflightLessonId = lessonId;
+      // ── Guard / supersede ──
+      if (navState === "NAVIGATING") {
+        if (via !== "popstate") return;          // prev/next/sidebar: dropped while a nav is in flight
+        // popstate: supersede (logical cancellation) — retarget the in-flight
+        // nav. The superseded nav self-skips side-effects on
+        // `navTargetId !== myTarget`; its fetch is NOT aborted, only its result
+        // is ignored, and its finally cleans up only what it owns (token-aware).
+        navTargetId = lessonId;
+      } else {
+        navState = "NAVIGATING";
+        navTargetId = lessonId;
+      }
+      const myTarget = lessonId;
+      const myVia = via;
 
       // Plan C PRIMARY path: the course list (loaded once by course-data,
       // now including materials) already holds every sibling lesson with the
       // same fields the lesson endpoint returns. Paint directly from it with
       // zero network and zero spinner. This is the common case for prev/next
       // and sidebar clicks once the course has loaded.
-      const fromCourseList = (courseLessonsList || []).find(l => l.id === lessonId);
+      const fromCourseList = (courseLessonsList || []).find(l => l.id === myTarget);
       if (fromCourseList && !fromCourseList.isSection) {
-        LESSON_ID = lessonId;
+        if (navTargetId !== myTarget) return;    // superseded before we started
+        LESSON_ID = myTarget;
         paintLesson(fromCourseList);
-        refreshPrevNextAfterSwap();
-        const newUrl = `/lesson.html?id=${encodeURIComponent(lessonId)}`;
-        if (window.location.pathname + window.location.search !== newUrl) {
-          window.history.pushState({ lessonId, via }, "", newUrl);
-        }
+        pushNavHistory(myTarget, myVia);
         window.scrollTo({ top: 0, behavior: "instant" in window.scrollTo ? "instant" : "auto" });
-        inflightLessonId = null;
-        void prevScrollY;
         // Keep the per-lesson cache warm for back-nav and deep-links.
-        try { spaLessonCacheSet(lessonId, { lesson: fromCourseList, email: studentEmail }); } catch {}
+        try { spaLessonCacheSet(myTarget, { lesson: fromCourseList, email: studentEmail }); } catch {}
         prefetchAdjacentLessons();
+        await navFinalize(myTarget);             // rebind + release AFTER the gesture boundary
         return;
       }
 
       // Plan A fast path: if this lesson was already prefetched/visited and is
       // still fresh, paint immediately with zero network. setInnerLoading is
       // skipped so the user never sees a spinner for a cached lesson.
-      const cached = spaLessonCacheGet(lessonId);
+      const cached = spaLessonCacheGet(myTarget);
       if (cached && cached.lesson) {
-        LESSON_ID = lessonId;
+        if (navTargetId !== myTarget) return;    // superseded
+        LESSON_ID = myTarget;
         if (cached.email) studentEmail = cached.email;
         paintLesson(cached.lesson);
-        refreshPrevNextAfterSwap();
-        const newUrl = `/lesson.html?id=${encodeURIComponent(lessonId)}`;
-        if (window.location.pathname + window.location.search !== newUrl) {
-          window.history.pushState({ lessonId, via }, "", newUrl);
-        }
+        pushNavHistory(myTarget, myVia);
         window.scrollTo({ top: 0, behavior: "instant" in window.scrollTo ? "instant" : "auto" });
-        inflightLessonId = null;
-        void prevScrollY;
         // Re-prefetch the new neighbors so the NEXT click is also instant.
         prefetchAdjacentLessons();
+        await navFinalize(myTarget);
         return;
       }
 
-      setInnerLoading(true);
+      // Plan B network path: the await IS the gesture boundary, so the rebind
+      // runs inline after it (no navFinalize needed). setInnerLoading owns the
+      // spinner via the token so a supersede cannot clear a newer nav's spinner.
+      setInnerLoading(true, myTarget);
 
       try {
-        const data = await fetchLessonPayload(lessonId);
-        // Race guard: drop the response if the user has already navigated
-        // elsewhere since this request started.
-        if (inflightLessonId !== lessonId) return;
+        const data = await fetchLessonPayload(myTarget);
+        // Supersede guard: drop the response if another nav took over.
+        if (navTargetId !== myTarget) return;
 
-        LESSON_ID = lessonId;
+        LESSON_ID = myTarget;
         if (data.email) studentEmail = data.email;
         paintLesson(data.lesson);
         refreshPrevNextAfterSwap();
-
-        // Update URL without reload. pushState so the back button returns to
-        // the previous lesson (instead of stepping out of the lesson viewer).
-        const newUrl = `/lesson.html?id=${encodeURIComponent(lessonId)}`;
-        if (window.location.pathname + window.location.search !== newUrl) {
-          window.history.pushState({ lessonId, via }, "", newUrl);
-        }
+        pushNavHistory(myTarget, myVia);
 
         // Restore scroll to top of main content so the user sees the new
         // lesson header rather than the previous lesson's recipe bottom.
         window.scrollTo({ top: 0, behavior: "instant" in window.scrollTo ? "instant" : "auto" });
-        void prevScrollY; // captured for analytics potential, currently unused
         // Re-prefetch neighbors of the new current lesson.
         prefetchAdjacentLessons();
       } catch (err) {
-        // fetchLessonPayload throws on non-ok; if data was attached, check for
-        // auth errors so we fall back to a full reload (which re-runs auth).
-        console.warn("[spa] navigateToLesson fetch failed, falling back to reload:", err);
-        window.location.href = `/lesson.html?id=${encodeURIComponent(lessonId)}`;
+        // fetchLessonPayload throws on non-ok; fall back to a full reload
+        // (which re-runs auth) — but ONLY for the active target. A superseded
+        // (stale) nav must never redirect, or it would clobber the newer nav.
+        if (navTargetId === myTarget) {
+          console.warn("[spa] navigateToLesson fetch failed, falling back to reload:", err);
+          window.location.href = `/lesson.html?id=${encodeURIComponent(myTarget)}`;
+        } else {
+          console.warn("[spa] stale nav fetch failed (superseded), not redirecting:", err);
+        }
       } finally {
-        if (inflightLessonId === lessonId) inflightLessonId = null;
-        setInnerLoading(false);
+        // Cleanup ONLY what this nav owns. setInnerLoading(false, myTarget)
+        // skips when a newer nav took the spinner (loadingOwner !== myTarget).
+        // Never clear a newer navigation's navState/navTargetId.
+        setInnerLoading(false, myTarget);
+        if (navTargetId === myTarget) {
+          navState = "IDLE";
+          navTargetId = null;
+        }
       }
     }
 
