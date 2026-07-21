@@ -110,11 +110,12 @@ export function timeLmsSync(context, name, operation) {
 function finalizeHeaders(res, context) {
   if (!context || context.finalized) return;
   context.finalized = true;
+  let header = "";
   try {
     const total = monotonicNow() - context.startedAt;
     if (Number.isFinite(total) && total >= 0) context.metrics.handler_total = total;
 
-    const header = ALLOWED_METRICS
+    const formatted = ALLOWED_METRICS
       .map((name) => {
         const duration = context.metrics[name];
         if (!Number.isFinite(duration) || duration < 0) return "";
@@ -123,10 +124,17 @@ function finalizeHeaders(res, context) {
       .filter(Boolean)
       .join(", ");
 
-    if (utf8ByteLength(header) <= MAX_HEADER_BYTES) {
-      res.setHeader("Server-Timing", header);
-    }
+    if (utf8ByteLength(formatted) <= MAX_HEADER_BYTES) header = formatted;
   } catch {}
+
+  if (header) {
+    try {
+      res.setHeader("Server-Timing", header);
+    } catch {}
+    try {
+      res.setHeader("X-LMS-Server-Timing", header);
+    } catch {}
+  }
 
   try {
     res.setHeader("X-LMS-Request-Ordinal", String(context.ordinal));

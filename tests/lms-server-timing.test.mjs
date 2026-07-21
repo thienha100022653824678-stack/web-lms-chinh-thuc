@@ -19,7 +19,7 @@ function makeReq() {
   };
 }
 
-function makeRes({ throwServerTiming = false } = {}) {
+function makeRes({ throwServerTiming = false, throwFallbackTiming = false } = {}) {
   const headers = Object.create(null);
   return {
     headers,
@@ -28,6 +28,9 @@ function makeRes({ throwServerTiming = false } = {}) {
     setHeader(name, value) {
       if (throwServerTiming && String(name).toLowerCase() === "server-timing") {
         throw new Error("header generation failed");
+      }
+      if (throwFallbackTiming && String(name).toLowerCase() === "x-lms-server-timing") {
+        throw new Error("fallback header generation failed");
       }
       headers[String(name).toLowerCase()] = value;
     },
@@ -117,6 +120,7 @@ test("env off preserves lesson status/body and emits no timing headers", async (
     assert.equal(res.body.success, true);
     assert.equal(res.body.lesson.id, "lesson-private-id");
     assert.equal(res.headers["server-timing"], undefined);
+    assert.equal(res.headers["x-lms-server-timing"], undefined);
     assert.equal(res.headers["x-lms-request-ordinal"], undefined);
     assert.equal(res.headers["x-lms-instance-age-ms"], undefined);
   });
@@ -130,8 +134,10 @@ test("env on emits only fixed finite non-negative metrics under 1 KB without PII
     await lessonHandler(req, res);
 
     const header = res.headers["server-timing"];
+    assert.equal(res.headers["x-lms-server-timing"], header);
     assert.ok(header);
     assert.ok(Buffer.byteLength(header, "utf8") < 1024);
+    assert.match(header, /^[a-z_]+;dur=\d+\.\d(?:, [a-z_]+;dur=\d+\.\d)*$/);
     const metrics = parseServerTiming(header);
     assert.deepEqual(metrics.map((metric) => metric.name), [...ALLOWED_METRICS]);
     for (const metric of metrics) {
@@ -194,6 +200,33 @@ test("Server-Timing header failure does not replace status or body", async () =>
     assert.equal(res.statusCode, 200);
     assert.equal(res.body.success, true);
     assert.equal(res.headers["server-timing"], undefined);
+    assert.ok(res.headers["x-lms-server-timing"]);
+  });
+});
+
+test("fallback timing header failure still sends Server-Timing and preserves response", async () => {
+  await withTimingEnv("1", async () => {
+    setSuccessfulLessonStubs();
+    const req = makeReq();
+    const res = makeRes({ throwFallbackTiming: true });
+    await lessonHandler(req, res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.success, true);
+    assert.ok(res.headers["server-timing"]);
+    assert.equal(res.headers["x-lms-server-timing"], undefined);
+  });
+});
+
+test("both timing headers may fail without replacing the response", async () => {
+  await withTimingEnv("1", async () => {
+    setSuccessfulLessonStubs();
+    const req = makeReq();
+    const res = makeRes({ throwServerTiming: true, throwFallbackTiming: true });
+    await lessonHandler(req, res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.success, true);
+    assert.equal(res.headers["server-timing"], undefined);
+    assert.equal(res.headers["x-lms-server-timing"], undefined);
   });
 });
 
