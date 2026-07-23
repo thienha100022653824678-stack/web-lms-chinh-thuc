@@ -421,9 +421,17 @@ export default async function handler(req, res) {
     let lmsSessionFailureReason = "";
 
     if (hasLmsSessionHeaders) {
+      // A1: deferTouch tells the guard to START the happy-path session touch
+      // (heartbeat on both tables) without awaiting it internally, returning it
+      // as __touchPromise. The guard still fully verifies access first; we
+      // await __touchPromise later (in the parallel cluster below) so a touch
+      // failure trips the existing fail-closed catch before the response goes
+      // out. lmsHeaders only carries lmsSessionId/lmsDeviceId, so we add
+      // deferTouch explicitly via spread (courseSlug stays null here on
+      // purpose — the handler does its own course_mismatch check below).
       const access = await timeLmsAsync(timing, "auth", () => globalThis.__RP2B1_LMS_SESSION_STUB__
         ? globalThis.__RP2B1_LMS_SESSION_STUB__
-        : verifyLmsVerifiedSessionAccess(supabase, lmsHeaders, timing));
+        : verifyLmsVerifiedSessionAccess(supabase, { ...lmsHeaders, deferTouch: true }, timing));
       if (access.ok) {
         email = access.email;
         lmsSessionAccess = access;
@@ -450,6 +458,13 @@ export default async function handler(req, res) {
     }
 
     if (!email) {
+      // Drain the deferred session touch before this early return so a
+      // heartbeat failure can never become an unhandled rejection after the
+      // response is sent. Only reachable with lmsSessionAccess set in the
+      // edge case where the guard returned ok but email resolved empty;
+      // otherwise a no-op (V1/stub: optional chaining yields undefined and
+      // await undefined resolves immediately).
+      await lmsSessionAccess?.__touchPromise?.catch(() => {});
       return res.status(401).json({
         success: false,
         error: "Vui lòng đăng nhập để truy cập bài học",
@@ -474,11 +489,22 @@ export default async function handler(req, res) {
     const lessonRecord = Array.isArray(lesson) ? lesson[0] : lesson;
     if (fetchError) throw fetchError;
     if (!lessonRecord) {
+      // Drain the deferred heartbeat before responding. Access was already
+      // granted valid upstream (lmsSessionAccess.ok), so a touch failure on
+      // this 404 content path is NOT a fail-closed event — swallow it so it
+      // can never surface as an unhandled rejection after the 404 is sent.
+      // No-op when lmsSessionAccess is falsy (V1/stub path).
+      await lmsSessionAccess?.__touchPromise?.catch(() => {});
       return res.status(404).json({ success: false, error: "Không tìm thấy bài học" });
     }
     const lessonResolved = lessonRecord;
 
     if (lmsSessionAccess && String(lessonResolved.course_slug || "").trim() !== lmsSessionAccess.courseSlug) {
+      // Drain the deferred heartbeat before responding. Same rationale as the
+      // 404 path above: access is already valid, so a touch failure here is
+      // not fail-closed and must not leak as an unhandled rejection after the
+      // normalized 401 invalid_session response is sent.
+      await lmsSessionAccess?.__touchPromise?.catch(() => {});
       // RP2-B1: safe error contract — never echo the binding course.
       return respondWithAccessError(res, {
         reason: "course_mismatch",
@@ -500,37 +526,84 @@ export default async function handler(req, res) {
       });
     }
 
-    // 3. Verify student enrollment for the course that this lesson belongs to
-    const { data: enrollment, error: enrollError } = await timeLmsAsync(timing, "enrollment_check", () => globalThis.__RP2B1_ENROLLMENTS_STUB__
-      ? globalThis.__RP2B1_ENROLLMENTS_STUB__
-      : supabase
-      .from("student_enrollments")
-      .select("id, status")
-      .eq("email", email)
-      .eq("course_slug", lessonResolved.course_slug)
-      .limit(10));
+    // 3. Verify student enrollment. On the V2 verified-session path the guard
+    // already proved an active enrollment: auth_enrollment_db queried the SAME
+    // email against the session's course_slug, and the course_mismatch check
+    // above already confirmed this lesson's course equals the session's
+    // course. Re-querying would be a duplicate round-trip, so V2 skips it.
+    // V1/legacy (sToken) never ran the guard's enrollment check, so it MUST
+    // keep this block. When skipped on V2, enrollment_check is simply never
+    // recorded (Server-Timing emits it as dur=0.0 — the honest "did not run"
+    // value, not a fake measurement); V1 still records the real duration.
+    if (!lmsSessionAccess) {
+      const { data: enrollment, error: enrollError } = await timeLmsAsync(timing, "enrollment_check", () => globalThis.__RP2B1_ENROLLMENTS_STUB__
+        ? globalThis.__RP2B1_ENROLLMENTS_STUB__
+        : supabase
+        .from("student_enrollments")
+        .select("id, status")
+        .eq("email", email)
+        .eq("course_slug", lessonResolved.course_slug)
+        .limit(10));
 
-    if (enrollError) throw enrollError;
-    const activeEnrollment = (enrollment || []).find(e => isActiveEnrollment(e.status));
-    if (!activeEnrollment) {
-      return res.status(403).json({
-        success: false,
-        error: "Bạn không có quyền xem bài học của khóa học này.",
-        email,
-        course: lessonResolved.course_slug
-      });
+      if (enrollError) throw enrollError;
+      const activeEnrollment = (enrollment || []).find(e => isActiveEnrollment(e.status));
+      if (!activeEnrollment) {
+        return res.status(403).json({
+          success: false,
+          error: "Bạn không có quyền xem bài học của khóa học này.",
+          email,
+          course: lessonResolved.course_slug
+        });
+      }
     }
 
-    // 4. Calculate exact displayLesson by querying all non-hidden lessons of this course ordered by lesson_no
-    const { data: siblingLessons } = await timeLmsAsync(timing, "sibling_lookup", () => globalThis.__RP2B1_SIBLING_LESSONS_STUB__
-      ? globalThis.__RP2B1_SIBLING_LESSONS_STUB__
-      : supabase
-      .from("lessons")
-      .select("id, is_section")
-      .eq("course_slug", lessonResolved.course_slug)
-      .neq("status", "hidden")
-      .order("lesson_no", { ascending: true }));
+    // 4. Parallelize the independent post-lesson work. sibling_lookup, media,
+    // and recipe each depend ONLY on lessonResolved (no cross-dependencies),
+    // so they can run concurrently via Promise.all. We also fold in the
+    // deferred session touch (__touchPromise) here so the heartbeat on both
+    // session tables overlaps this whole cluster instead of blocking the
+    // response — the touch started inside the guard (during auth) and by now
+    // has already overlapped lesson_lookup + course_mismatch (+ V1
+    // enrollment_check); awaiting it here keeps fail-closed semantics: a
+    // touch throw rejects Promise.all and falls through to the catch below
+    // before any response is sent.
+    //
+    // __touchPromise is a BARE entry in this Promise.all — it was already
+    // wrapped in timeLmsAsync("auth_touch_db", ...) inside the guard, so
+    // re-wrapping it here would double-count auth_touch_db (timeLmsAsync is
+    // additive: context.metrics[name] += duration). The guard returns
+    // undefined for __touchPromise on the stub / V1 path; Promise.all
+    // tolerates undefined entries (resolves them to undefined and continues).
+    const [siblingResult, mainMediaInfo, recipeText] = await Promise.all([
+      timeLmsAsync(timing, "sibling_lookup", () => globalThis.__RP2B1_SIBLING_LESSONS_STUB__
+        ? globalThis.__RP2B1_SIBLING_LESSONS_STUB__
+        : supabase
+        .from("lessons")
+        .select("id, is_section")
+        .eq("course_slug", lessonResolved.course_slug)
+        .neq("status", "hidden")
+        .order("lesson_no", { ascending: true })),
+      // Plan B: resolve main media via the cached Drive-metadata helper so the
+      // google drive.files.get round-trip is skipped when metadata is fresh.
+      timeLmsAsync(timing, "media", () => Boolean(lessonResolved.is_section)
+        ? { mainMediaType: "none", mainMediaMimeType: "", mainMediaName: "" }
+        : resolveMainMediaInfo(
+          lessonResolved.video_url || "",
+          (fileId) => getDriveFileMetadataCached(fileId, timing)
+        )),
+      // Fetch recipe text (cached; see fetchRecipeText — returns "" on error,
+      // never throws, so it cannot trip the fail-closed catch).
+      timeLmsAsync(timing, "recipe", () => fetchRecipeText(lessonResolved.recipe_url, timing)),
+      lmsSessionAccess ? lmsSessionAccess.__touchPromise : undefined
+    ]);
+    // sibling_lookup intentionally does NOT inspect its error — preserved
+    // verbatim from the original serial code: on a hard supabase failure
+    // `data` is undefined and we silently fall back to displayLesson =
+    // lesson_no. Do NOT add error-checking here (would change behavior).
+    const { data: siblingLessons } = siblingResult;
 
+    // Calculate exact displayLesson by querying all non-hidden lessons of
+    // this course ordered by lesson_no (sync, needs siblingLessons above).
     const hasSection = (siblingLessons || []).some(l => Boolean(l.is_section));
     let displayLesson = lessonResolved.lesson_no;
     let sectionCounter = 0;
@@ -550,22 +623,11 @@ export default async function handler(req, res) {
       }
     }
 
-    // 5. Secure Video URL & Media URLs
+    // 5. Secure Video URL & Media URLs (sync, depends only on lessonResolved)
     const { securedVideo, securedMedia } = timeLmsSync(timing, "bunny", () => ({
       securedVideo: signBunnyEmbedUrl(lessonResolved.video_url || ""),
       securedMedia: signMediaUrls(lessonResolved.media_urls || "")
     }));
-    // Plan B: resolve main media via the cached Drive-metadata helper so the
-    // google drive.files.get round-trip is skipped when metadata is fresh.
-    const mainMediaInfo = await timeLmsAsync(timing, "media", () => Boolean(lessonResolved.is_section)
-      ? { mainMediaType: "none", mainMediaMimeType: "", mainMediaName: "" }
-      : resolveMainMediaInfo(
-        lessonResolved.video_url || "",
-        (fileId) => getDriveFileMetadataCached(fileId, timing)
-      ));
-
-    // 6. Fetch recipe text (cached; see fetchRecipeText)
-    const recipeText = await timeLmsAsync(timing, "recipe", () => fetchRecipeText(lessonResolved.recipe_url, timing));
 
     // Formatted lesson output
     const payload = timeLmsSync(timing, "response_build", () => {

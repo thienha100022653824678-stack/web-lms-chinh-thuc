@@ -31,7 +31,7 @@ function maybeThrow(stub, table) {
   }
 }
 
-function makeChain(result, table) {
+function makeChain(result, table, stub) {
   // Read-only + write, thenable-ish chain. Each read method returns the
   // same chain so callers can do `select().eq(...).maybeSingle()`.
   // `upsert`/`insert` are supported (additive) so write-path tests
@@ -69,6 +69,9 @@ function makeChain(result, table) {
     // `update().eq().eq()` before returning; without this method the stub
     // threw "update is not a function" and masked the real 401 under a 500.
     update(data) {
+      if (stub.throwOnUpdate && stub.throwOnUpdate[table]) {
+        throw new Error(`[stub] simulated update failure for table=${table}`);
+      }
       recordWrite(table, "update", data);
       return chain;
     },
@@ -99,11 +102,11 @@ function fromStub(table) {
   maybeThrow(stub, table);
   const data = clone(stub[table]);
   if (data === undefined || data === null) {
-    return makeChain({ data: null, error: null }, table);
+    return makeChain({ data: null, error: null }, table, stub);
   }
   const isArray = Array.isArray(data);
   const result = isArray ? { data: data.slice(), error: null } : { data, error: null };
-  return makeChain(result, table);
+  return makeChain(result, table, stub);
 }
 
 const supabase = {
