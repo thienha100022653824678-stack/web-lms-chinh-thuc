@@ -20,6 +20,7 @@ import {
 } from "../lms-session-guard.js";
 import { isV2GlobalOneDeviceEnabled } from "../v2-flags.js";
 import { resolveMainMediaInfo } from "../lms-media.js";
+import { getOrLoadLmsRecipeText } from "../lms-content-cache.js";
 import { applyCors } from "../cors.js";
 
 const SESSION_COOKIE = "course_session_token";
@@ -308,18 +309,20 @@ async function fetchRecipeText(recipeUrl) {
   if (!/^https?:\/\//i.test(trimmed)) {
     return trimmed;
   }
-  try {
-    const text = await fetchRecipeTextFromGoogleApi(trimmed);
-    if (text) return text;
-  } catch (err) {
-    console.warn("[course-data] Google API recipe fetch failed, trying public fallback:", err.message);
-  }
-  try {
-    return await fetchRecipeTextFromPublicUrl(trimmed);
-  } catch (err) {
-    console.error("[course-data] Public recipe fetch failed:", err.message);
-    return "";
-  }
+  return getOrLoadLmsRecipeText(trimmed, async () => {
+    try {
+      const text = await fetchRecipeTextFromGoogleApi(trimmed);
+      if (text) return text;
+    } catch (err) {
+      console.warn("[course-data] Google API recipe fetch failed, trying public fallback:", err.message);
+    }
+    try {
+      return await fetchRecipeTextFromPublicUrl(trimmed);
+    } catch (err) {
+      console.error("[course-data] Public recipe fetch failed:", err.message);
+      return "";
+    }
+  });
 }
 
 async function attachRecipeText(lesson) {
