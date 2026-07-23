@@ -848,6 +848,87 @@ async function loadLessonWithSupabaseStub(stub) {
   }
 }
 
+async function withLessonRealGuard(stub, run) {
+  const fs = await import("node:fs");
+  const stubPath = join(ROOT, "tests", ".supabase-stub.json");
+  fs.writeFileSync(stubPath, JSON.stringify(stub));
+  process.env.LMS_RP2B1_SUPABASE_STUB = "1";
+  delete globalThis.__RP2B1_LMS_SESSION_STUB__;
+  globalThis.__RP2B1_LESSONS_STUB__ = {
+    data: stub.lesson === undefined ? null : stub.lesson,
+    error: null
+  };
+  globalThis.__RP2B1_SIBLING_LESSONS_STUB__ = {
+    data: stub.siblingLessons || [],
+    error: null
+  };
+  try {
+    const mod = await import("../utils/lms-handlers/lesson.js?real-guard=" + Date.now());
+    return await run(mod.default);
+  } finally {
+    try { fs.unlinkSync(stubPath); } catch {}
+    delete process.env.LMS_RP2B1_SUPABASE_STUB;
+    delete globalThis.__RP2B1_LMS_SESSION_STUB__;
+    delete globalThis.__RP2B1_LESSONS_STUB__;
+    delete globalThis.__RP2B1_SIBLING_LESSONS_STUB__;
+  }
+}
+
+function realGuardLessonStub(overrides = {}) {
+  const email = Object.hasOwn(overrides, "email")
+    ? overrides.email
+    : "student@example.com";
+  return {
+    lms_verified_sessions: {
+      lms_session_id: "lms_sess_abc",
+      email,
+      student_session_id: "student_sess_abc",
+      lms_device_id: "dev_xyz",
+      course_slug: "intro",
+      status: "active",
+      last_seen_at: new Date().toISOString(),
+      id: "row-id-1"
+    },
+    student_active_sessions: {
+      email,
+      student_session_id: "student_sess_abc",
+      status: "active",
+      last_seen_at: new Date().toISOString()
+    },
+    student_enrollments: [{ id: 1, status: "active" }],
+    student_session_controls: null,
+    lesson: {
+      id: "lesson-1",
+      course_slug: "intro",
+      lesson_no: 1,
+      title: "Bài 1",
+      is_section: false,
+      status: "active",
+      video_url: "",
+      media_urls: "",
+      recipe_url: "",
+      materials: [],
+      views: 0
+    },
+    siblingLessons: [],
+    throwOnUpdate: { lms_verified_sessions: true },
+    ...overrides
+  };
+}
+
+async function captureUnhandledRejections(run) {
+  const unhandled = [];
+  const listener = (reason) => unhandled.push(reason);
+  process.on("unhandledRejection", listener);
+  try {
+    const result = await run();
+    await new Promise((resolve) => setImmediate(resolve));
+    return { result, unhandled };
+  } finally {
+    process.removeListener("unhandledRejection", listener);
+  }
+}
+
 test("lesson: flag off keeps V1 behavior (no headers → 401 missing_login_session)", async () => {
   const snap = snapshotEnv();
   try {
@@ -1054,6 +1135,137 @@ test("lesson: flag on + course mismatch → invalid_session 401", async () => {
     await handler(req, res);
     assert.equal(res.statusCode, 401);
     assert.equal(res.body?.error, "invalid_session");
+  } finally {
+    restoreEnv(snap);
+  }
+});
+
+test("lesson deferTouch: touch update failure fails closed with flag on", async () => {
+  const snap = snapshotEnv();
+  try {
+    setFlag({ V2_GLOBAL_ONE_DEVICE_ENABLED: "1" });
+    await withLessonRealGuard(realGuardLessonStub(), async (handler) => {
+      const { req, res } = buildReqRes({
+        method: "GET",
+        body: {},
+        query: { id: "lesson-1" },
+        headers: { "x-lms-session-id": "lms_sess_abc", "x-lms-device-id": "dev_xyz" }
+      });
+      req.query.id = "lesson-1";
+      await handler(req, res);
+      assert.equal(res.statusCode, 503);
+      assert.equal(res.body?.error, "one_device_policy_unavailable");
+    });
+  } finally {
+    restoreEnv(snap);
+  }
+});
+
+test("lesson deferTouch: touch update failure returns legacy 500 with flag off", async () => {
+  const snap = snapshotEnv();
+  const originalConsoleError = console.error;
+  try {
+    clearFlagEnv();
+    console.error = () => {};
+    await withLessonRealGuard(realGuardLessonStub(), async (handler) => {
+      const { req, res } = buildReqRes({
+        method: "GET",
+        body: {},
+        query: { id: "lesson-1" },
+        headers: { "x-lms-session-id": "lms_sess_abc", "x-lms-device-id": "dev_xyz" }
+      });
+      req.query.id = "lesson-1";
+      await handler(req, res);
+      assert.equal(res.statusCode, 500);
+      assert.match(res.body?.detail || "", /simulated update failure/);
+    });
+  } finally {
+    console.error = originalConsoleError;
+    restoreEnv(snap);
+  }
+});
+
+test("lesson deferTouch: 404 drains a failed touch without unhandledRejection", async () => {
+  const snap = snapshotEnv();
+  try {
+    setFlag({ V2_GLOBAL_ONE_DEVICE_ENABLED: "1" });
+    const stub = realGuardLessonStub({ lesson: null });
+    await withLessonRealGuard(stub, async (handler) => {
+      const { result: res, unhandled } = await captureUnhandledRejections(async () => {
+        const { req, res } = buildReqRes({
+          method: "GET",
+          body: {},
+          query: { id: "missing" },
+          headers: { "x-lms-session-id": "lms_sess_abc", "x-lms-device-id": "dev_xyz" }
+        });
+        req.query.id = "missing";
+        await handler(req, res);
+        return res;
+      });
+      assert.equal(res.statusCode, 404);
+      assert.deepEqual(unhandled, []);
+    });
+  } finally {
+    restoreEnv(snap);
+  }
+});
+
+test("lesson deferTouch: course mismatch drains a failed touch without unhandledRejection", async () => {
+  const snap = snapshotEnv();
+  try {
+    setFlag({ V2_GLOBAL_ONE_DEVICE_ENABLED: "1" });
+    const stub = realGuardLessonStub({
+      lesson: {
+        id: "lesson-1",
+        course_slug: "other",
+        lesson_no: 1,
+        title: "Bài khác",
+        is_section: false,
+        status: "active"
+      }
+    });
+    await withLessonRealGuard(stub, async (handler) => {
+      const { result: res, unhandled } = await captureUnhandledRejections(async () => {
+        const { req, res } = buildReqRes({
+          method: "GET",
+          body: {},
+          query: { id: "lesson-1" },
+          headers: { "x-lms-session-id": "lms_sess_abc", "x-lms-device-id": "dev_xyz" }
+        });
+        req.query.id = "lesson-1";
+        await handler(req, res);
+        return res;
+      });
+      assert.equal(res.statusCode, 401);
+      assert.equal(res.body?.error, "invalid_session");
+      assert.deepEqual(unhandled, []);
+    });
+  } finally {
+    restoreEnv(snap);
+  }
+});
+
+test("lesson deferTouch: empty-email 401 drains a failed touch without unhandledRejection", async () => {
+  const snap = snapshotEnv();
+  try {
+    clearFlagEnv();
+    const stub = realGuardLessonStub({ email: "" });
+    await withLessonRealGuard(stub, async (handler) => {
+      const { result: res, unhandled } = await captureUnhandledRejections(async () => {
+        const { req, res } = buildReqRes({
+          method: "GET",
+          body: {},
+          query: { id: "lesson-1" },
+          headers: { "x-lms-session-id": "lms_sess_abc", "x-lms-device-id": "dev_xyz" }
+        });
+        req.query.id = "lesson-1";
+        await handler(req, res);
+        return res;
+      });
+      assert.equal(res.statusCode, 401);
+      assert.equal(res.body?.authError, "missing_login_session");
+      assert.deepEqual(unhandled, []);
+    });
   } finally {
     restoreEnv(snap);
   }
