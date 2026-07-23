@@ -60,33 +60,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,600;0,700;0,800;1,600&display=swap" rel="stylesheet">
-  <script src="/vendor/tailwind-jit.js"></script>
+  <link rel="stylesheet" href="/vendor/tailwind-static.css">
   <!-- Canonical mediaUrls parser (4-field, caption-aware). Loaded BEFORE the inline
        app script so parseMediaUrls/decodeMediaCaption are globals. Single source of truth. -->
   <script src="/vendor/lms-media.js"></script>
   <script src="https://accounts.google.com/gsi/client"></script>
-
-  <!-- Tailwind Configuration for Theme Colors -->
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            brandCream: '#FCF8F2',
-            brandGreen: '#2A4B2A',
-            brandGreenLight: '#3E6B3E',
-            brandBrown: '#2D1914',
-            brandOrange: '#D96B27',
-            brandGray: '#F5EFEB',
-          },
-          fontFamily: {
-            sans: ['"Be Vietnam Pro"', 'sans-serif'],
-            serif: ['"Playfair Display"', 'serif'],
-          }
-        }
-      }
-    }
-  </script>
 
   <style>
     .no-copy {
