@@ -774,7 +774,8 @@ export async function verifyLmsVerifiedSessionAccess(supabase, {
   lmsDeviceId,
   courseSlug = null,
   lmsIdleHours = getLmsSessionIdleHours(),
-  studentIdleHours = getStudentSessionIdleHours()
+  studentIdleHours = getStudentSessionIdleHours(),
+  deferTouch = false
 }, timing = null) {
   if (!lmsSessionId || !lmsDeviceId) {
     return { ok: false, reason: "missing_lms_session", session: null };
@@ -798,7 +799,37 @@ export async function verifyLmsVerifiedSessionAccess(supabase, {
     return { ok: false, reason: `lms_session_${session.status}`, session };
   }
 
-  const control = await timeLmsAsync(timing, "auth_control_db", () => getStudentSessionControl(supabase, session.email));
+  // course slug is needed by the parallel enrollment query below; compute it
+  // before starting the independent control/student/enrollment cluster.
+  const expectedCourseSlug = String(courseSlug || "").trim();
+  const sessionCourseSlug = String(session.course_slug || "").trim();
+
+  // A1: control, student-session, and enrollment are all provably dependent
+  // ONLY on `session` (which has passed null/device/status checks above) —
+  // none depends on the result of the others, so they can run concurrently.
+  // Promise.all fast-rejects on any throw, preserving fail-closed behavior.
+  const [control, studentResult, enrollResult] = await Promise.all([
+    timeLmsAsync(timing, "auth_control_db", () => getStudentSessionControl(supabase, session.email)),
+    timeLmsAsync(timing, "auth_student_db", () => supabase
+      .from("student_active_sessions")
+      .select("*")
+      .eq("student_session_id", session.student_session_id)
+      .eq("email", normalizeEmail(session.email))
+      .maybeSingle()),
+    timeLmsAsync(timing, "auth_enrollment_db", () => supabase
+      .from("student_enrollments")
+      .select("id,status")
+      .eq("email", normalizeEmail(session.email))
+      .eq("course_slug", sessionCourseSlug)
+      .limit(10))
+  ]);
+  const { data: studentSession, error: studentError } = studentResult;
+  const { data: enrollments, error: enrollError } = enrollResult;
+  if (studentError) throw studentError;
+  if (enrollError) throw enrollError;
+
+  // Checks run in the ORIGINAL semantic order, preserving every side-effect
+  // UPDATE branch and every reason string verbatim.
   if (isRevokedBySessionControl(session, control)) {
     await timeLmsAsync(timing, "auth_touch_db", () => supabase
       .from("lms_verified_sessions")
@@ -824,20 +855,10 @@ export async function verifyLmsVerifiedSessionAccess(supabase, {
     return { ok: false, reason: "lms_session_expired", session };
   }
 
-  const expectedCourseSlug = String(courseSlug || "").trim();
-  const sessionCourseSlug = String(session.course_slug || "").trim();
   if (expectedCourseSlug && sessionCourseSlug !== expectedCourseSlug) {
     return { ok: false, reason: "course_mismatch", session };
   }
 
-  const { data: studentSession, error: studentError } = await timeLmsAsync(timing, "auth_student_db", () => supabase
-    .from("student_active_sessions")
-    .select("*")
-    .eq("student_session_id", session.student_session_id)
-    .eq("email", normalizeEmail(session.email))
-    .maybeSingle());
-
-  if (studentError) throw studentError;
   if (!studentSession) {
     return { ok: false, reason: "student_session_inactive", session };
   }
@@ -870,17 +891,33 @@ export async function verifyLmsVerifiedSessionAccess(supabase, {
     return { ok: false, reason: "student_session_expired", session };
   }
 
-  const { data: enrollments, error: enrollError } = await timeLmsAsync(timing, "auth_enrollment_db", () => supabase
-    .from("student_enrollments")
-    .select("id,status")
-    .eq("email", normalizeEmail(session.email))
-    .eq("course_slug", sessionCourseSlug)
-    .limit(10));
-
-  if (enrollError) throw enrollError;
   const activeEnrollment = (enrollments || []).find(enrollment => isActiveEnrollment(enrollment.status));
   if (!activeEnrollment) {
     return { ok: false, reason: "enrollment_inactive", session };
+  }
+
+  // Happy-path touch: a heartbeat that updates last_seen_at on BOTH tables.
+  // It does NOT affect any access decision above. When deferTouch is true
+  // (lesson endpoint only), start the touch WITHOUT awaiting inside the guard
+  // so it overlaps with the lesson-side work; the lesson handler MUST await
+  // __touchPromise before sending the response so a touch failure still trips
+  // the existing fail-closed catch. When false (course-data/logout/tests),
+  // await the touch here exactly as before.
+  if (deferTouch) {
+    const __touchPromise = timeLmsAsync(timing, "auth_touch_db", () => Promise.all([
+      touchLmsVerifiedSession(supabase, lmsSessionId),
+      touchStudentSession(supabase, session.student_session_id)
+    ]));
+    return {
+      ok: true,
+      reason: "valid",
+      email: normalizeEmail(session.email),
+      courseSlug: sessionCourseSlug,
+      session,
+      studentSession,
+      enrollment: activeEnrollment,
+      __touchPromise
+    };
   }
 
   await timeLmsAsync(timing, "auth_touch_db", () => Promise.all([
