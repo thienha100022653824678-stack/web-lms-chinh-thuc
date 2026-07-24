@@ -595,6 +595,7 @@
         const response = await fetch(`/api/lms/portal?endpoint=lesson&id=${encodeURIComponent(lessonId)}`, {
           method: "GET",
           credentials: "same-origin",
+          cache: "no-store",
           headers: getSavedLmsSessionHeaders()
         });
         const data = await response.json();
@@ -1485,6 +1486,7 @@
         const response = await fetch(`/api/lms/portal?endpoint=lesson&id=${LESSON_ID}`, {
           method: "GET",
           credentials: "same-origin",
+          cache: "no-store",
           headers: getSavedLmsSessionHeaders()
         });
 

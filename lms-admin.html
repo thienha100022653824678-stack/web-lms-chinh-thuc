@@ -1002,6 +1002,7 @@
       isEditMode: false,
       originalCourse: "",
       originalLesson: "",
+      originalLessonId: "",
       recipeFileBase64: "",
       recipeFileName: "",
       lessonMaterials: [],
@@ -1555,12 +1556,13 @@
 
     // ── Load Lessons List ──────────────────────────────────────────────────
     async function loadLessonsList(course) {
-      if (!course) return;
+      if (!course) return false;
       showLoader("Đang tải danh sách bài học...");
       try {
         const res = await fetch(`/api/lms/admin?endpoint=lessons&course=${encodeURIComponent(course)}`, {
           method: "GET",
-          headers: authHeaders()
+          headers: authHeaders(),
+          cache: "no-store"
         });
         const d = await res.json();
 
@@ -1568,11 +1570,14 @@
           STATE.lessons = d.lessons || [];
           renderLessonsList();
           initNewLesson();
+          return true;
         } else {
           toast(d.error || "Lỗi tải bài học", "error");
+          return false;
         }
       } catch {
         toast("Lỗi kết nối khi tải danh sách bài học", "error");
+        return false;
       } finally {
         hideLoader();
       }
@@ -1700,6 +1705,7 @@
       STATE.isEditMode = false;
       STATE.originalCourse = "";
       STATE.originalLesson = "";
+      STATE.originalLessonId = "";
       STATE.recipeFileBase64 = "";
       STATE.recipeFileName = "";
       STATE.lessonMaterials = [];
@@ -1743,6 +1749,7 @@
       STATE.isEditMode = true;
       STATE.originalCourse = l.course;
       STATE.originalLesson = l.lesson;
+      STATE.originalLessonId = l.id || "";
       STATE.recipeFileBase64 = "";
       STATE.originalMime = ""; // Unused reset placeholder if needed
       STATE.recipeFileName = "";
@@ -1850,6 +1857,7 @@
         lesson,
         originalCourse: STATE.isEditMode ? STATE.originalCourse : undefined,
         originalLesson: STATE.isEditMode ? STATE.originalLesson : undefined,
+        originalLessonId: STATE.isEditMode ? STATE.originalLessonId : undefined,
         lessonData
       };
 
@@ -1893,18 +1901,72 @@
     }
 
     async function executeSaveLesson(payload) {
+      const expectedLessonId = String(payload.originalLessonId || "").trim();
+      const expectedVideoUrl = String(payload.lessonData?.videoUrl || "").trim();
+      console.info("[lesson-save] request", {
+        action: payload.action,
+        originalLessonId: expectedLessonId,
+        originalCourse: payload.originalCourse,
+        originalLesson: payload.originalLesson,
+        course: payload.lessonData?.course,
+        lesson: payload.lessonData?.lesson,
+        videoUrl: expectedVideoUrl,
+        thumbnailUrl: payload.lessonData?.thumbnailUrl || ""
+      });
       showLoader("Đang lưu bài học...");
       try {
         const res = await fetch("/api/lms/admin?endpoint=lessons", {
           method: "POST",
           headers: authHeaders(),
+          cache: "no-store",
           body: JSON.stringify(payload)
         });
         const d = await res.json();
+        console.info("[lesson-save] response", {
+          status: res.status,
+          success: Boolean(d.success),
+          matchedCount: d.matchedCount,
+          savedLesson: d.savedLesson || null
+        });
 
         if (res.ok && d.success) {
-          toast(STATE.isEditMode ? "Cập nhật bài học thành công!" : "Tạo bài học thành công!");
-          await loadLessonsList(payload.course);
+          if (payload.action === "update") {
+            const savedId = String(d.savedLesson?.id || "");
+            const savedVideoUrl = String(d.savedLesson?.videoUrl || "").trim();
+            if (!d.savedLesson || d.matchedCount !== 1 || (expectedLessonId && savedId !== expectedLessonId) || savedVideoUrl !== expectedVideoUrl) {
+              console.error("[lesson-save] database verification mismatch", {
+                expectedLessonId,
+                savedId,
+                expectedVideoUrl,
+                savedVideoUrl,
+                matchedCount: d.matchedCount
+              });
+              toast("Database không xác nhận đúng media vừa lưu.", "error");
+              return;
+            }
+          }
+
+          const reloadOk = await loadLessonsList(payload.course);
+          if (!reloadOk) {
+            toast("Đã ghi dữ liệu nhưng không thể đọc lại để xác minh.", "error");
+            return;
+          }
+
+          if (payload.action === "update") {
+            const refreshed = STATE.lessons.find(item => String(item.id || "") === expectedLessonId);
+            const refreshedVideoUrl = String(refreshed?.videoUrl || "").trim();
+            if (!refreshed || refreshedVideoUrl !== expectedVideoUrl) {
+              console.error("[lesson-save] read-after-write mismatch", {
+                expectedLessonId,
+                expectedVideoUrl,
+                refreshedVideoUrl
+              });
+              toast("Dữ liệu đọc lại không khớp media vừa lưu.", "error");
+              return;
+            }
+          }
+
+          toast(payload.action === "update" ? "Cập nhật bài học thành công!" : "Tạo bài học thành công!");
         } else {
           toast(d.error || "Lỗi khi lưu bài học", "error");
         }

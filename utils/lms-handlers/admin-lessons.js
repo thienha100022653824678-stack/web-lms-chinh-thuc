@@ -213,7 +213,7 @@ export default async function handler(req, res) {
 
     // ── POST: Create / Update / Delete ────────────────────────────────────────
     if (req.method === "POST") {
-      const { action, course, lesson, originalCourse, originalLesson, lessonData } = req.body || {};
+      const { action, course, lesson, originalCourse, originalLesson, originalLessonId, lessonData } = req.body || {};
 
       if (!action) {
         return res.status(400).json({ success: false, error: "Thiếu tham số action" });
@@ -325,29 +325,46 @@ export default async function handler(req, res) {
           updated_at: new Date().toISOString()
         };
 
-        let { error: updateErr } = await supabase
-          .from("lessons")
-          .update(updatePayload)
-          .eq("course_slug", originalCourse)
-          .eq("lesson_no", parseInt(originalLesson, 10));
+        const updateAndReturn = (payload) => {
+          let query = supabase.from("lessons").update(payload);
+          if (originalLessonId) {
+            query = query.eq("id", String(originalLessonId).trim());
+          } else {
+            query = query
+              .eq("course_slug", originalCourse)
+              .eq("lesson_no", parseInt(originalLesson, 10));
+          }
+          return query.select("id, course_slug, lesson_no, video_url, thumbnail_url, updated_at");
+        };
+
+        let { data: updatedRows, error: updateErr } = await updateAndReturn(updatePayload);
 
         // Fallback: If update fails for any reason, retry without is_section
         if (updateErr) {
           console.warn("[admin-lessons] Update with is_section failed:", updateErr.message, "- retrying without is_section...");
-          delete updatePayload.is_section;
-          const retryRes = await supabase
-            .from("lessons")
-            .update(updatePayload)
-            .eq("course_slug", originalCourse)
-            .eq("lesson_no", parseInt(originalLesson, 10));
+          const retryPayload = { ...updatePayload };
+          delete retryPayload.is_section;
+          const retryRes = await updateAndReturn(retryPayload);
           if (!retryRes.error) {
             updateErr = null;
+            updatedRows = retryRes.data;
           } else {
             console.error("[admin-lessons] Update retry also failed:", retryRes.error.message);
           }
         }
 
         if (updateErr) throw updateErr;
+        if (!Array.isArray(updatedRows) || updatedRows.length !== 1) {
+          return res.status(409).json({
+            success: false,
+            error: updatedRows?.length
+              ? "Có nhiều bản ghi bài học cùng khớp; đã từ chối báo lưu thành công."
+              : "Không tìm thấy đúng bản ghi bài học để cập nhật.",
+            code: updatedRows?.length ? "lesson_update_ambiguous" : "lesson_update_no_match",
+            matchedCount: Array.isArray(updatedRows) ? updatedRows.length : 0
+          });
+        }
+        const savedRow = updatedRows[0];
 
         // Sync the aggregated real course recipe to System 1 Portal.
         try {
@@ -356,7 +373,19 @@ export default async function handler(req, res) {
           console.error("[admin-lessons] Sync recipe failed on update:", syncErr.message);
         }
 
-        return res.status(200).json({ success: true, message: "Cập nhật bài học thành công" });
+        return res.status(200).json({
+          success: true,
+          message: "Cập nhật bài học thành công",
+          matchedCount: 1,
+          savedLesson: {
+            id: savedRow.id,
+            course: savedRow.course_slug,
+            lesson: savedRow.lesson_no,
+            videoUrl: savedRow.video_url || "",
+            thumbnailUrl: savedRow.thumbnail_url || "",
+            updatedAt: savedRow.updated_at || ""
+          }
+        });
       }
 
       // Action: DELETE (Soft delete)
