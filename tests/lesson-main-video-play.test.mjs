@@ -54,6 +54,7 @@ test("main media classification uses the Drive file name before its opaque URL",
   vm.runInNewContext(
     [
       functionSource("extractIframeSrc"),
+      functionSource("isGoogleDriveVideoUrl"),
       functionSource("inferMainMediaTypeFromText"),
       functionSource("getExplicitMainMediaType"),
       functionSource("getMainMediaType"),
@@ -76,6 +77,15 @@ test("main media classification uses the Drive file name before its opaque URL",
   assert.equal(context.getMainMediaType({
     mainMediaType: "video",
     videoUrl: `${driveUrl}&lms_media_type=image&lms_media_name=photo.jpg`
+  }), "image");
+  // An old record with no upload marker and a failed Drive metadata lookup has
+  // no name, no mime and only an opaque Drive URL. It must NOT be classified as
+  // a video, or the render paints a phantom Play button over the image.
+  assert.equal(context.getMainMediaType({
+    mainMediaType: "unknown",
+    mainMediaName: "",
+    mainMediaMimeType: "",
+    videoUrl: driveUrl
   }), "image");
 });
 
