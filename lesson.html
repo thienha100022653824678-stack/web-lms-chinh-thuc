@@ -905,16 +905,32 @@
       return url;
     }
 
-    function inferMainMediaTypeFromUrl(input) {
+    function inferMainMediaTypeFromText(input) {
       const text = extractIframeSrc(String(input || "")).replace(/&amp;/g, "&").trim();
       const match = text.match(/\.([a-z0-9]{2,5})(?:[?#].*)?$/i);
       const ext = match ? match[1].toLowerCase() : "";
-      if (["jpg", "jpeg", "png", "webp", "gif"].includes(ext)) return "image";
+      if (["jpg", "jpeg", "jfif", "png", "webp", "gif", "avif", "heic", "heif", "bmp", "svg", "tif", "tiff"].includes(ext)) return "image";
       if (["mp4", "webm", "mov", "m4v"].includes(ext)) return "video";
       return "unknown";
     }
 
+    function getExplicitMainMediaType(input) {
+      const text = extractIframeSrc(String(input || "")).replace(/&amp;/g, "&").trim();
+      if (!text) return "";
+      try {
+        const type = String(new URL(text).searchParams.get("lms_media_type") || "").toLowerCase().trim();
+        return type === "image" || type === "video" ? type : "";
+      } catch (err) {
+        return "";
+      }
+    }
+
     function getMainMediaType(lesson) {
+      // The upload flow writes this marker from the browser File MIME type.
+      // It is authoritative and avoids relying on Drive metadata permissions.
+      const explicitType = getExplicitMainMediaType(lesson?.videoUrl || lesson?.secureVideoUrl || "");
+      if (explicitType) return explicitType;
+
       const serverType = String(lesson?.mainMediaType || "").toLowerCase().trim();
       if (serverType === "image" || serverType === "video") return serverType;
 
@@ -922,7 +938,14 @@
       if (mime.startsWith("image/")) return "image";
       if (mime.startsWith("video/")) return "video";
 
-      return inferMainMediaTypeFromUrl(lesson?.videoUrl || lesson?.secureVideoUrl || "");
+      // Drive URLs normally contain only a file id, so they cannot reveal the
+      // media type. The API also returns Drive's original file name; use it
+      // before falling back to the opaque URL so an image never becomes a
+      // video merely because metadata classification was inconclusive.
+      const nameType = inferMainMediaTypeFromText(lesson?.mainMediaName || "");
+      if (nameType !== "unknown") return nameType;
+
+      return inferMainMediaTypeFromText(lesson?.videoUrl || lesson?.secureVideoUrl || "");
     }
 
     function isMainMediaImage(lesson) {
@@ -1148,6 +1171,45 @@
           loading="lazy">
         </iframe>
       `;
+    }
+
+    function playMainVideo(videoWrapper, lesson, userEmail) {
+      if (!videoWrapper || !lesson) return;
+
+      if (isCocCocBrowser()) {
+        videoWrapper.innerHTML = getCocCocBlockedHtml();
+        clearWatermarkFrom(videoWrapper);
+        return;
+      }
+      if (!isMobileDevice()) {
+        videoWrapper.innerHTML = getPCBlockedHtml();
+        clearWatermarkFrom(videoWrapper);
+        return;
+      }
+
+      const videoUrl = lessonVideoUrl(lesson);
+      if (!videoUrl) return;
+
+      // Drive already uses a dedicated first-party player page. Navigate there
+      // during the original user gesture instead of replacing this placeholder
+      // with a second thumbnail + Play button (which required a second tap,
+      // especially noticeable as a black frame on iPhone Safari).
+      if (videoUrl.includes("drive.google.com")) {
+        const fileId = getGoogleDriveFileId(videoUrl);
+        if (fileId) {
+          const returnUrl = window.location.href;
+          const playerUrl = `/gdrive-player.html?id=${fileId}&returnUrl=${encodeURIComponent(returnUrl)}`;
+          openGoogleDrivePlayer(playerUrl, returnUrl);
+          return;
+        }
+      }
+
+      videoWrapper.innerHTML = getIframePlayerHtml(videoUrl);
+      if (lesson.videoProvider === "bunny_embed") {
+        createWatermark(videoWrapper, userEmail);
+      } else {
+        clearWatermarkFrom(videoWrapper);
+      }
     }
 
     function toggleRecipeMore() {
@@ -1500,28 +1562,7 @@
             const playBtn = document.getElementById("playBtn");
             videoThumb.src = normalizeGoogleDriveImageUrl(currentLesson.thumbnailUrl || HERO_PLACEHOLDER_IMAGE);
 
-            playBtn.onclick = () => {
-              if (isCocCocBrowser()) {
-                videoWrapper.innerHTML = getCocCocBlockedHtml();
-                clearWatermarkFrom(videoWrapper);
-                return;
-              }
-              if (!isMobileDevice()) {
-                videoWrapper.innerHTML = getPCBlockedHtml();
-                clearWatermarkFrom(videoWrapper);
-                return;
-              }
-
-              const videoUrl = lessonVideoUrl(currentLesson);
-              if (!videoUrl) return;
-
-              videoWrapper.innerHTML = getIframePlayerHtml(videoUrl);
-              if (currentLesson.videoProvider === "bunny_embed") {
-                createWatermark(videoWrapper, studentEmail);
-              } else {
-                clearWatermarkFrom(videoWrapper);
-              }
-            };
+            playBtn.onclick = () => playMainVideo(videoWrapper, currentLesson, studentEmail);
           } else {
             videoBox.classList.add("hidden");
           }
@@ -1911,22 +1952,7 @@
             vt.src = normalizeGoogleDriveImageUrl(lesson.thumbnailUrl || HERO_PLACEHOLDER_IMAGE);
           }
           if (pb) {
-            pb.onclick = () => {
-              if (isCocCocBrowser()) {
-                videoWrapper.innerHTML = getCocCocBlockedHtml();
-                return;
-              }
-              if (!isMobileDevice()) {
-                videoWrapper.innerHTML = getPCBlockedHtml();
-                return;
-              }
-              const videoUrl = lessonVideoUrl(currentLesson);
-              if (!videoUrl) return;
-              videoWrapper.innerHTML = getIframePlayerHtml(videoUrl);
-              if (currentLesson.videoProvider === "bunny_embed") {
-                createWatermark(videoWrapper, studentEmail);
-              }
-            };
+            pb.onclick = () => playMainVideo(videoWrapper, currentLesson, studentEmail);
           }
         } else {
           videoBox.classList.add("hidden");

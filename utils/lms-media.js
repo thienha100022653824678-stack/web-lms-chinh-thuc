@@ -1,5 +1,19 @@
 const VIDEO_EXTENSIONS = new Set(["mp4", "webm", "mov", "m4v"]);
-const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "gif"]);
+const IMAGE_EXTENSIONS = new Set([
+  "jpg",
+  "jpeg",
+  "jfif",
+  "png",
+  "webp",
+  "gif",
+  "avif",
+  "heic",
+  "heif",
+  "bmp",
+  "svg",
+  "tif",
+  "tiff"
+]);
 
 function extractIframeSrc(input) {
   const text = String(input || "").trim();
@@ -32,12 +46,32 @@ function extensionFromText(value) {
   return "";
 }
 
+function explicitMediaInfoFromUrl(value) {
+  const text = extractIframeSrc(String(value || "")).replace(/&amp;/g, "&").trim();
+  if (!text) return { type: "", name: "" };
+
+  try {
+    const parsed = new URL(text);
+    const type = String(parsed.searchParams.get("lms_media_type") || "").toLowerCase().trim();
+    const name = String(parsed.searchParams.get("lms_media_name") || "").trim();
+    return {
+      type: type === "image" || type === "video" ? type : "",
+      name
+    };
+  } catch {
+    return { type: "", name: "" };
+  }
+}
+
 export function classifyMediaType({ url = "", mimeType = "", name = "" } = {}) {
+  const explicit = explicitMediaInfoFromUrl(url);
+  if (explicit.type) return explicit.type;
+
   const mime = String(mimeType || "").toLowerCase().trim();
   if (mime.startsWith("image/")) return "image";
   if (mime.startsWith("video/")) return "video";
 
-  const ext = extensionFromText(name) || extensionFromText(url);
+  const ext = extensionFromText(name) || extensionFromText(explicit.name) || extensionFromText(url);
   if (IMAGE_EXTENSIONS.has(ext)) return "image";
   if (VIDEO_EXTENSIONS.has(ext)) return "video";
 
