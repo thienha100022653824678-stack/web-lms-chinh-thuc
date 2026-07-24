@@ -946,7 +946,16 @@
       const nameType = inferMainMediaTypeFromText(lesson?.mainMediaName || "");
       if (nameType !== "unknown") return nameType;
 
-      return inferMainMediaTypeFromText(lesson?.videoUrl || lesson?.secureVideoUrl || "");
+      const urlType = inferMainMediaTypeFromText(lesson?.videoUrl || lesson?.secureVideoUrl || "");
+      if (urlType !== "unknown") return urlType;
+
+      // Old records predate the upload marker, and their Drive metadata lookup
+      // can fail (e.g. an expired service-account token), leaving no marker,
+      // mime or file name — only an opaque Drive URL. Treat that unclassifiable
+      // main media as an image rather than a video: a still is degraded but not
+      // misleading, whereas a phantom Play button over an image is the reported
+      // bug. New uploads carry an explicit marker and never reach this branch.
+      return "image";
     }
 
     function isMainMediaImage(lesson) {
