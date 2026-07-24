@@ -3218,7 +3218,11 @@
                 if (progressBar) progressBar.style.width = "100%";
 
                 toast("Upload video lên Google Drive thành công!");
-                const directUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+                const uploadedMediaType = uploadMime.startsWith("image/") ? "image" : "video";
+                const directUrl =
+                  `https://drive.google.com/uc?export=download&id=${fileId}` +
+                  `&lms_media_type=${uploadedMediaType}` +
+                  `&lms_media_name=${encodeURIComponent(file.name)}`;
 
                 if (type === "main_video") {
                   const urlInput = document.getElementById("fVideoUrl");

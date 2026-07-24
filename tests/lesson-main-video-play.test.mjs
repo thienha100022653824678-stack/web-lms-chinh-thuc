@@ -50,11 +50,12 @@ test("hard-load and SPA lesson renderers share the one-tap Play handler", () => 
 });
 
 test("main media classification uses the Drive file name before its opaque URL", () => {
-  const context = {};
+  const context = { URL };
   vm.runInNewContext(
     [
       functionSource("extractIframeSrc"),
       functionSource("inferMainMediaTypeFromText"),
+      functionSource("getExplicitMainMediaType"),
       functionSource("getMainMediaType"),
       "this.getMainMediaType = getMainMediaType;"
     ].join("\n"),
@@ -72,4 +73,15 @@ test("main media classification uses the Drive file name before its opaque URL",
     mainMediaName: "Huong dan dong goi.mp4",
     videoUrl: driveUrl
   }), "video");
+  assert.equal(context.getMainMediaType({
+    mainMediaType: "video",
+    videoUrl: `${driveUrl}&lms_media_type=image&lms_media_name=photo.jpg`
+  }), "image");
+});
+
+test("main upload persists explicit media type and original file name in its Drive URL", () => {
+  const adminSource = readFileSync(join(ROOT, "lms-admin.html"), "utf8");
+  assert.match(adminSource, /uploadMime\.startsWith\("image\/"\) \? "image" : "video"/);
+  assert.match(adminSource, /&lms_media_type=\$\{uploadedMediaType\}/);
+  assert.match(adminSource, /&lms_media_name=\$\{encodeURIComponent\(file\.name\)\}/);
 });

@@ -914,7 +914,23 @@
       return "unknown";
     }
 
+    function getExplicitMainMediaType(input) {
+      const text = extractIframeSrc(String(input || "")).replace(/&amp;/g, "&").trim();
+      if (!text) return "";
+      try {
+        const type = String(new URL(text).searchParams.get("lms_media_type") || "").toLowerCase().trim();
+        return type === "image" || type === "video" ? type : "";
+      } catch (err) {
+        return "";
+      }
+    }
+
     function getMainMediaType(lesson) {
+      // The upload flow writes this marker from the browser File MIME type.
+      // It is authoritative and avoids relying on Drive metadata permissions.
+      const explicitType = getExplicitMainMediaType(lesson?.videoUrl || lesson?.secureVideoUrl || "");
+      if (explicitType) return explicitType;
+
       const serverType = String(lesson?.mainMediaType || "").toLowerCase().trim();
       if (serverType === "image" || serverType === "video") return serverType;
 
