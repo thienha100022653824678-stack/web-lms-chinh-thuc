@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import vm from "node:vm";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const source = readFileSync(join(ROOT, "lesson.html"), "utf8");
@@ -46,4 +47,29 @@ test("hard-load and SPA lesson renderers share the one-tap Play handler", () => 
   ) || [];
 
   assert.equal(callSites.length, 2);
+});
+
+test("main media classification uses the Drive file name before its opaque URL", () => {
+  const context = {};
+  vm.runInNewContext(
+    [
+      functionSource("extractIframeSrc"),
+      functionSource("inferMainMediaTypeFromText"),
+      functionSource("getMainMediaType"),
+      "this.getMainMediaType = getMainMediaType;"
+    ].join("\n"),
+    context
+  );
+
+  const driveUrl = "https://drive.google.com/uc?export=download&id=opaque-file-id";
+  assert.equal(context.getMainMediaType({
+    mainMediaType: "unknown",
+    mainMediaName: "Cach dong goi hut chan khong.jpg",
+    videoUrl: driveUrl
+  }), "image");
+  assert.equal(context.getMainMediaType({
+    mainMediaType: "unknown",
+    mainMediaName: "Huong dan dong goi.mp4",
+    videoUrl: driveUrl
+  }), "video");
 });

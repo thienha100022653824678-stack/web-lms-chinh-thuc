@@ -905,11 +905,11 @@
       return url;
     }
 
-    function inferMainMediaTypeFromUrl(input) {
+    function inferMainMediaTypeFromText(input) {
       const text = extractIframeSrc(String(input || "")).replace(/&amp;/g, "&").trim();
       const match = text.match(/\.([a-z0-9]{2,5})(?:[?#].*)?$/i);
       const ext = match ? match[1].toLowerCase() : "";
-      if (["jpg", "jpeg", "png", "webp", "gif"].includes(ext)) return "image";
+      if (["jpg", "jpeg", "jfif", "png", "webp", "gif", "avif", "heic", "heif", "bmp", "svg", "tif", "tiff"].includes(ext)) return "image";
       if (["mp4", "webm", "mov", "m4v"].includes(ext)) return "video";
       return "unknown";
     }
@@ -922,7 +922,14 @@
       if (mime.startsWith("image/")) return "image";
       if (mime.startsWith("video/")) return "video";
 
-      return inferMainMediaTypeFromUrl(lesson?.videoUrl || lesson?.secureVideoUrl || "");
+      // Drive URLs normally contain only a file id, so they cannot reveal the
+      // media type. The API also returns Drive's original file name; use it
+      // before falling back to the opaque URL so an image never becomes a
+      // video merely because metadata classification was inconclusive.
+      const nameType = inferMainMediaTypeFromText(lesson?.mainMediaName || "");
+      if (nameType !== "unknown") return nameType;
+
+      return inferMainMediaTypeFromText(lesson?.videoUrl || lesson?.secureVideoUrl || "");
     }
 
     function isMainMediaImage(lesson) {

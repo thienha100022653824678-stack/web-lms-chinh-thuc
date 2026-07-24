@@ -1,5 +1,19 @@
 const VIDEO_EXTENSIONS = new Set(["mp4", "webm", "mov", "m4v"]);
-const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "gif"]);
+const IMAGE_EXTENSIONS = new Set([
+  "jpg",
+  "jpeg",
+  "jfif",
+  "png",
+  "webp",
+  "gif",
+  "avif",
+  "heic",
+  "heif",
+  "bmp",
+  "svg",
+  "tif",
+  "tiff"
+]);
 
 function extractIframeSrc(input) {
   const text = String(input || "").trim();
