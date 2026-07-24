@@ -298,6 +298,15 @@ export default async function handler(req, res) {
         if (!lessonData || typeof lessonData !== "object") {
           return res.status(400).json({ success: false, error: "Thiếu dữ liệu lessonData" });
         }
+        console.info("[admin-lessons] update request", {
+          originalLessonId: String(originalLessonId || ""),
+          originalCourse,
+          originalLesson,
+          targetCourse: lessonData.course,
+          targetLesson: lessonData.lesson,
+          requestedVideoUrl: lessonData.videoUrl || "",
+          requestedThumbnailUrl: lessonData.thumbnailUrl || ""
+        });
 
         // Fetch course ID by slug
         const { data: courseRec } = await supabase
@@ -365,6 +374,14 @@ export default async function handler(req, res) {
           });
         }
         const savedRow = updatedRows[0];
+        console.info("[admin-lessons] update persisted", {
+          id: savedRow.id,
+          course: savedRow.course_slug,
+          lesson: savedRow.lesson_no,
+          persistedVideoUrl: savedRow.video_url || "",
+          persistedThumbnailUrl: savedRow.thumbnail_url || "",
+          updatedAt: savedRow.updated_at || ""
+        });
 
         // Sync the aggregated real course recipe to System 1 Portal.
         try {

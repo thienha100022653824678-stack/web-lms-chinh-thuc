@@ -44,6 +44,13 @@ test("success response returns the persisted media row for client verification",
   assert.ok(successToast > reloadCheck, "success toast must happen only after both DB checks");
 });
 
+test("server records requested and persisted media values for production tracing", () => {
+  assert.match(handler, /\[admin-lessons\] update request/);
+  assert.match(handler, /requestedVideoUrl:\s*lessonData\.videoUrl\s*\|\|\s*""/);
+  assert.match(handler, /\[admin-lessons\] update persisted/);
+  assert.match(handler, /persistedVideoUrl:\s*savedRow\.video_url\s*\|\|\s*""/);
+});
+
 test("admin and student reads explicitly bypass browser HTTP caches", () => {
   assert.match(
     adminPage,
