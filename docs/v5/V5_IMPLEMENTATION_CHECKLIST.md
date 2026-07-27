@@ -21,7 +21,7 @@
 
 - [x] B05 and V5 test suites pass.
 - [x] Security/performance/accessibility evidence recorded.
-- [ ] Exact commit pushed.
-- [ ] Fixture-only Preview Ready with no Production alias/write.
-- [ ] Final implementation report complete.
-- [ ] Stop before Production rollout.
+- [x] Exact commit pushed.
+- [x] Fixture-only Preview Ready with no Production alias/write.
+- [x] Final implementation report complete.
+- [x] Stop before Production rollout.

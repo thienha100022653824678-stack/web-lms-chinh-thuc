@@ -19,8 +19,8 @@ Build and verify an isolated, feature-flagged LMS V5 channel-feed Preview from e
 - [completed] 4. Implement student channel list/feed/search/topics/progress/realtime-fallback UI.
 - [completed] 5. Implement admin feed/composer/media lifecycle/preview/version/audit UI.
 - [completed] 6. Add and run unit, integration, E2E, security, accessibility, and performance tests; retain B05 baseline.
-- [in_progress] 7. Commit exact source, push branch, deploy isolated Preview with fixture-only/no-production-write configuration, and probe desktop/mobile.
-- [pending] 8. Write `docs/v5/V5_PREVIEW_IMPLEMENTATION_REPORT.md`, verify all gates, and stop before Production rollout.
+- [completed] 7. Commit exact source, push branch, deploy isolated Preview with fixture-only/no-production-write configuration, and probe desktop/mobile.
+- [completed] 8. Write `docs/v5/V5_PREVIEW_IMPLEMENTATION_REPORT.md`, verify all gates, and stop before Production rollout.
 
 ## Completion Criteria
 - All user-defined Preview gates pass with evidence recorded in the final report.

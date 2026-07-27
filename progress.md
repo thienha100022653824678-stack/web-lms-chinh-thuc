@@ -20,3 +20,6 @@
 - No Supabase/Drive/email/order/enrollment/lesson mutation was called.
 - Final local verification: B05 300/300, V5 unit/integration/security 113/113, browser E2E 5/5; total 418 passing.
 - Performance microbenchmark over 1,000 posts and 1,000 cursor operations: 17.46 ms total, 0.0175 ms average; initial page remains 24 posts.
+- Pushed deployed implementation commit `110435dd90e3712ec377447608952d74b8e2253e`.
+- Final manual Preview `dpl_9SpgJMDfW6nqZXwuLskDdYPPgLRZ` is Ready with no aliases; authenticated probes: V5 200, V5 admin 200, B05 fallback 200, unauthenticated V5 API 401.
+- Production deployment remains the exact reference `dpl_HVQvwrveFjxE81cpsoXRraDB34wR`; no Production deploy/promotion/domain/database mutation occurred.
