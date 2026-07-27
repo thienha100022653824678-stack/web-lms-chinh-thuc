@@ -22,7 +22,7 @@ export default async function studentV5Handler(req, res) {
   if (req.method === "OPTIONS") return res.status(204).end();
 
   try {
-    const path = normalizePath(req.query?.path);
+    const path = normalizePath(req.query?.path || pathFromUrl(req.url, "/api/v5/"));
     if (req.method === "GET" && path.length === 1 && path[0] === "channels") {
       const identity = await requireStudentIdentity(req);
       const enrollments = globalThis.__V5_ENROLLMENTS_STUB__ || await supabase.from("student_enrollments").select("course_slug,status").eq("email", identity.email);
@@ -90,6 +90,11 @@ async function courseSlugForChannel(channelId) {
 
 function normalizePath(value) {
   return (Array.isArray(value) ? value : String(value || "").split("/")).map((item) => decodeURIComponent(item)).filter(Boolean);
+}
+
+function pathFromUrl(url, prefix) {
+  const pathname = String(url || "").split("?")[0];
+  return pathname.startsWith(prefix) ? pathname.slice(prefix.length) : "";
 }
 
 function rejectOffset(query = {}) {

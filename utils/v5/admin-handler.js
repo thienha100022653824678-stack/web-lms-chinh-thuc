@@ -22,7 +22,7 @@ export default async function adminV5Handler(req, res) {
   if (req.method === "OPTIONS") return res.status(204).end();
   try {
     const admin = requireV5Admin(req);
-    const path = normalizePath(req.query?.path);
+    const path = normalizePath(req.query?.path || pathFromUrl(req.url, "/api/v5/admin/"));
 
     if (req.method === "GET" && path.length === 1 && path[0] === "channels") return ok(res, await adminChannels());
     if (req.method === "GET" && path[0] === "channels" && path[1] && path[2] === "posts") {
@@ -78,6 +78,11 @@ function normalizePath(value) {
   return (Array.isArray(value) ? value : String(value || "").split("/")).map((item) => decodeURIComponent(item)).filter(Boolean);
 }
 
+function pathFromUrl(url, prefix) {
+  const pathname = String(url || "").split("?")[0];
+  return pathname.startsWith(prefix) ? pathname.slice(prefix.length) : "";
+}
+
 function ok(res, data) {
   res.setHeader("Cache-Control", "private, no-store");
   return res.status(200).json({ ok: true, data });
@@ -87,4 +92,3 @@ function created(res, data) {
   res.setHeader("Cache-Control", "private, no-store");
   return res.status(201).json({ ok: true, data });
 }
-
