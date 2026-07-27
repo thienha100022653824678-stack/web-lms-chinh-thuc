@@ -1,0 +1,44 @@
+{
+  "source": "synthetic-sanitized-preview",
+  "lessons": [
+    {
+      "id": "51000000-0000-4000-8000-000000000001",
+      "course_slug": "v5-chuyen-de",
+      "course_title": "LMS • Lớp chuyên đề",
+      "lesson_no": 1,
+      "title": "Nền tảng",
+      "is_section": true
+    },
+    {
+      "id": "51000000-0000-4000-8000-000000000002",
+      "course_slug": "v5-chuyen-de",
+      "lesson_no": 2,
+      "title": "Kỹ thuật chuẩn bị",
+      "content": "Nội dung fixture đã được tạo mới, không lấy từ dữ liệu học viên.",
+      "image_url": "https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&w=1200&q=80",
+      "main_media_caption": "Ảnh minh họa fixture",
+      "materials": [
+        {
+          "url": "https://example.test/tai-lieu-mau.pdf",
+          "name": "Tài liệu mẫu.pdf",
+          "caption": "Không chứa dữ liệu Production"
+        }
+      ]
+    },
+    {
+      "id": "51000000-0000-4000-8000-000000000003",
+      "course_slug": "v5-chuyen-de",
+      "lesson_no": 3,
+      "title": "Thực hành",
+      "is_section": true
+    },
+    {
+      "id": "51000000-0000-4000-8000-000000000004",
+      "course_slug": "v5-chuyen-de",
+      "lesson_no": 4,
+      "title": "Hoàn thiện",
+      "content": "Bài thực hành fixture.",
+      "video_url": "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4"
+    }
+  ]
+}

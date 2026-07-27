@@ -6,12 +6,27 @@
 "@supabase/supabase-js": "^2.39.8",
 "cloudinary": "^2.3.0",
 "google-auth-library": "^9.15.1",
-"googleapis": "^140.0.1"
+"googleapis": "^140.0.1",
+"react": "^19.2.8",
+"react-dom": "^19.2.8"
 },
 "devDependencies": {
-"tailwindcss": "3.4.17"
+"@types/react": "^19.2.17",
+"@types/react-dom": "^19.2.3",
+"@vitejs/plugin-react": "^6.0.4",
+"playwright-core": "^1.62.0",
+"tailwindcss": "3.4.17",
+"typescript": "^7.0.2",
+"vite": "^8.1.5"
 },
 "scripts": {
-"build:lms-css": "tailwindcss -c tailwind.config.cjs -i styles/lms-tailwind.css -o vendor/tailwind-static.css --minify"
+"build:lms-css": "tailwindcss -c tailwind.config.cjs -i styles/lms-tailwind.css -o vendor/tailwind-static.css --minify",
+"dev:v5": "vite --config apps/lms-v5/vite.config.ts",
+"build:v5": "vite build --config apps/lms-v5/vite.config.ts",
+"build:v5:preview": "vite build --mode preview-fixture --config apps/lms-v5/vite.config.ts",
+"test:b05": "node --test --test-concurrency=1 tests/*.test.mjs",
+"test:v5": "node --test --test-concurrency=1 tests/v5/*.test.mjs",
+"test:v5:e2e": "npm run build:v5:preview && node --test --test-concurrency=1 tests/v5-e2e/*.test.mjs",
+"test": "npm run test:b05 && npm run test:v5"
 }
 }

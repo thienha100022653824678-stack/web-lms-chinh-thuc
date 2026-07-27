@@ -12,6 +12,7 @@ yarn-debug.log*
 yarn-error.log*
 .vercel
 .env*
+dist-v5/
 
 # supabase CLI local link state (never commit)
 supabase/
