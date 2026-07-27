@@ -23,6 +23,7 @@
 "build:lms-css": "tailwindcss -c tailwind.config.cjs -i styles/lms-tailwind.css -o vendor/tailwind-static.css --minify",
 "dev:v5": "vite --config apps/lms-v5/vite.config.ts",
 "build:v5": "vite build --config apps/lms-v5/vite.config.ts",
+"build:v5:bundle": "npm run build:v5 && node scripts/v5/prepare-preview.mjs",
 "build:v5:preview": "vite build --mode preview-fixture --config apps/lms-v5/vite.config.ts",
 "test:b05": "node --test --test-concurrency=1 tests/*.test.mjs",
 "test:v5": "node --test --test-concurrency=1 tests/v5/*.test.mjs",

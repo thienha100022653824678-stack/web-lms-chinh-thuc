@@ -1,10 +1,11 @@
 {
-  "buildCommand": "npm run build:v5",
+  "buildCommand": "npm run build:v5:bundle",
+  "outputDirectory": "dist-v5",
   "rewrites": [
-    { "source": "/v5", "destination": "/dist-v5/v5.html" },
-    { "source": "/v5/", "destination": "/dist-v5/v5.html" },
-    { "source": "/v5-admin", "destination": "/dist-v5/v5-admin.html" },
-    { "source": "/v5-admin/", "destination": "/dist-v5/v5-admin.html" }
+    { "source": "/v5", "destination": "/v5.html" },
+    { "source": "/v5/", "destination": "/v5.html" },
+    { "source": "/v5-admin", "destination": "/v5-admin.html" },
+    { "source": "/v5-admin/", "destination": "/v5-admin.html" }
   ],
   "headers": [
     {
