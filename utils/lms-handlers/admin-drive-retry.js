@@ -1,6 +1,7 @@
 import { supabase } from "../supabase.js";
 import { getAdminFromRequest, syncGoogleDrivePermission } from "../lms.js";
 import { applyCors } from "../cors.js";
+import { assertCourseInLearningSite, isLmsAdminMultiSiteEnabled, learningSiteErrorResponse, requestLearningSite } from "../learning-site.js";
 
 const ACTIVE_ENROLLMENT_STATUSES = ["active", "approved", "approved_ready", "approved_waiting_content", "completed", "da duyet"];
 const ERROR_DRIVE_STATUSES = ["failed", "FAILED", "pending_retry", "PENDING_RETRY", "error", "quota_limited", "QUOTA_LIMITED"];
@@ -24,6 +25,12 @@ export default async function handler(req, res) {
     }
 
     const { type, email, courseSlug } = req.body || {};
+    if (isLmsAdminMultiSiteEnabled()) {
+      if (!courseSlug) {
+        return res.status(400).json({ success: false, code: "INVALID_LEARNING_SITE", error: "Batch toàn hệ thống bị tắt khi multi-site bật" });
+      }
+      await assertCourseInLearningSite(supabase, courseSlug, requestLearningSite(req), { canonicalOnly: true });
+    }
 
     if (type === "single") {
       if (!email || !courseSlug) {
@@ -163,6 +170,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ success: false, error: "Loại retry không hợp lệ" });
 
   } catch (err) {
+    if (learningSiteErrorResponse(res, err)) return;
     console.error("[drive-retry] Error in handler:", err);
     return res.status(500).json({ success: false, error: err.message || "Lỗi xử lý server" });
   }

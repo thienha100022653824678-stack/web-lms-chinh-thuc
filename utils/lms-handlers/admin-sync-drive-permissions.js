@@ -1,6 +1,13 @@
 import { getAdminFromRequest, getGoogleDriveClient, getCourseFolderIdOrDiscover, addDriveFolderPermissionDirect, removeDriveFolderPermissionDirect } from "../lms.js";
 import { supabase } from "../supabase.js";
 import { applyCors } from "../cors.js";
+import {
+  assertCourseInLearningSite,
+  isLmsAdminMultiSiteEnabled,
+  learningSiteErrorResponse,
+  listCanonicalCoursesForSite,
+  requestLearningSite
+} from "../learning-site.js";
 
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { mode: "admin" });
@@ -18,6 +25,8 @@ export default async function handler(req, res) {
     }
 
     const { courseSlug } = req.body || {};
+    const multiSiteEnabled = isLmsAdminMultiSiteEnabled();
+    const requestedSite = multiSiteEnabled ? requestLearningSite(req) : null;
 
     let driveClientInfo;
     try {
@@ -36,6 +45,9 @@ export default async function handler(req, res) {
     // Get list of courses to sync
     let coursesToSync = [];
     if (courseSlug) {
+      if (multiSiteEnabled) {
+        await assertCourseInLearningSite(supabase, courseSlug, requestedSite, { canonicalOnly: true });
+      }
       const { data: course } = await supabase
         .from("courses")
         .select("slug, title")
@@ -47,11 +59,17 @@ export default async function handler(req, res) {
       }
       coursesToSync.push(course);
     } else {
-      const { data: courses } = await supabase
-        .from("courses")
-        .select("slug, title")
-        .eq("active", true);
-      coursesToSync = courses || [];
+      if (multiSiteEnabled) {
+        coursesToSync = (await listCanonicalCoursesForSite(supabase, requestedSite))
+          .filter((course) => course.active)
+          .map(({ slug, title }) => ({ slug, title }));
+      } else {
+        const { data: courses } = await supabase
+          .from("courses")
+          .select("slug, title")
+          .eq("active", true);
+        coursesToSync = courses || [];
+      }
     }
 
     for (const course of coursesToSync) {
@@ -160,6 +178,7 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
+    if (learningSiteErrorResponse(res, err)) return;
     console.error("[admin-sync-drive-permissions] Unexpected error:", err);
     return res.status(500).json({
       success: false,

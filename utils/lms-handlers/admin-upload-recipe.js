@@ -2,6 +2,7 @@ import { PassThrough } from "stream";
 import { supabase } from "../supabase.js";
 import { getAdminFromRequest, getGoogleDriveClient } from "../lms.js";
 import { applyCors } from "../cors.js";
+import { assertCourseInLearningSite, isLmsAdminMultiSiteEnabled, learningSiteErrorResponse, requestLearningSite } from "../learning-site.js";
 
 export const config = {
   api: {
@@ -33,6 +34,10 @@ export default async function handler(req, res) {
     const adminSession = getAdminFromRequest(req);
     if (!adminSession) {
       return res.status(401).json({ success: false, error: "Chưa đăng nhập admin" });
+    }
+    const { course, lesson, title, fileData, text } = req.body || {};
+    if (isLmsAdminMultiSiteEnabled() && course) {
+      await assertCourseInLearningSite(supabase, course, requestLearningSite(req), { canonicalOnly: true });
     }
 
     let drive;
@@ -183,6 +188,7 @@ export default async function handler(req, res) {
       warning: dbErrorMsg
     });
   } catch (err) {
+    if (learningSiteErrorResponse(res, err)) return;
     console.error("[admin-upload-recipe] Unexpected error:", err);
     return res.status(500).json({
       success: false,

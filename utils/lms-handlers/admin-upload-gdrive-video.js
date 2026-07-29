@@ -2,6 +2,7 @@ import { PassThrough } from "stream";
 import { getAdminFromRequest, getGoogleDriveClient, resolveCourseFolderTree, saveCourseFolderId } from "../lms.js";
 import { supabase } from "../supabase.js";
 import { applyCors } from "../cors.js";
+import { assertCourseInLearningSite, isLmsAdminMultiSiteEnabled, learningSiteErrorResponse, requestLearningSite } from "../learning-site.js";
 
 const MAX_VIDEO_BYTES = 500 * 1024 * 1024; // 500 MB limit
 
@@ -108,6 +109,9 @@ export default async function handler(req, res) {
 
     if (!course_slug) {
       return res.status(400).json({ success: false, error: "Thiếu slug khóa học (course_slug)" });
+    }
+    if (isLmsAdminMultiSiteEnabled()) {
+      await assertCourseInLearningSite(supabase, course_slug, requestLearningSite(req), { canonicalOnly: true });
     }
 
     // Direct frontend upload helper: resolve folder structure and return folderId
@@ -226,6 +230,7 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
+    if (learningSiteErrorResponse(res, err)) return;
     console.error("[admin-upload-gdrive-video] Error:", err);
     return res.status(500).json({
       success: false,

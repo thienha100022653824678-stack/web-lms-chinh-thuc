@@ -1,6 +1,7 @@
 import { supabase } from "../supabase.js";
 import { getAdminFromRequest, normalizeEmail, syncGoogleDrivePermission } from "../lms.js";
 import { applyCors } from "../cors.js";
+import { assertCourseInLearningSite, auditLearningSiteOperation, isLmsAdminMultiSiteEnabled, learningSiteErrorResponse, requestLearningSite } from "../learning-site.js";
 
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { mode: "admin" });
@@ -43,12 +44,25 @@ export default async function handler(req, res) {
     if (!targetEmail || !targetCourseSlug) {
       return res.status(400).json({ success: false, error: "Thiếu email hoặc course slug" });
     }
+    if (isLmsAdminMultiSiteEnabled()) {
+      await assertCourseInLearningSite(supabase, targetCourseSlug, requestLearningSite(req), { canonicalOnly: true });
+    }
 
     const driveSync = await syncGoogleDrivePermission(supabase, {
       email: targetEmail,
       courseSlug: targetCourseSlug,
       action: "create"
     });
+    if (isLmsAdminMultiSiteEnabled()) {
+      const site = requestLearningSite(req);
+      await auditLearningSiteOperation(supabase, {
+        adminEmail: adminSession.email,
+        action: "lms_multisite_drive_permission",
+        courseSlug: targetCourseSlug,
+        selectedSite: site,
+        effectiveSite: site
+      });
+    }
 
     return res.status(200).json({
       success: !!driveSync.success,
@@ -56,6 +70,7 @@ export default async function handler(req, res) {
       error: driveSync.success ? null : driveSync.error || "Cấp lại quyền Drive thất bại"
     });
   } catch (err) {
+    if (learningSiteErrorResponse(res, err)) return;
     console.error("[admin-drive-permission] Error:", err);
     return res.status(500).json({
       success: false,

@@ -2,6 +2,7 @@ import { PassThrough } from "stream";
 import { getAdminFromRequest, getGoogleDriveClient, resolveCourseFolderTree, saveCourseFolderId } from "../lms.js";
 import { supabase } from "../supabase.js";
 import { applyCors } from "../cors.js";
+import { assertCourseInLearningSite, isLmsAdminMultiSiteEnabled, learningSiteErrorResponse, requestLearningSite } from "../learning-site.js";
 
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024; // 4 MB
 
@@ -50,6 +51,9 @@ export default async function handler(req, res) {
       lessonNo,
       lessonTitle
     } = req.body || {};
+    if (isLmsAdminMultiSiteEnabled() && course) {
+      await assertCourseInLearningSite(supabase, course, requestLearningSite(req), { canonicalOnly: true });
+    }
 
     let drive;
     try {
@@ -212,6 +216,7 @@ export default async function handler(req, res) {
       warning: isFallback ? "Lưu ý: Không thể ghi vào thư mục cấu hình. File đã được tải lên thư mục gốc Drive của bạn." : null
     });
   } catch (err) {
+    if (learningSiteErrorResponse(res, err)) return;
     console.error("[admin-upload-image] Unexpected error:", err);
     return res.status(500).json({
       success: false,

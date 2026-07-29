@@ -1,6 +1,7 @@
 import { supabase } from "../supabase.js";
 import { getAdminFromRequest, getGoogleDriveClient } from "../lms.js";
 import { applyCors } from "../cors.js";
+import { assertCourseInLearningSite, isLmsAdminMultiSiteEnabled, learningSiteErrorResponse, requestLearningSite } from "../learning-site.js";
 
 // Helper to extract Drive File ID from URL or return raw ID if matched
 function extractDriveFileId(value) {
@@ -110,6 +111,9 @@ export default async function handler(req, res) {
     const { courseSlug, lessonData } = req.body || {};
     if (!courseSlug) {
       return res.status(400).json({ success: false, error: "Thiếu courseSlug" });
+    }
+    if (isLmsAdminMultiSiteEnabled()) {
+      await assertCourseInLearningSite(supabase, courseSlug, requestLearningSite(req), { canonicalOnly: true });
     }
 
     // Retrieve course folder
@@ -285,6 +289,7 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
+    if (learningSiteErrorResponse(res, err)) return;
     console.error("[verify-media] Unexpected error:", err);
     return res.status(500).json({ success: false, error: err.message || "Lỗi xử lý server" });
   }

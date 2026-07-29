@@ -4,6 +4,14 @@ import { applyCors } from "../cors.js";
 import {
   maybeShadowEnrollmentAccess,
 } from "../v2-outbox-shadow.js";
+import {
+  assertCourseInLearningSite,
+  auditLearningSiteOperation,
+  isLmsAdminMultiSiteEnabled,
+  learningSiteErrorResponse,
+  listCanonicalCoursesForSite,
+  requestLearningSite
+} from "../learning-site.js";
 
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { mode: "admin" });
@@ -22,6 +30,8 @@ export default async function handler(req, res) {
     // ── GET: List enrollments with filters ────────────────────────────────────
     if (req.method === "GET") {
       const { course, search } = req.query || {};
+      const multiSiteEnabled = isLmsAdminMultiSiteEnabled();
+      const requestedSite = multiSiteEnabled ? requestLearningSite(req) : null;
       let query = supabase
         .from("student_enrollments")
         .select(`
@@ -32,7 +42,13 @@ export default async function handler(req, res) {
           )
         `);
 
-      if (course) {
+      if (multiSiteEnabled && course) {
+        await assertCourseInLearningSite(supabase, course, requestedSite, { canonicalOnly: true });
+        query = query.eq("course_slug", course);
+      } else if (multiSiteEnabled) {
+        const visibleCourses = await listCanonicalCoursesForSite(supabase, requestedSite);
+        query = query.in("course_slug", visibleCourses.map((item) => item.slug));
+      } else if (course) {
         query = query.eq("course_slug", course);
       }
       if (search) {
@@ -51,6 +67,10 @@ export default async function handler(req, res) {
       if (!email || !courseSlug) {
         return res.status(400).json({ success: false, error: "Thiếu email hoặc course slug" });
       }
+      const requestedSite = isLmsAdminMultiSiteEnabled() ? requestLearningSite(req) : null;
+      if (requestedSite) {
+        await assertCourseInLearningSite(supabase, courseSlug, requestedSite, { canonicalOnly: true });
+      }
 
       const syncResult = await syncEnrollment(supabase, {
         email,
@@ -68,6 +88,15 @@ export default async function handler(req, res) {
         { email: normalizeEmail(email), course_slug: courseSlug, status: "active" },
         "upserted"
       );
+      if (requestedSite) {
+        await auditLearningSiteOperation(supabase, {
+          adminEmail: adminSession.email,
+          action: "lms_multisite_enrollment_grant",
+          courseSlug,
+          selectedSite: requestedSite,
+          effectiveSite: requestedSite
+        });
+      }
 
       return res.status(200).json({ success: true, enrollment: syncResult.enrollment, driveSync: syncResult.driveSync });
     }
@@ -85,6 +114,12 @@ export default async function handler(req, res) {
         .select("email, course_slug, status")
         .eq("id", id)
         .maybeSingle();
+      if (isLmsAdminMultiSiteEnabled()) {
+        if (!oldEnroll) {
+          return res.status(404).json({ success: false, code: "COURSE_NOT_FOUND_IN_SITE", error: "Không tìm thấy enrollment" });
+        }
+        await assertCourseInLearningSite(supabase, oldEnroll.course_slug, requestLearningSite(req), { canonicalOnly: true });
+      }
 
       const { data, error } = await supabase
         .from("student_enrollments")
@@ -98,6 +133,19 @@ export default async function handler(req, res) {
         .single();
 
       if (error) throw error;
+      if (isLmsAdminMultiSiteEnabled() && data.course_slug !== oldEnroll.course_slug) {
+        throw new Error("Enrollment read-after-write verification failed");
+      }
+      if (isLmsAdminMultiSiteEnabled()) {
+        const site = requestLearningSite(req);
+        await auditLearningSiteOperation(supabase, {
+          adminEmail: adminSession.email,
+          action: "lms_multisite_enrollment_update",
+          courseSlug: data.course_slug,
+          selectedSite: site,
+          effectiveSite: site
+        });
+      }
 
       // Sync Google Drive permissions if status changed
       if (oldEnroll && status && oldEnroll.status !== status) {
@@ -131,6 +179,12 @@ export default async function handler(req, res) {
         .select("email, course_slug")
         .eq("id", id)
         .maybeSingle();
+      if (isLmsAdminMultiSiteEnabled()) {
+        if (!enroll) {
+          return res.status(404).json({ success: false, code: "COURSE_NOT_FOUND_IN_SITE", error: "Không tìm thấy enrollment" });
+        }
+        await assertCourseInLearningSite(supabase, enroll.course_slug, requestLearningSite(req), { canonicalOnly: true });
+      }
 
       const { error } = await supabase
         .from("student_enrollments")
@@ -138,6 +192,22 @@ export default async function handler(req, res) {
         .eq("id", id);
 
       if (error) throw error;
+      if (isLmsAdminMultiSiteEnabled()) {
+        const { data: deletedRow } = await supabase
+          .from("student_enrollments")
+          .select("id")
+          .eq("id", id)
+          .maybeSingle();
+        if (deletedRow) throw new Error("Enrollment delete verification failed");
+        const site = requestLearningSite(req);
+        await auditLearningSiteOperation(supabase, {
+          adminEmail: adminSession.email,
+          action: "lms_multisite_enrollment_revoke",
+          courseSlug: enroll.course_slug,
+          selectedSite: site,
+          effectiveSite: site
+        });
+      }
 
       if (enroll) {
         await syncEnrollment(supabase, {
@@ -158,6 +228,7 @@ export default async function handler(req, res) {
 
     return res.status(405).json({ success: false, error: "Method not allowed" });
   } catch (err) {
+    if (learningSiteErrorResponse(res, err)) return;
     console.error("[admin-enrollments] Error:", err);
     return res.status(500).json({
       success: false,

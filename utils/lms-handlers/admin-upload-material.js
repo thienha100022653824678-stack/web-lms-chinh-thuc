@@ -2,6 +2,7 @@ import { PassThrough } from "stream";
 import { getAdminFromRequest, getGoogleDriveClient, resolveCourseFolderTree, saveCourseFolderId } from "../lms.js";
 import { supabase } from "../supabase.js";
 import { applyCors } from "../cors.js";
+import { assertCourseInLearningSite, isLmsAdminMultiSiteEnabled, learningSiteErrorResponse, requestLearningSite } from "../learning-site.js";
 
 const MAX_MATERIAL_BYTES = 50 * 1024 * 1024;
 
@@ -80,6 +81,9 @@ export default async function handler(req, res) {
 
     if (!courseSlug) {
       return res.status(400).json({ success: false, error: "Thieu slug khoa hoc (course_slug)" });
+    }
+    if (isLmsAdminMultiSiteEnabled()) {
+      await assertCourseInLearningSite(supabase, courseSlug, requestLearningSite(req), { canonicalOnly: true });
     }
 
     if (!fileData || typeof fileData !== "string") {
@@ -190,6 +194,7 @@ export default async function handler(req, res) {
       }
     });
   } catch (err) {
+    if (learningSiteErrorResponse(res, err)) return;
     console.error("[admin-upload-material] Error:", err);
     return res.status(500).json({
       success: false,

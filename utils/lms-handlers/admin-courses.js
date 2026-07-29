@@ -1,6 +1,14 @@
 import { supabase } from "../supabase.js";
 import { getAdminFromRequest } from "../lms.js";
 import { applyCors } from "../cors.js";
+import {
+  assertCourseInLearningSite,
+  isLmsAdminMultiSiteEnabled,
+  isSelfTargetCourse,
+  learningSiteErrorResponse,
+  requestLearningSite,
+  resolveEffectiveLearningSite
+} from "../learning-site.js";
 
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { mode: "admin" });
@@ -18,14 +26,45 @@ export default async function handler(req, res) {
 
     // ── GET: Read courses list + Config ───────────────────────────────────────
     if (req.method === "GET") {
+      const multiSiteEnabled = isLmsAdminMultiSiteEnabled();
+      const requestedSite = multiSiteEnabled ? requestLearningSite(req) : null;
       // 1. Get course slugs from courses table
       const { data: courseRows, error: courseErr } = await supabase
         .from("courses")
-        .select("slug, title, subtitle, image_url, raw_data")
+        .select(multiSiteEnabled
+          ? "id,slug,title,subtitle,image_url,raw_data,sales_site,learning_course_slug,learning_site,active,is_published"
+          : "slug,title,subtitle,image_url,raw_data")
         .order("sort_order", { ascending: true });
 
       if (courseErr) throw courseErr;
-      const courses = (courseRows || []).map(c => c.slug);
+      let visibleRows = courseRows || [];
+      let legacySharedMappings = [];
+      if (multiSiteEnabled) {
+        const bySlug = new Map(visibleRows.map((course) => [course.slug, course]));
+        const scoped = [];
+        for (const course of visibleRows) {
+          const effectiveSite = await resolveEffectiveLearningSite(course, {
+            findCourseBySlug: async (slug) => bySlug.get(slug) || null
+          });
+          if (effectiveSite === requestedSite && isSelfTargetCourse(course)) {
+            scoped.push({ ...course, effective_learning_site: effectiveSite });
+          }
+        }
+        visibleRows = scoped;
+        const visibleSlugs = new Set(scoped.map((course) => course.slug));
+        legacySharedMappings = (courseRows || [])
+          .filter((course) =>
+            !isSelfTargetCourse(course) &&
+            !course.learning_site &&
+            visibleSlugs.has(course.learning_course_slug)
+          )
+          .map((course) => ({
+            alias_slug: course.slug,
+            canonical_slug: course.learning_course_slug,
+            read_only: true
+          }));
+      }
+      const courses = visibleRows.map(c => c.slug);
 
       // 2. Read Config from site_config
       const { data: configRows, error: configErr } = await supabase
@@ -43,7 +82,17 @@ export default async function handler(req, res) {
         });
       }
 
-      for (const course of courseRows || []) {
+      if (multiSiteEnabled) {
+        const allCoursePrefixes = (courseRows || []).map((course) => `${course.slug}_`);
+        for (const key of Object.keys(config)) {
+          const ownerPrefix = allCoursePrefixes.find((prefix) => key.startsWith(prefix));
+          if (ownerPrefix && !courses.some((slug) => ownerPrefix === `${slug}_`)) {
+            delete config[key];
+          }
+        }
+      }
+
+      for (const course of visibleRows) {
         const slug = course.slug;
         const rawData = course.raw_data || {};
         if (!slug) continue;
@@ -68,7 +117,15 @@ export default async function handler(req, res) {
         }
       }
 
-      return res.status(200).json({ success: true, courses, config });
+      return res.status(200).json({
+        success: true,
+        courses,
+        courseRows: multiSiteEnabled ? visibleRows : undefined,
+        legacySharedMappings: multiSiteEnabled ? legacySharedMappings : undefined,
+        config,
+        learning_site: requestedSite,
+        multiSiteEnabled
+      });
     }
 
     // ── POST: Update Config ───────────────────────────────────────────────────
@@ -83,6 +140,11 @@ export default async function handler(req, res) {
       }
       if (!newConfig || typeof newConfig !== "object") {
         return res.status(400).json({ success: false, error: "Thiếu dữ liệu config" });
+      }
+      const multiSiteEnabled = isLmsAdminMultiSiteEnabled();
+      const requestedSite = multiSiteEnabled ? requestLearningSite(req) : null;
+      if (multiSiteEnabled) {
+        await assertCourseInLearningSite(supabase, course, requestedSite, { canonicalOnly: true });
       }
 
       for (const [field, value] of Object.entries(newConfig)) {
@@ -152,11 +214,20 @@ export default async function handler(req, res) {
         console.error("[admin-courses] Sync to courses table failed:", dbErr.message);
       }
 
+      if (multiSiteEnabled) {
+        const verified = await assertCourseInLearningSite(supabase, course, requestedSite, { canonicalOnly: true });
+        return res.status(200).json({
+          success: true,
+          course: verified.course.slug,
+          learning_site: verified.effectiveSite
+        });
+      }
       return res.status(200).json({ success: true });
     }
 
     return res.status(405).json({ success: false, error: "Method not allowed" });
   } catch (err) {
+    if (learningSiteErrorResponse(res, err)) return;
     console.error("[admin-courses] Error:", err);
     return res.status(500).json({
       success: false,

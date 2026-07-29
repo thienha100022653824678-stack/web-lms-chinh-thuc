@@ -1,6 +1,7 @@
 import { supabase } from "../supabase.js";
 import { getAdminFromRequest, normalizeEmail, syncEnrollment } from "../lms.js";
 import { applyCors } from "../cors.js";
+import { assertCourseInLearningSite, isLmsAdminMultiSiteEnabled, learningSiteErrorResponse, requestLearningSite } from "../learning-site.js";
 
 // Helper to validate email format
 function isValidEmail(email) {
@@ -39,6 +40,9 @@ export default async function handler(req, res) {
 
     if (!courseSlug) {
       return res.status(400).json({ success: false, error: "Thiếu mã khóa học (courseSlug)" });
+    }
+    if (isLmsAdminMultiSiteEnabled()) {
+      await assertCourseInLearningSite(supabase, courseSlug, requestLearningSite(req), { canonicalOnly: true });
     }
 
     // --- Clean and validate email list ---
@@ -173,6 +177,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ success: false, error: "Action không hợp lệ" });
 
   } catch (err) {
+    if (learningSiteErrorResponse(res, err)) return;
     console.error("[bulk-enroll] Error processing action:", err);
     return res.status(500).json({ success: false, error: err.message || "Lỗi xử lý server" });
   }
