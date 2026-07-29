@@ -89,15 +89,18 @@ VALUES
 ('65000000-0000-4000-8000-000000000001','student-shared@example.test','Student Shared','active')
 ON CONFLICT(email) DO UPDATE SET full_name=excluded.full_name,status=excluded.status,updated_at=now();
 
-INSERT INTO public.student_enrollments(id,student_id,course_id,course_slug,email,status,normalized_email,source_system)
+INSERT INTO public.student_enrollments(
+  id,student_id,course_id,course_slug,email,status,normalized_email,source_system,sync_correlation_id
+)
 VALUES
-('71000000-0000-4000-8000-000000000001','61000000-0000-4000-8000-000000000001','41000000-0000-4000-8000-000000000001','preview-yeunauan-course-a','student-a.yeunauan@example.test','active','student-a.yeunauan@example.test','preview'),
-('72000000-0000-4000-8000-000000000001','62000000-0000-4000-8000-000000000001','42000000-0000-4000-8000-000000000001','preview-yeubep-course-a','student-b.yeubep@example.test','active','student-b.yeubep@example.test','preview'),
-('74000000-0000-4000-8000-000000000001','64000000-0000-4000-8000-000000000001','41000000-0000-4000-8000-000000000001','preview-yeunauan-course-a','student-revoked@example.test','inactive','student-revoked@example.test','preview'),
-('75000000-0000-4000-8000-000000000001','65000000-0000-4000-8000-000000000001','41000000-0000-4000-8000-000000000001','preview-yeunauan-course-a','student-shared@example.test','active','student-shared@example.test','preview'),
-('75000000-0000-4000-8000-000000000002','65000000-0000-4000-8000-000000000001','42000000-0000-4000-8000-000000000001','preview-yeubep-course-a','student-shared@example.test','active','student-shared@example.test','preview')
+('71000000-0000-4000-8000-000000000001','61000000-0000-4000-8000-000000000001','41000000-0000-4000-8000-000000000001','preview-yeunauan-course-a','student-a.yeunauan@example.test','active','student-a.yeunauan@example.test','preview','71000000-0000-4000-8000-000000000101'),
+('72000000-0000-4000-8000-000000000001','62000000-0000-4000-8000-000000000001','42000000-0000-4000-8000-000000000001','preview-yeubep-course-a','student-b.yeubep@example.test','active','student-b.yeubep@example.test','preview','72000000-0000-4000-8000-000000000101'),
+('74000000-0000-4000-8000-000000000001','64000000-0000-4000-8000-000000000001','41000000-0000-4000-8000-000000000001','preview-yeunauan-course-a','student-revoked@example.test','inactive','student-revoked@example.test','preview','74000000-0000-4000-8000-000000000101'),
+('75000000-0000-4000-8000-000000000001','65000000-0000-4000-8000-000000000001','41000000-0000-4000-8000-000000000001','preview-yeunauan-course-a','student-shared@example.test','active','student-shared@example.test','preview','75000000-0000-4000-8000-000000000101'),
+('75000000-0000-4000-8000-000000000002','65000000-0000-4000-8000-000000000001','42000000-0000-4000-8000-000000000001','preview-yeubep-course-a','student-shared@example.test','active','student-shared@example.test','preview','75000000-0000-4000-8000-000000000102')
 ON CONFLICT(email,course_slug) DO UPDATE SET student_id=excluded.student_id,course_id=excluded.course_id,status=excluded.status,
- normalized_email=excluded.normalized_email,source_system=excluded.source_system,updated_at=now();
+ normalized_email=excluded.normalized_email,source_system=excluded.source_system,
+ sync_correlation_id=excluded.sync_correlation_id,updated_at=now();
 
 INSERT INTO public.lesson_progress(id,email,course_slug,lesson_id,progress_percent,completed,last_watched_at)
 VALUES

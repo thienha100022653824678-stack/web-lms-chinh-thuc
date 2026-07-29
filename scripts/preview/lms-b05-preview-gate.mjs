@@ -2,6 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import pg from "pg";
+import {
+  BUSINESS_COLUMN_ALLOWLIST,
+  BUSINESS_PRIMARY_KEYS,
+  businessDataChecksum,
+  businessSelectList,
+  businessTableCounts
+} from "../lib/multisite-business-checksum.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const EXPECTED_REF = "plgrmaktvudjetfkwmyg";
@@ -206,6 +213,168 @@ async function migrationContract(client) {
   return { column, constraints, indexes, enrollmentUnique };
 }
 
+async function businessSnapshot(client) {
+  const rows = {};
+  for (const table of Object.keys(BUSINESS_COLUMN_ALLOWLIST)) {
+    const exists = (await client.query(
+      `select to_regclass($1) is not null exists`,
+      [`public.${table}`]
+    )).rows[0].exists;
+    rows[table] = exists
+      ? (await client.query(
+        `select ${businessSelectList(table)} from public.${pg.escapeIdentifier(table)} t
+         order by ${BUSINESS_PRIMARY_KEYS[table].map((column) => `t.${pg.escapeIdentifier(column)}`).join(",")}`
+      )).rows
+      : [];
+  }
+  return {
+    checksum: businessDataChecksum(rows),
+    counts: businessTableCounts(rows),
+    tableChecksums: Object.fromEntries(
+      Object.keys(BUSINESS_COLUMN_ALLOWLIST).sort().map((table) => [
+        table,
+        businessDataChecksum(Object.fromEntries(
+          Object.keys(BUSINESS_COLUMN_ALLOWLIST).map((name) => [name, name === table ? rows[name] : []])
+        ))
+      ])
+    ),
+    fieldChecksums: Object.fromEntries(
+      Object.keys(BUSINESS_COLUMN_ALLOWLIST).sort().map((table) => [
+        table,
+        Object.fromEntries(BUSINESS_COLUMN_ALLOWLIST[table].map((column) => [
+          column,
+          stableChecksum(
+            [...rows[table]]
+              .sort((a, b) => String(a[BUSINESS_PRIMARY_KEYS[table][0]]).localeCompare(
+                String(b[BUSINESS_PRIMARY_KEYS[table][0]]), "en"
+              ))
+              .map((row) => row[column] ?? null)
+          )
+        ]))
+      ])
+    ),
+    rows
+  };
+}
+
+async function multisiteSchemaSnapshot(client) {
+  const result = {
+    column: (await client.query(`
+      select column_name,data_type,is_nullable,column_default
+      from information_schema.columns
+      where table_schema='public' and table_name='courses'
+      order by ordinal_position
+    `)).rows,
+    constraints: (await client.query(`
+      select conname,pg_get_constraintdef(oid,true) definition
+      from pg_constraint where conrelid='public.courses'::regclass order by conname
+    `)).rows,
+    indexes: (await client.query(`
+      select indexname,indexdef from pg_indexes
+      where schemaname='public' and tablename='courses' order by indexname
+    `)).rows,
+    learningSiteComment: (await client.query(`
+      select col_description('public.courses'::regclass,ordinal_position::int) comment
+      from information_schema.columns where table_schema='public'
+        and table_name='courses' and column_name='learning_site'
+    `)).rows[0]?.comment || null
+  };
+  return { ...result, checksum: stableChecksum(result) };
+}
+
+function expectedSchemaDeltaMatches(before, after) {
+  const newColumn = after.column.find((row) => row.column_name === "learning_site");
+  const unchangedColumns = after.column.filter((row) => row.column_name !== "learning_site");
+  const newConstraintNames = new Set(["courses_learning_site_check"]);
+  const newIndexNames = new Set([
+    "idx_courses_learning_site",
+    "idx_courses_learning_site_active_status",
+    "idx_courses_learning_target_site"
+  ]);
+  const unchangedConstraints = after.constraints.filter((row) => !newConstraintNames.has(row.conname));
+  const unchangedIndexes = after.indexes.filter((row) => !newIndexNames.has(row.indexname));
+  const constraint = after.constraints.find((row) => row.conname === "courses_learning_site_check");
+  const actualNewIndexes = after.indexes.filter((row) => newIndexNames.has(row.indexname));
+  return Boolean(
+    newColumn?.data_type === "text" &&
+    newColumn?.is_nullable === "YES" &&
+    newColumn?.column_default === null &&
+    stableChecksum(unchangedColumns) === stableChecksum(before.column) &&
+    stableChecksum(unchangedConstraints) === stableChecksum(before.constraints) &&
+    stableChecksum(unchangedIndexes) === stableChecksum(before.indexes) &&
+    constraint?.definition.includes("learning_site IS NULL") &&
+    constraint?.definition.includes("yeunauan") &&
+    constraint?.definition.includes("yeubep") &&
+    actualNewIndexes.length === 3 &&
+    after.learningSiteComment === "Logical LMS content owner. Nullable for deterministic legacy compatibility."
+  );
+}
+
+async function withRolledBackMutation(client, action) {
+  await client.query("begin");
+  try {
+    return await action();
+  } finally {
+    await client.query("rollback");
+  }
+}
+
+async function negativeControls(client, baseline) {
+  const baselineChecksum = baseline.checksum;
+  const first = (await client.query(`select id,slug,sales_site,learning_course_slug from public.courses order by id limit 1`)).rows[0];
+  const second = (await client.query(`select id,slug from public.courses where id<>$1 order by id limit 1`, [first.id])).rows[0];
+  const changed = async (sql, params) => withRolledBackMutation(client, async () => {
+    await client.query(sql, params);
+    return (await businessSnapshot(client)).checksum !== baselineChecksum;
+  });
+  const titleDetected = await changed(`update public.courses set title=title || ' NEGATIVE' where id=$1`, [first.id]);
+  const slugDetected = await changed(`update public.courses set slug=slug || '-negative' where id=$1`, [first.id]);
+  const salesSiteDetected = await changed(
+    `update public.courses set sales_site=case when sales_site='yeunauan' then 'yeubep' else 'yeunauan' end where id=$1`,
+    [first.id]
+  );
+  const targetDetected = await withRolledBackMutation(client, async () => {
+    await client.query(`update public.courses set learning_course_slug='missing-negative-target' where id=$1`, [first.id]);
+    const checksumChanged = (await businessSnapshot(client)).checksum !== baselineChecksum;
+    const unresolved = Number((await client.query(`
+      select count(*)::int count from public.courses c
+      left join public.courses target on target.slug=coalesce(nullif(trim(c.learning_course_slug),''),c.slug)
+      where target.id is null
+    `)).rows[0].count);
+    return checksumChanged && unresolved > 0;
+  });
+  const deleteDetected = await withRolledBackMutation(client, async () => {
+    await client.query(`delete from public.lessons where id=(select id from public.lessons order by id limit 1)`);
+    const current = await businessSnapshot(client);
+    return current.checksum !== baselineChecksum &&
+      current.counts.lessons !== baseline.counts.lessons;
+  });
+  const addDetected = await withRolledBackMutation(client, async () => {
+    await client.query(`
+      insert into public.courses(id,slug,title,active,is_published,sales_site,learning_course_slug,learning_site)
+      values(gen_random_uuid(),'preview-negative-added','Negative added',false,false,'yeunauan','preview-negative-added',null)
+    `);
+    const current = await businessSnapshot(client);
+    return current.checksum !== baselineChecksum;
+  });
+  const collisionDetected = await withRolledBackMutation(client, async () => {
+    try {
+      await client.query(`update public.courses set slug=$1 where id=$2`, [second.slug, first.id]);
+      return false;
+    } catch (error) {
+      return error.code === "23505";
+    }
+  });
+  const explicitSiteDetected = await withRolledBackMutation(client, async () => {
+    await client.query(`update public.courses set learning_site='yeunauan' where id=$1`, [first.id]);
+    return Number((await client.query(`select count(*)::int count from public.courses where learning_site is not null`)).rows[0].count) > 0;
+  });
+  return {
+    titleDetected, slugDetected, salesSiteDetected, targetDetected,
+    addDetected, deleteDetected, collisionDetected, explicitSiteDetected
+  };
+}
+
 const env = loadEnv(resolveEnvFile());
 const client = new pg.Client(connectionConfig(env));
 try {
@@ -270,6 +439,115 @@ try {
       contract: firstContract,
       idempotent_contract_unchanged:
         stableChecksum(firstContract) === stableChecksum(idempotentContract)
+    }));
+  } else if (command === "checksum-rehearse") {
+    await client.query(`set lock_timeout='5s'; set statement_timeout='30s'`);
+    const previewBefore = await snapshot(client, `checksum-rehearsal-before-${Date.now()}`);
+    await assertSyntheticOnly(client, previewBefore);
+    const beforeV5 = previewBefore.v5Checksum;
+
+    // Normalize the guarded synthetic substrate to the exact pre-migration shape.
+    await setGuard(client);
+    await applySql(client, "migrations/preview/20260729_lms_b05_preview_substrate.sql");
+    await applySql(client, "migrations/20260729_lms_learning_site_rollback.sql");
+    const businessBefore = await businessSnapshot(client);
+    const schemaBefore = await multisiteSchemaSnapshot(client);
+
+    const migrationStarted = performance.now();
+    await applySql(client, "migrations/20260729_lms_learning_site.sql");
+    const migrationDurationMs = Number((performance.now() - migrationStarted).toFixed(3));
+    const businessAfter = await businessSnapshot(client);
+    const schemaAfter = await multisiteSchemaSnapshot(client);
+    const contractAfter = await migrationContract(client);
+    const siteInvariant = (await client.query(`
+      select count(*) filter(where learning_site is null)::int null_count,
+        count(*) filter(where learning_site is not null)::int non_null_count,
+        count(*) filter(where learning_site is not null and learning_site not in ('yeunauan','yeubep'))::int invalid_count
+      from public.courses
+    `)).rows[0];
+    const duplicateSlugs = Number((await client.query(`
+      select count(*)::int count from (select slug from public.courses group by slug having count(*)>1) d
+    `)).rows[0].count);
+    const unresolved = Number((await client.query(`
+      select count(*)::int count from public.courses c
+      left join public.courses target on target.slug=coalesce(nullif(trim(c.learning_course_slug),''),c.slug)
+      where target.id is null
+    `)).rows[0].count);
+    const controls = await negativeControls(client, businessAfter);
+    if (Object.values(controls).some((value) => value !== true)) {
+      throw new Error(`NEGATIVE_CONTROL_FAILED:${JSON.stringify(controls)}`);
+    }
+    const idempotentStarted = performance.now();
+    await applySql(client, "migrations/20260729_lms_learning_site.sql");
+    const idempotentDurationMs = Number((performance.now() - idempotentStarted).toFixed(3));
+    const idempotentSchema = await multisiteSchemaSnapshot(client);
+
+    const rollbackStarted = performance.now();
+    await applySql(client, "migrations/20260729_lms_learning_site_rollback.sql");
+    const rollbackDurationMs = Number((performance.now() - rollbackStarted).toFixed(3));
+    const businessRollback = await businessSnapshot(client);
+    const schemaRollback = await multisiteSchemaSnapshot(client);
+
+    const reapplyStarted = performance.now();
+    await applySql(client, "migrations/20260729_lms_learning_site.sql");
+    const reapplyDurationMs = Number((performance.now() - reapplyStarted).toFixed(3));
+    const businessReapply = await businessSnapshot(client);
+    const schemaReapply = await multisiteSchemaSnapshot(client);
+
+    const expectedDelta = expectedSchemaDeltaMatches(schemaBefore, schemaAfter);
+    const checks = {
+      business_after_match: businessBefore.checksum === businessAfter.checksum,
+      counts_after_match: stableChecksum(businessBefore.counts) === stableChecksum(businessAfter.counts),
+      expected_schema_delta_match: expectedDelta,
+      learning_site_all_null: Number(siteInvariant.null_count) === businessAfter.counts.courses &&
+        Number(siteInvariant.non_null_count) === 0 && Number(siteInvariant.invalid_count) === 0,
+      duplicate_slug_zero: duplicateSlugs === 0,
+      unresolved_zero: unresolved === 0,
+      rollback_business_match: businessBefore.checksum === businessRollback.checksum,
+      rollback_schema_match: schemaBefore.checksum === schemaRollback.checksum,
+      reapply_business_match: businessBefore.checksum === businessReapply.checksum,
+      reapply_schema_deterministic: schemaAfter.checksum === schemaReapply.checksum,
+      second_apply_idempotent: schemaAfter.checksum === idempotentSchema.checksum,
+      global_slug_unique_preserved: contractAfter.constraints.some((row) =>
+        row.definition.includes("UNIQUE (slug)")
+      ),
+      enrollment_identity_preserved: Number(contractAfter.enrollmentUnique) === 1
+    };
+    if (Object.values(checks).some((value) => value !== true)) {
+      throw new Error(`CHECKSUM_REHEARSAL_FAILED:${JSON.stringify(checks)}`);
+    }
+
+    // Restore the deterministic synthetic Preview owners while retaining the migrated schema.
+    await applySql(client, "migrations/preview/20260729_lms_b05_preview_seed.sql");
+    const previewFinal = await snapshot(client, `checksum-rehearsal-final-${Date.now()}`);
+    if (previewFinal.v5Checksum !== beforeV5) throw new Error("V5_CHECKSUM_CHANGED_DURING_CHECKSUM_REHEARSAL");
+
+    console.log(JSON.stringify({
+      ok: true,
+      preview_ref: EXPECTED_REF,
+      BUSINESS_DATA_CHECKSUM_BEFORE: businessBefore.checksum,
+      BUSINESS_DATA_CHECKSUM_AFTER: businessAfter.checksum,
+      BUSINESS_DATA_CHECKSUM_MATCH: checks.business_after_match,
+      SCHEMA_CHECKSUM_BEFORE: schemaBefore.checksum,
+      SCHEMA_CHECKSUM_AFTER: schemaAfter.checksum,
+      EXPECTED_SCHEMA_DELTA_MATCH: checks.expected_schema_delta_match,
+      LEARNING_SITE_NULL_COUNT: Number(siteInvariant.null_count),
+      LEARNING_SITE_NON_NULL_COUNT: Number(siteInvariant.non_null_count),
+      INVALID_LEARNING_SITE_COUNT: Number(siteInvariant.invalid_count),
+      counts: businessAfter.counts,
+      table_checksums: businessAfter.tableChecksums,
+      student_enrollment_field_checksums: businessAfter.fieldChecksums.student_enrollments,
+      checks,
+      negative_controls: controls,
+      v5_checksum_before: beforeV5,
+      v5_checksum_after: previewFinal.v5Checksum,
+      timeouts: { lock_timeout: "5s", statement_timeout: "30s" },
+      durations_ms: {
+        migration: migrationDurationMs,
+        idempotent_second_apply: idempotentDurationMs,
+        rollback: rollbackDurationMs,
+        reapply: reapplyDurationMs
+      }
     }));
   } else if (command === "snapshot") {
     const result = await snapshot(client, `snapshot-${Date.now()}`);

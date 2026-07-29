@@ -7,6 +7,10 @@ Owner approval ID/time: `________________`
 Execution window: `________________`
 Operators: `________________`
 
+The previous approval `OWNER-APPROVAL-20260729-LMS-MULTISITE-01` is invalid
+after incident `LMS-MULTISITE-P2-CHECKSUM-20260729-01`. A new owner approval ID
+is mandatory. This template cannot inherit or reuse the previous authorization.
+
 ## Exact source and projects
 
 | Component | Full SHA | Vercel project |
@@ -52,8 +56,11 @@ Existing names are snapshotted by P1. No secret value belongs in this manifest.
 ## Ordered checklist
 
 - [ ] P0 identity and owner authorization complete.
-- [ ] P1 encrypted backup/count/checksum/env/domain snapshots complete.
-- [ ] P2 exact additive migration with flags false; verification passed.
+- [ ] P1 encrypted backup/count/env/domain snapshots plus independent
+  `BUSINESS_DATA_CHECKSUM_BEFORE` and `SCHEMA_CHECKSUM_BEFORE` complete.
+- [ ] P2 exact additive migration with flags false; explicit-column business
+  checksum matches, expected schema delta matches, and new-column NULL invariant
+  passes.
 - [ ] P3 exact artifacts deployed with flags false; legacy smoke passed.
 - [ ] P4 LMS admin canary and read-only IDOR passed.
 - [ ] P5 owner-approved controlled write canary passed.
@@ -66,6 +73,8 @@ Existing names are snapshotted by P1. No secret value belongs in this manifest.
 - [ ] Schema-only backup encrypted and hash recorded.
 - [ ] Relevant table exports retained outside Git.
 - [ ] Counts/schema checksum recorded.
+- [ ] No whole-row JSON/`SELECT *` checksum is present in the execution harness.
+- [ ] Negative-control suite and corrective Preview rehearsal evidence attached.
 - [ ] Vercel env-name and domain/alias snapshot recorded.
 - [ ] Forward/rollback hashes reverified.
 - [ ] Rollback deployment IDs reverified.

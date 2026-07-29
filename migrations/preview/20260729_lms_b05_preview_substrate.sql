@@ -42,18 +42,35 @@ CREATE TABLE IF NOT EXISTS public.courses (
   slug text NOT NULL UNIQUE,
   title text NOT NULL,
   subtitle text,
+  price text,
   image_url text,
+  description text,
+  teacher_name text,
   raw_data jsonb DEFAULT '{}'::jsonb,
   active boolean DEFAULT true,
   is_published boolean DEFAULT false,
   sort_order integer DEFAULT 0,
+  sync_lms_status text,
+  sync_portal_status text,
+  sync_error text,
   drive_folder_id text,
+  drive_permission_mode text,
+  expected_start_date date,
   sales_site text,
   learning_course_slug text,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now(),
   CONSTRAINT courses_sales_site_check CHECK (sales_site IS NULL OR sales_site IN ('yeunauan','yeubep'))
 );
+
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS price text;
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS description text;
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS teacher_name text;
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS sync_lms_status text;
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS sync_portal_status text;
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS sync_error text;
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS drive_permission_mode text;
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS expected_start_date date;
 
 CREATE TABLE IF NOT EXISTS public.lessons (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -64,6 +81,8 @@ CREATE TABLE IF NOT EXISTS public.lessons (
   description text,
   video_provider text DEFAULT 'fixture',
   video_url text,
+  bunny_library_id text,
+  bunny_video_id text,
   recipe_url text,
   document_url text,
   photo_url text,
@@ -71,6 +90,8 @@ CREATE TABLE IF NOT EXISTS public.lessons (
   duration_text text,
   level text,
   media_urls text,
+  views integer DEFAULT 0,
+  is_free boolean DEFAULT false,
   active boolean DEFAULT true,
   status text DEFAULT 'active',
   sort_order integer DEFAULT 0,
@@ -87,6 +108,10 @@ CREATE TABLE IF NOT EXISTS public.lessons (
 
 ALTER TABLE public.lessons ADD COLUMN IF NOT EXISTS duration_text text;
 ALTER TABLE public.lessons ADD COLUMN IF NOT EXISTS level text;
+ALTER TABLE public.lessons ADD COLUMN IF NOT EXISTS bunny_library_id text;
+ALTER TABLE public.lessons ADD COLUMN IF NOT EXISTS bunny_video_id text;
+ALTER TABLE public.lessons ADD COLUMN IF NOT EXISTS views integer DEFAULT 0;
+ALTER TABLE public.lessons ADD COLUMN IF NOT EXISTS is_free boolean DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS public.site_config (
   key text PRIMARY KEY,

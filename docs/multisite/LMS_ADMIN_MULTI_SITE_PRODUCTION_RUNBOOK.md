@@ -28,6 +28,11 @@ later Gate may start.
   migration hashes. Do not commit data/PII.
 - Verification: backup tool exit zero, encrypted artifacts readable, counts are
   at least the read-only baseline 9/39/22/79 where applicable.
+- Capture `BUSINESS_DATA_CHECKSUM_BEFORE` using only the explicit pre-existing
+  business-column allowlists in
+  `scripts/lib/multisite-business-checksum.mjs`. The query must not use
+  `SELECT *`, `row_to_json(table.*)` or `to_jsonb(table.*)`. Record
+  `SCHEMA_CHECKSUM_BEFORE` independently from the business checksum.
 - Owner checkpoint: backup location/retention acknowledged.
 - Rollback trigger: incomplete/unreadable backup or count mismatch.
 - Evidence: sanitized manifest of filenames, hashes, counts and timestamps.
@@ -37,13 +42,29 @@ later Gate may start.
 - Precondition: both feature flags remain absent/false; P1 passed.
 - Action: set `lock_timeout='5s'`, `statement_timeout='30s'`; apply only
   `migrations/20260729_lms_learning_site.sql`. Do not backfill.
-- Verification: run `sql/PRODUCTION_VERIFICATION_READ_ONLY.sql`; expect nullable
-  TEXT, allowlist check, three indexes, zero invalid rows, unchanged counts,
-  zero duplicate course slug and enrollment identity.
+- Verification: run `sql/PRODUCTION_VERIFICATION_READ_ONLY.sql`. Capture and
+  compare these independent outputs:
+  `BUSINESS_DATA_CHECKSUM_BEFORE`, `BUSINESS_DATA_CHECKSUM_AFTER`,
+  `BUSINESS_DATA_CHECKSUM_MATCH`, `SCHEMA_CHECKSUM_BEFORE`,
+  `SCHEMA_CHECKSUM_AFTER`, `EXPECTED_SCHEMA_DELTA_MATCH`,
+  `LEARNING_SITE_NULL_COUNT`, `LEARNING_SITE_NON_NULL_COUNT` and
+  `INVALID_LEARNING_SITE_COUNT`.
+- The business checksum uses only explicit columns that existed before the
+  migration and excludes `learning_site`, column order, catalog OIDs and
+  timestamps. Adding the reviewed nullable column therefore is not a business
+  mutation. Any change to an allowlisted existing business column or row count
+  remains a stop condition.
+- The schema checksum is evaluated separately. The only accepted delta is the
+  nullable TEXT column, allowlist constraint, three reviewed indexes and column
+  comment. `LEARNING_SITE_NON_NULL_COUNT` and
+  `INVALID_LEARNING_SITE_COUNT` must both be zero; unexpected explicit values
+  remain an immediate stop condition.
 - Owner checkpoint: review catalog/count result before deployment.
 - Rollback trigger: lock/statement timeout, duration over 30s, invalid/missing
-  object, count/checksum mismatch or unexpected non-NULL row.
-- Evidence: migration duration, SQL output and post-schema checksum.
+  object, allowlisted business checksum/count mismatch, unexpected schema delta
+  or unexpected non-NULL row.
+- Evidence: migration duration, all named checksum/invariant outputs and the
+  exact pre/post schema-delta comparison.
 
 ## P3 — Deploy with flags off
 
