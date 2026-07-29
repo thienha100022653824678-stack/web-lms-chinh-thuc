@@ -2,6 +2,7 @@ import { supabase } from "../supabase.js";
 import { getAdminFromRequest, normalizeEmail, syncGoogleDrivePermission } from "../lms.js";
 import { applyCors } from "../cors.js";
 import { assertCourseInLearningSite, auditLearningSiteOperation, isLmsAdminMultiSiteEnabled, learningSiteErrorResponse, requestLearningSite } from "../learning-site.js";
+import { handlePreviewDriveDryRun } from "../preview-drive-adapter.js";
 
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { mode: "admin" });
@@ -44,6 +45,7 @@ export default async function handler(req, res) {
     if (!targetEmail || !targetCourseSlug) {
       return res.status(400).json({ success: false, error: "Thiếu email hoặc course slug" });
     }
+    if (await handlePreviewDriveDryRun({ req, res, supabase, adminEmail: adminSession.email, courseSlug: targetCourseSlug, action: "direct_permission", email: targetEmail })) return;
     if (isLmsAdminMultiSiteEnabled()) {
       await assertCourseInLearningSite(supabase, targetCourseSlug, requestLearningSite(req), { canonicalOnly: true });
     }

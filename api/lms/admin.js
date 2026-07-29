@@ -18,6 +18,7 @@ import adminVerifyMediaHandler from "../../utils/lms-handlers/admin-verify-media
 import adminStudentTraceHandler from "../../utils/lms-handlers/admin-student-trace.js";
 import adminAccountSharingAlertsHandler from "../../utils/lms-handlers/admin-account-sharing-alerts.js";
 import adminRuntimeModeHandler from "../../utils/lms-handlers/admin-runtime-mode.js";
+import adminPreviewAuthHandler from "../../utils/lms-handlers/admin-preview-auth.js";
 import { warmRuntimeConfig } from "../../utils/v2-runtime-controller.js";
 
 export const config = {
@@ -50,6 +51,9 @@ export default async function handler(req, res) {
 
   if (endpoint === "auth") {
     return adminAuthHandler(req, res);
+  }
+  if (endpoint === "preview-auth") {
+    return adminPreviewAuthHandler(req, res);
   }
   if (endpoint === "drive-auth" || endpoint === "drive-status") {
     return adminDriveAuthHandler(req, res);

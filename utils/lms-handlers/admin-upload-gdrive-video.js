@@ -3,6 +3,7 @@ import { getAdminFromRequest, getGoogleDriveClient, resolveCourseFolderTree, sav
 import { supabase } from "../supabase.js";
 import { applyCors } from "../cors.js";
 import { assertCourseInLearningSite, isLmsAdminMultiSiteEnabled, learningSiteErrorResponse, requestLearningSite } from "../learning-site.js";
+import { handlePreviewDriveDryRun } from "../preview-drive-adapter.js";
 
 const MAX_VIDEO_BYTES = 500 * 1024 * 1024; // 500 MB limit
 
@@ -99,19 +100,20 @@ export default async function handler(req, res) {
       accessToken
     } = req.body || {};
 
+    if (!course_slug) {
+      return res.status(400).json({ success: false, error: "Thiếu slug khóa học (course_slug)" });
+    }
+    if (await handlePreviewDriveDryRun({ req, res, supabase, adminEmail: adminSession.email, courseSlug: course_slug, action: "upload_video" })) return;
+    if (isLmsAdminMultiSiteEnabled()) {
+      await assertCourseInLearningSite(supabase, course_slug, requestLearningSite(req), { canonicalOnly: true });
+    }
+
     let drive;
     try {
       const clientInfo = await getGoogleDriveClient(supabase);
       drive = clientInfo.drive;
     } catch (driveErr) {
       return res.status(200).json({ success: false, needsOAuth: true, error: driveErr.message || "Chưa kết nối Google Drive" });
-    }
-
-    if (!course_slug) {
-      return res.status(400).json({ success: false, error: "Thiếu slug khóa học (course_slug)" });
-    }
-    if (isLmsAdminMultiSiteEnabled()) {
-      await assertCourseInLearningSite(supabase, course_slug, requestLearningSite(req), { canonicalOnly: true });
     }
 
     // Direct frontend upload helper: resolve folder structure and return folderId

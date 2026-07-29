@@ -8,6 +8,7 @@ import {
   listCanonicalCoursesForSite,
   requestLearningSite
 } from "../learning-site.js";
+import { handlePreviewDriveDryRun } from "../preview-drive-adapter.js";
 
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { mode: "admin" });
@@ -27,6 +28,7 @@ export default async function handler(req, res) {
     const { courseSlug } = req.body || {};
     const multiSiteEnabled = isLmsAdminMultiSiteEnabled();
     const requestedSite = multiSiteEnabled ? requestLearningSite(req) : null;
+    if (await handlePreviewDriveDryRun({ req, res, supabase, adminEmail: adminSession.email, courseSlug, action: "sync_permissions" })) return;
 
     let driveClientInfo;
     try {

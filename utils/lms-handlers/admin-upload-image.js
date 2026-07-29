@@ -3,6 +3,7 @@ import { getAdminFromRequest, getGoogleDriveClient, resolveCourseFolderTree, sav
 import { supabase } from "../supabase.js";
 import { applyCors } from "../cors.js";
 import { assertCourseInLearningSite, isLmsAdminMultiSiteEnabled, learningSiteErrorResponse, requestLearningSite } from "../learning-site.js";
+import { handlePreviewDriveDryRun } from "../preview-drive-adapter.js";
 
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024; // 4 MB
 
@@ -51,6 +52,7 @@ export default async function handler(req, res) {
       lessonNo,
       lessonTitle
     } = req.body || {};
+    if (await handlePreviewDriveDryRun({ req, res, supabase, adminEmail: adminSession.email, courseSlug: course, action: "upload_image" })) return;
     if (isLmsAdminMultiSiteEnabled() && course) {
       await assertCourseInLearningSite(supabase, course, requestLearningSite(req), { canonicalOnly: true });
     }

@@ -2,6 +2,7 @@ import { supabase } from "../supabase.js";
 import { getAdminFromRequest, getGoogleDriveClient } from "../lms.js";
 import { applyCors } from "../cors.js";
 import { assertCourseInLearningSite, isLmsAdminMultiSiteEnabled, learningSiteErrorResponse, requestLearningSite } from "../learning-site.js";
+import { handlePreviewDriveDryRun } from "../preview-drive-adapter.js";
 
 // Helper to extract Drive File ID from URL or return raw ID if matched
 function extractDriveFileId(value) {
@@ -112,6 +113,7 @@ export default async function handler(req, res) {
     if (!courseSlug) {
       return res.status(400).json({ success: false, error: "Thiếu courseSlug" });
     }
+    if (await handlePreviewDriveDryRun({ req, res, supabase, adminEmail: adminSession.email, courseSlug, action: "verify_media" })) return;
     if (isLmsAdminMultiSiteEnabled()) {
       await assertCourseInLearningSite(supabase, courseSlug, requestLearningSite(req), { canonicalOnly: true });
     }

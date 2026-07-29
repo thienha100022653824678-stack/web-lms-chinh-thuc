@@ -3,6 +3,7 @@ import { supabase } from "../supabase.js";
 import { getAdminFromRequest, getGoogleDriveClient } from "../lms.js";
 import { applyCors } from "../cors.js";
 import { assertCourseInLearningSite, isLmsAdminMultiSiteEnabled, learningSiteErrorResponse, requestLearningSite } from "../learning-site.js";
+import { handlePreviewDriveDryRun } from "../preview-drive-adapter.js";
 
 export const config = {
   api: {
@@ -36,6 +37,7 @@ export default async function handler(req, res) {
       return res.status(401).json({ success: false, error: "Chưa đăng nhập admin" });
     }
     const { course, lesson, title, fileData, text } = req.body || {};
+    if (await handlePreviewDriveDryRun({ req, res, supabase, adminEmail: adminSession.email, courseSlug: course, action: "upload_recipe" })) return;
     if (isLmsAdminMultiSiteEnabled() && course) {
       await assertCourseInLearningSite(supabase, course, requestLearningSite(req), { canonicalOnly: true });
     }

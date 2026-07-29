@@ -2,6 +2,7 @@ import { getAdminFromRequest, getGoogleDriveClient, resolveCourseFolderTree, sav
 import { supabase } from "../supabase.js";
 import { applyCors } from "../cors.js";
 import { assertCourseInLearningSite, isLmsAdminMultiSiteEnabled, learningSiteErrorResponse, requestLearningSite } from "../learning-site.js";
+import { handlePreviewDriveDryRun } from "../preview-drive-adapter.js";
 
 async function moveDriveFileSafe(drive, fileId, newParentId) {
   try {
@@ -82,6 +83,7 @@ export default async function handler(req, res) {
     if (!courseSlug) {
       return res.status(400).json({ success: false, error: "Thiếu mã khóa học (courseSlug)" });
     }
+    if (await handlePreviewDriveDryRun({ req, res, supabase, adminEmail: adminSession.email, courseSlug, action: "repair" })) return;
     if (isLmsAdminMultiSiteEnabled()) {
       await assertCourseInLearningSite(supabase, courseSlug, requestLearningSite(req), { canonicalOnly: true });
     }

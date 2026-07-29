@@ -3,6 +3,7 @@ import { getAdminFromRequest, getGoogleDriveClient, resolveCourseFolderTree, sav
 import { supabase } from "../supabase.js";
 import { applyCors } from "../cors.js";
 import { assertCourseInLearningSite, isLmsAdminMultiSiteEnabled, learningSiteErrorResponse, requestLearningSite } from "../learning-site.js";
+import { handlePreviewDriveDryRun } from "../preview-drive-adapter.js";
 
 const MAX_MATERIAL_BYTES = 50 * 1024 * 1024;
 
@@ -82,6 +83,7 @@ export default async function handler(req, res) {
     if (!courseSlug) {
       return res.status(400).json({ success: false, error: "Thieu slug khoa hoc (course_slug)" });
     }
+    if (await handlePreviewDriveDryRun({ req, res, supabase, adminEmail: adminSession.email, courseSlug, action: "upload_material" })) return;
     if (isLmsAdminMultiSiteEnabled()) {
       await assertCourseInLearningSite(supabase, courseSlug, requestLearningSite(req), { canonicalOnly: true });
     }
