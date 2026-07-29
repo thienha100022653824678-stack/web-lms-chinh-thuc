@@ -38,9 +38,11 @@ for (const [browserName, launcher] of Object.entries(browsers)) {
       const page = await context.newPage();
       const errors = [];
       page.on("pageerror", (error) => errors.push(error.message));
-      await page.goto(`${baseURL}/lms-admin.html?site=yeunauan&course=preview-yeunauan-course-a`, { waitUntil: "networkidle" });
+      await page.goto(`${baseURL}/lms-admin.html?site=yeunauan&course=preview-yeunauan-course-a`, { waitUntil: "domcontentloaded" });
       await page.waitForFunction(() => !document.getElementById("learningSiteSelector")?.classList.contains("hidden"));
-      await page.waitForFunction(() => document.body.innerText.includes("preview-yeunauan-course-a"));
+      await page.waitForFunction(() =>
+        document.getElementById("courseSelect")?.value === "preview-yeunauan-course-a"
+      );
       const selectorText = await page.locator("#learningSiteSelector").innerText();
       if (!selectorText.includes("shop.yeunauan.live") || !selectorText.includes("yeubep.shop")) {
         throw new Error(`${browserName}/${viewportName}:selector-labels`);
@@ -54,7 +56,9 @@ for (const [browserName, launcher] of Object.entries(browsers)) {
         throw new Error(`${browserName}/${viewportName}:keyboard-focus`);
       }
       await page.locator("#learningSiteBtn-yeubep").click();
-      await page.waitForFunction(() => document.body.innerText.includes("preview-yeubep-course-a"));
+      await page.waitForFunction(() =>
+        typeof STATE !== "undefined" && STATE.courses.includes("preview-yeubep-course-a")
+      );
       if (await page.locator("#courseSelect").inputValue()) throw new Error(`${browserName}/${viewportName}:course-not-cleared`);
       if (await page.evaluate(() => localStorage.getItem("lmsAdminLearningSite")) !== "yeubep") {
         throw new Error(`${browserName}/${viewportName}:storage`);
@@ -87,14 +91,16 @@ await context.request.post(`${baseURL}/api/lms/admin?endpoint=preview-auth`, {
   headers: { "x-lms-preview-harness-secret": harness }
 });
 const page = await context.newPage();
-await page.goto(`${baseURL}/lms-admin.html?site=yeunauan&course=preview-legacy-canonical`, { waitUntil: "networkidle" });
+await page.goto(`${baseURL}/lms-admin.html?site=yeunauan&course=preview-legacy-canonical`, { waitUntil: "domcontentloaded" });
 await page.waitForFunction(() => !document.getElementById("learningSiteSelector")?.classList.contains("hidden"));
 await page.screenshot({ path: path.join(output, "01-yeubep-shop.png"), fullPage: true });
 await page.locator("#legacySharedNotice").screenshot({ path: path.join(output, "03-legacy-shared-warning.png") });
 await page.locator("#tabBtn-students").click();
 await page.screenshot({ path: path.join(output, "05-global-tab-badge.png"), fullPage: true });
 await page.locator("#learningSiteBtn-yeubep").click();
-await page.waitForFunction(() => document.body.innerText.includes("preview-yeubep-course-a"));
+await page.waitForFunction(() =>
+  typeof STATE !== "undefined" && STATE.courses.includes("preview-yeubep-course-a")
+);
 await page.screenshot({ path: path.join(output, "02-shop-yeunauan-live.png"), fullPage: true });
 
 // UI-only empty-state rendering; API scope evidence remains covered separately by hosted HTTP tests.
@@ -105,7 +111,7 @@ await page.route("**/api/lms/admin?endpoint=courses", async (route) => {
     body: JSON.stringify({ success: true, courses: [], config: {}, multiSiteEnabled: true, legacySharedMappings: [] })
   });
 });
-await page.reload({ waitUntil: "networkidle" });
+await page.reload({ waitUntil: "domcontentloaded" });
 await page.waitForTimeout(300);
 await page.screenshot({ path: path.join(output, "04-empty-state-ui-only.png"), fullPage: true });
 await context.close();
