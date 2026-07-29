@@ -26,3 +26,7 @@ Unresolved mappings: **0**. Duplicate slugs: **0**. Required backfill: **0**.
 No backfill was executed. The known cross-site alias is deterministic,
 compatible and read-only. An optional explicit backfill is outside this
 manifest and requires separate owner approval.
+
+The JSON companion includes hashed course IDs plus per-course lesson, canonical
+order and canonical enrollment counts. No email, customer or payment field was
+selected.
