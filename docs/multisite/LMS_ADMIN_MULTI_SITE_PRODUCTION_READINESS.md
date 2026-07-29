@@ -41,6 +41,11 @@ read-only cross-site compatibility mapping. No backfill is required.
 
 See `evidence/PRODUCTION_LEARNING_SITE_DRY_RUN.md` and `.json`.
 
+The REST-safe preflight cannot expose live `pg_extension`/`pg_catalog`; the last
+full read-only public-schema snapshot supplies the existing uniqueness contract,
+and P1 mandates a fresh schema-only/extension inventory before any authorized
+migration. See `evidence/PRODUCTION_READ_ONLY_PREFLIGHT.md`.
+
 ## Proposed schema delta
 
 Forward `migrations/20260729_lms_learning_site.sql` adds only:
