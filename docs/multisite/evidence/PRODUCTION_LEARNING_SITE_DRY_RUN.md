@@ -1,8 +1,10 @@
 # Production Learning Site Dry-Run
 
-Generated: 2026-07-29T09:16:43.232Z  
-Mode: Production REST read-only, non-PII  
-Production ref: `aqozjkfwzmyfunqvcyjv`  
+Generated: 2026-07-29T09:16:43.232Z
+
+Mode: Production REST read-only, non-PII
+
+Production ref: `aqozjkfwzmyfunqvcyjv`
 OpenAPI schema SHA-256: `15d368bfdb9d5dab4a26d53220fcb4599e7a3f129984799402283dae90216b7a`
 
 Counts: courses 9, orders 30, enrollments 22, lessons 39, site_config 79.

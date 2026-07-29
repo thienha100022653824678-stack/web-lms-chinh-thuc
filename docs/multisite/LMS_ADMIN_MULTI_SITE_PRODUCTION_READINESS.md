@@ -1,7 +1,8 @@
 # LMS Admin Multi-Site — Production Readiness
 
-Date: 2026-07-29  
-Decision: **READY FOR OWNER-APPROVED PRODUCTION CANARY**  
+Date: 2026-07-29
+
+Decision: **READY FOR OWNER-APPROVED PRODUCTION CANARY**
 Authorization: none. Production execution remains prohibited.
 
 ## Exact identity

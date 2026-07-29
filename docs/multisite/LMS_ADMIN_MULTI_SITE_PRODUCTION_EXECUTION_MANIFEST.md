@@ -2,8 +2,9 @@ STATUS: NOT AUTHORIZED FOR EXECUTION
 
 # LMS Admin Multi-Site — Production Execution Manifest
 
-Owner approval ID/time: `________________`  
-Execution window: `________________`  
+Owner approval ID/time: `________________`
+
+Execution window: `________________`
 Operators: `________________`
 
 ## Exact source and projects

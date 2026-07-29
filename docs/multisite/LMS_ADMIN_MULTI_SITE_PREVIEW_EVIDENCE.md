@@ -1,6 +1,6 @@
 # LMS Admin Multi-Site — Protected Preview Evidence
 
-Date: 2026-07-29  
+Date: 2026-07-29
 Status: complete.
 
 | Evidence | Exact result |

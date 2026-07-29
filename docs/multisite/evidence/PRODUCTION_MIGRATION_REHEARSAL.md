@@ -1,6 +1,6 @@
 # Production Migration Rehearsal
 
-Date: 2026-07-29  
+Date: 2026-07-29
 Target: sanitized B05-compatible schema on Supabase Preview
 `plgrmaktvudjetfkwmyg`; Production was not connected or mutated.
 

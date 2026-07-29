@@ -1,6 +1,6 @@
 # LMS Admin Multi-Site Isolation — Implementation Report
 
-Date: 2026-07-29  
+Date: 2026-07-29
 Status: **READY FOR OWNER-APPROVED PRODUCTION CANARY; not authorized**
 
 ## Exact source and Preview
