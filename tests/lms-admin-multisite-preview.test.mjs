@@ -66,3 +66,11 @@ test("Preview auth route is 404/fail-closed outside Preview and fixed identity o
   assert.match(handler, /route_not_found/);
   assert.match(router, /endpoint === "preview-auth"/);
 });
+
+test("Progress admin handler validates canonical course/lesson and verifies persisted row", () => {
+  const source = fs.readFileSync(new URL("../utils/lms-handlers/admin-progress.js", import.meta.url), "utf8");
+  assert.match(source, /assertCourseInLearningSite/);
+  assert.match(source, /lesson\.course_slug !== current\.course_slug/);
+  assert.match(source, /Progress read-after-write verification failed/);
+  assert.match(source, /lms_multisite_progress_update/);
+});

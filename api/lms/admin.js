@@ -19,6 +19,7 @@ import adminStudentTraceHandler from "../../utils/lms-handlers/admin-student-tra
 import adminAccountSharingAlertsHandler from "../../utils/lms-handlers/admin-account-sharing-alerts.js";
 import adminRuntimeModeHandler from "../../utils/lms-handlers/admin-runtime-mode.js";
 import adminPreviewAuthHandler from "../../utils/lms-handlers/admin-preview-auth.js";
+import adminProgressHandler from "../../utils/lms-handlers/admin-progress.js";
 import { warmRuntimeConfig } from "../../utils/v2-runtime-controller.js";
 
 export const config = {
@@ -69,6 +70,9 @@ export default async function handler(req, res) {
   }
   if (endpoint === "enrollments") {
     return adminEnrollmentsHandler(req, res);
+  }
+  if (endpoint === "progress") {
+    return adminProgressHandler(req, res);
   }
   if (endpoint === "upload-image") {
     return adminUploadImageHandler(req, res);

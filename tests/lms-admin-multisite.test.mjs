@@ -72,6 +72,7 @@ test("course-dependent handlers enforce server-side scope", () => {
     "admin-courses.js",
     "admin-lessons.js",
     "admin-enrollments.js",
+    "admin-progress.js",
     "admin-bulk-enroll.js",
     "admin-drive-permission.js",
     "admin-drive-retry.js",
