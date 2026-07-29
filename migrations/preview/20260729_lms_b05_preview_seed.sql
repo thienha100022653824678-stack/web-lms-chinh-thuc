@@ -9,6 +9,44 @@ BEGIN
 END
 $guard$;
 
+-- Reset only the exact synthetic LMS B05 fixture namespace. This makes a
+-- rehearsal reproducible after hosted write/IDOR tests while preserving every
+-- pre-existing V5 row and every lms_v5_* object.
+DELETE FROM public.admin_audit_logs;
+DELETE FROM public.drive_permission_logs;
+DELETE FROM public.drive_sync_queue;
+DELETE FROM public.lesson_progress
+WHERE course_slug IN (
+  'preview-yeunauan-course-a','preview-yeunauan-course-b',
+  'preview-yeubep-course-a','preview-yeubep-course-b',
+  'preview-legacy-canonical','preview-legacy-shared-alias'
+);
+DELETE FROM public.student_enrollments
+WHERE course_slug IN (
+  'preview-yeunauan-course-a','preview-yeunauan-course-b',
+  'preview-yeubep-course-a','preview-yeubep-course-b',
+  'preview-legacy-canonical','preview-legacy-shared-alias'
+);
+DELETE FROM public.lessons
+WHERE course_slug IN (
+  'preview-yeunauan-course-a','preview-yeunauan-course-b',
+  'preview-yeubep-course-a','preview-yeubep-course-b',
+  'preview-legacy-canonical','preview-legacy-shared-alias'
+);
+DELETE FROM public.site_config WHERE key LIKE 'preview-%';
+DELETE FROM public.students
+WHERE email IN (
+  'student-a.yeunauan@example.test','student-b.yeubep@example.test',
+  'student-no-enrollment@example.test','student-revoked@example.test',
+  'student-shared@example.test'
+);
+DELETE FROM public.courses
+WHERE slug IN (
+  'preview-yeunauan-course-a','preview-yeunauan-course-b',
+  'preview-yeubep-course-a','preview-yeubep-course-b',
+  'preview-legacy-canonical','preview-legacy-shared-alias'
+);
+
 INSERT INTO public.courses(id,slug,title,subtitle,active,is_published,sort_order,sales_site,learning_course_slug,learning_site,drive_folder_id,raw_data)
 VALUES
 ('41000000-0000-4000-8000-000000000001','preview-yeunauan-course-a','Preview cùng tên','Site yeunauan A',true,true,1,'yeunauan',NULL,'yeunauan','preview-folder-ya','{"studentDisplayTitle":"Bếp Preview A"}'),
