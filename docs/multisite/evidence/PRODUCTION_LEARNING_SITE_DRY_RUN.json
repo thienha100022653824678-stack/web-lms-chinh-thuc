@@ -1,0 +1,29 @@
+{
+  "generated_at": "2026-07-29T09:16:43.232Z",
+  "dry_run": true,
+  "production_ref": "aqozjkfwzmyfunqvcyjv",
+  "pii_selected": false,
+  "schema_openapi_sha256": "15d368bfdb9d5dab4a26d53220fcb4599e7a3f129984799402283dae90216b7a",
+  "learning_site_column_present": false,
+  "counts": {
+    "courses": 9,
+    "orders": 30,
+    "student_enrollments": 22,
+    "lessons": 39,
+    "site_config": 79
+  },
+  "duplicate_slugs": [],
+  "unresolved_count": 0,
+  "legacy_alias_count": 1,
+  "rows": [
+    {"course":"banhmi4k","sales_site":null,"canonical_target":"banhmi4k","proposed_learning_site":"yeunauan","reason":"legacy_null_yeunauan_fallback","explicit_write_required":"no","warning":""},
+    {"course":"banhmicamsicula","sales_site":null,"canonical_target":"banhmicamsicula","proposed_learning_site":"yeunauan","reason":"legacy_null_yeunauan_fallback","explicit_write_required":"no","warning":""},
+    {"course":"bonglancuonnhatban","sales_site":null,"canonical_target":"bonglancuonnhatban","proposed_learning_site":"yeunauan","reason":"legacy_null_yeunauan_fallback","explicit_write_required":"no","warning":""},
+    {"course":"heomoixaolan","sales_site":null,"canonical_target":"heomoixaolan","proposed_learning_site":"yeunauan","reason":"legacy_null_yeunauan_fallback","explicit_write_required":"no","warning":""},
+    {"course":"nguyencammongtimHT","sales_site":null,"canonical_target":"nguyencammongtimHT","proposed_learning_site":"yeunauan","reason":"legacy_null_yeunauan_fallback","explicit_write_required":"no","warning":""},
+    {"course":"puddingnama","sales_site":null,"canonical_target":"puddingnama","proposed_learning_site":"yeunauan","reason":"legacy_null_yeunauan_fallback","explicit_write_required":"no","warning":""},
+    {"course":"thitkhomamtep","sales_site":"yeubep","canonical_target":"thitkhomamtep","proposed_learning_site":"yeubep","reason":"self_target_sales_site_fallback","explicit_write_required":"no","warning":""},
+    {"course":"thitxiennuongchaungoc","sales_site":null,"canonical_target":"thitxiennuongchaungoc","proposed_learning_site":"yeunauan","reason":"legacy_null_yeunauan_fallback","explicit_write_required":"no","warning":""},
+    {"course":"thitxiennuongchaungoc-yeubep","sales_site":"yeubep","canonical_target":"thitxiennuongchaungoc","proposed_learning_site":"yeunauan","reason":"canonical_target_owner","explicit_write_required":"no","warning":"LEGACY_CROSS_SITE_SHARED_MAPPING"}
+  ]
+}

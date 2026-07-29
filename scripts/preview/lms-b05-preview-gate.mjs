@@ -180,6 +180,32 @@ async function seedEvidence(client) {
   return { counts, checksum: stableChecksum({ rows, lessons, enrollments }) };
 }
 
+async function migrationContract(client) {
+  const column = (await client.query(`
+    select data_type,is_nullable
+    from information_schema.columns
+    where table_schema='public' and table_name='courses' and column_name='learning_site'
+  `)).rows[0] || null;
+  const constraints = (await client.query(`
+    select conname,pg_get_constraintdef(oid) definition
+    from pg_constraint
+    where conrelid='public.courses'::regclass
+      and conname in ('courses_learning_site_check','courses_slug_key')
+    order by conname
+  `)).rows;
+  const indexes = (await client.query(`
+    select indexname,indexdef from pg_indexes
+    where schemaname='public' and tablename='courses'
+    order by indexname
+  `)).rows;
+  const enrollmentUnique = (await client.query(`
+    select count(*)::int count from pg_constraint
+    where conrelid='public.student_enrollments'::regclass
+      and contype='u' and pg_get_constraintdef(oid) like '%(email, course_slug)%'
+  `)).rows[0].count;
+  return { column, constraints, indexes, enrollmentUnique };
+}
+
 const env = loadEnv(resolveEnvFile());
 const client = new pg.Client(connectionConfig(env));
 try {
@@ -193,16 +219,26 @@ try {
       v5Checksum: before.v5Checksum, exactCounts: before.exactCounts
     }));
   } else if (command === "rehearse") {
+    await client.query(`set lock_timeout='5s'; set statement_timeout='30s'`);
     const before = await snapshot(client, `rehearsal-before-${Date.now()}`);
     await assertSyntheticOnly(client, before);
     const beforeV5 = before.v5Checksum;
     await setGuard(client);
     await applySql(client, "migrations/preview/20260729_lms_b05_preview_substrate.sql");
+    const migrationStarted = performance.now();
     await applySql(client, "migrations/20260729_lms_learning_site.sql");
+    const migrationDurationMs = Number((performance.now() - migrationStarted).toFixed(3));
     await applySql(client, "migrations/preview/20260729_lms_b05_preview_seed.sql");
     const firstSeed = await seedEvidence(client);
+    const firstContract = await migrationContract(client);
+    const idempotentStarted = performance.now();
+    await applySql(client, "migrations/20260729_lms_learning_site.sql");
+    const idempotentDurationMs = Number((performance.now() - idempotentStarted).toFixed(3));
+    const idempotentContract = await migrationContract(client);
     const first = await snapshot(client, `rehearsal-first-forward-${Date.now()}`);
+    const rollbackStarted = performance.now();
     await applySql(client, "migrations/20260729_lms_learning_site_rollback.sql");
+    const rollbackDurationMs = Number((performance.now() - rollbackStarted).toFixed(3));
     await applySql(client, "migrations/preview/20260729_lms_b05_preview_substrate_rollback.sql");
     const rolledBack = await snapshot(client, `rehearsal-rollback-${Date.now()}`);
     if (rolledBack.v5Checksum !== beforeV5) throw new Error("V5_CHECKSUM_CHANGED_AFTER_ROLLBACK");
@@ -211,7 +247,9 @@ try {
     }
     await setGuard(client);
     await applySql(client, "migrations/preview/20260729_lms_b05_preview_substrate.sql");
+    const reapplyStarted = performance.now();
     await applySql(client, "migrations/20260729_lms_learning_site.sql");
+    const reapplyDurationMs = Number((performance.now() - reapplyStarted).toFixed(3));
     await applySql(client, "migrations/preview/20260729_lms_b05_preview_seed.sql");
     const secondSeed = await seedEvidence(client);
     if (firstSeed.checksum !== secondSeed.checksum) throw new Error("SEED_CHECKSUM_NOT_REPRODUCIBLE");
@@ -221,7 +259,17 @@ try {
       ok: true, previewRef: EXPECTED_REF, beforeCatalogChecksum: before.catalogChecksum,
       v5Checksum: beforeV5, rollbackCatalogChecksum: rolledBack.catalogChecksum,
       finalCatalogChecksum: final.catalogChecksum, seedChecksum: secondSeed.checksum,
-      counts: secondSeed.counts
+      counts: secondSeed.counts,
+      timeouts: { lock_timeout: "5s", statement_timeout: "30s" },
+      durations_ms: {
+        migration: migrationDurationMs,
+        idempotent_second_apply: idempotentDurationMs,
+        rollback: rollbackDurationMs,
+        reapply: reapplyDurationMs
+      },
+      contract: firstContract,
+      idempotent_contract_unchanged:
+        stableChecksum(firstContract) === stableChecksum(idempotentContract)
     }));
   } else if (command === "snapshot") {
     const result = await snapshot(client, `snapshot-${Date.now()}`);
