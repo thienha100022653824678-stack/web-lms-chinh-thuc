@@ -74,3 +74,13 @@ test("Progress admin handler validates canonical course/lesson and verifies pers
   assert.match(source, /Progress read-after-write verification failed/);
   assert.match(source, /lms_multisite_progress_update/);
 });
+
+test("Admin cookie restore runs before Google config so isolated Preview needs no Google secret", () => {
+  const html = fs.readFileSync(new URL("../lms-admin.html", import.meta.url), "utf8");
+  const saved = html.indexOf("if (savedToken)");
+  const config = html.indexOf('fetch("/api/lms/portal?endpoint=public-config")');
+  assert.ok(saved > 0 && config > saved);
+  assert.match(html.slice(saved, config), /loadAdminSession/);
+  assert.match(html, /Preview harness cookies are[\s\S]+HttpOnly/);
+  assert.match(html, /body: "\{\}"/);
+});

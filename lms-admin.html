@@ -4185,25 +4185,38 @@
         return null;
       };
       const savedToken = getCookie("admin_session_token");
+
+      // A valid HttpOnly Preview/admin cookie must be verified server-side before
+      // loading Google configuration. This keeps the session restore contract
+      // usable without installing Google credentials in an isolated Preview.
+      if (savedToken) {
+        loadAdminSession({ sessionToken: savedToken });
+        return;
+      }
       
-      fetch("/api/lms/portal?endpoint=public-config").then(res => res.json()).then(async config => {
+      // Try the server-side cookie as well; Preview harness cookies are
+      // intentionally HttpOnly and therefore invisible to document.cookie.
+      fetch("/api/lms/admin?endpoint=auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}"
+      }).then(async restoreResponse => {
+        const restored = await restoreResponse.json();
+        if (restoreResponse.ok && restored.success && restored.sessionToken) {
+          await loadAdminSession({ sessionToken: restored.sessionToken });
+          return;
+        }
+        const configResponse = await fetch("/api/lms/portal?endpoint=public-config");
+        const config = await configResponse.json();
         googleClientId = config.googleClientId;
         if (!googleClientId) {
           document.getElementById("loginStatusMsg").innerHTML = `Lỗi: Chưa thiết lập biến môi trường <b>GOOGLE_CLIENT_ID</b>`;
           return;
         }
-
-        if (savedToken) {
-          await loadAdminSession({ sessionToken: savedToken });
-          return;
-        }
-
-        // Render Google Sign-in button
         google.accounts.id.initialize({
           client_id: googleClientId,
           callback: (response) => loadAdminSession({ credential: response.credential })
         });
-
         google.accounts.id.renderButton(
           document.getElementById("googleSignInBtn"),
           { theme: "outline", size: "large", text: "signin_with", shape: "pill" }
