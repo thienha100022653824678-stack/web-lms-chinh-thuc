@@ -27,6 +27,17 @@ DELETE FROM public.site_config WHERE key LIKE 'preview-%';
 DELETE FROM public.lessons WHERE course_slug LIKE 'preview-%';
 DELETE FROM public.courses WHERE slug LIKE 'preview-%';
 
+DO $constraints$
+DECLARE v_constraint text;
+BEGIN
+  FOR v_constraint IN
+    SELECT object_name FROM public.lms_b05_preview_substrate_manifest WHERE object_kind='constraint'
+  LOOP
+    EXECUTE format('ALTER TABLE public.student_enrollments DROP CONSTRAINT IF EXISTS %I', v_constraint);
+  END LOOP;
+END
+$constraints$;
+
 DO $columns$
 DECLARE v_col text;
 BEGIN

@@ -68,6 +68,8 @@ CREATE TABLE IF NOT EXISTS public.lessons (
   document_url text,
   photo_url text,
   thumbnail_url text,
+  duration_text text,
+  level text,
   media_urls text,
   active boolean DEFAULT true,
   status text DEFAULT 'active',
@@ -82,6 +84,9 @@ CREATE TABLE IF NOT EXISTS public.lessons (
   updated_at timestamptz DEFAULT now(),
   UNIQUE(course_slug, lesson_no)
 );
+
+ALTER TABLE public.lessons ADD COLUMN IF NOT EXISTS duration_text text;
+ALTER TABLE public.lessons ADD COLUMN IF NOT EXISTS level text;
 
 CREATE TABLE IF NOT EXISTS public.site_config (
   key text PRIMARY KEY,
@@ -203,6 +208,33 @@ BEGIN
   END LOOP;
 END
 $enrollment_columns$;
+
+DO $enrollment_constraints$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname='lms_b05_preview_student_enrollments_student_fkey'
+      AND conrelid='public.student_enrollments'::regclass
+  ) THEN
+    ALTER TABLE public.student_enrollments
+      ADD CONSTRAINT lms_b05_preview_student_enrollments_student_fkey
+      FOREIGN KEY(student_id) REFERENCES public.students(id) ON DELETE CASCADE;
+    INSERT INTO public.lms_b05_preview_substrate_manifest(object_kind,object_name)
+    VALUES ('constraint','lms_b05_preview_student_enrollments_student_fkey') ON CONFLICT DO NOTHING;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname='lms_b05_preview_student_enrollments_course_fkey'
+      AND conrelid='public.student_enrollments'::regclass
+  ) THEN
+    ALTER TABLE public.student_enrollments
+      ADD CONSTRAINT lms_b05_preview_student_enrollments_course_fkey
+      FOREIGN KEY(course_id) REFERENCES public.courses(id) ON DELETE CASCADE;
+    INSERT INTO public.lms_b05_preview_substrate_manifest(object_kind,object_name)
+    VALUES ('constraint','lms_b05_preview_student_enrollments_course_fkey') ON CONFLICT DO NOTHING;
+  END IF;
+END
+$enrollment_constraints$;
 
 CREATE INDEX IF NOT EXISTS idx_courses_slug ON public.courses(slug);
 CREATE INDEX IF NOT EXISTS idx_lessons_course_slug ON public.lessons(course_slug);
