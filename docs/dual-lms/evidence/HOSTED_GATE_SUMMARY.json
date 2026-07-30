@@ -1,0 +1,34 @@
+{
+  "captured": "2026-07-30",
+  "lms": {
+    "deployment": "dpl_EJzbhs29UDcquWYantGm9ZUN49Dm",
+    "source": "044519300131745bf0e99a98ff152dd2c8afcc92",
+    "catalogs": {
+      "yeunauan": 3,
+      "yeubep": 2
+    },
+    "idor_rejections": 4,
+    "drive_dry_run_actions": 9,
+    "mixed_batch": "MIXED_LMS_BATCH_FORBIDDEN"
+  },
+  "commerce": [
+    {
+      "deployment": "dpl_EsjG25a7ieikyePWEr2LpRVaMDKi",
+      "storefront": "shop.yeunauan.live",
+      "tenant": "yeunauan",
+      "self_target": "passed",
+      "forged_target": "CROSS_LMS_TARGET_FORBIDDEN",
+      "duplicate": "COURSE_SLUG_CONFLICT"
+    },
+    {
+      "deployment": "dpl_YkqFJF3HZt4DzNAGoS6jHzkLNDqK",
+      "storefront": "yeubep.shop",
+      "tenant": "yeubep",
+      "self_target": "passed",
+      "forged_target": "CROSS_LMS_TARGET_FORBIDDEN",
+      "duplicate": "COURSE_SLUG_CONFLICT"
+    }
+  ],
+  "contains_pii_or_secret": false,
+  "production_mutation": false
+}

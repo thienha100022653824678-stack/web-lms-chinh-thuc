@@ -1,0 +1,37 @@
+{
+  "cases": [
+    {
+      "storefront": "shop.yeunauan.live",
+      "tenant": "yeunauan",
+      "selected": "yeunauan",
+      "oppositeDisabled": true,
+      "options": [
+        {
+          "value": "",
+          "text": "Dùng chính khóa học này"
+        },
+        {
+          "value": "thitxiennuongchaungoc",
+          "text": "thitxiennuongchaungoc — 4 bài học"
+        }
+      ]
+    },
+    {
+      "storefront": "yeubep.shop",
+      "tenant": "yeubep",
+      "selected": "yeubep",
+      "oppositeDisabled": true,
+      "options": [
+        {
+          "value": "",
+          "text": "Dùng chính khóa học này"
+        }
+      ]
+    }
+  ],
+  "rejection": {
+    "storefront": "shop.yeunauan.live",
+    "status": 409,
+    "code": "CROSS_LMS_TARGET_FORBIDDEN"
+  }
+}

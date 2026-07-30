@@ -1,0 +1,97 @@
+{
+  "deployment": "https://web-lms-chinh-thuc-g24eydt80.vercel.app",
+  "cases": [
+    {
+      "browser": "chromium",
+      "viewport": "desktop",
+      "passed": true,
+      "appErrors": [],
+      "platformWarnings": []
+    },
+    {
+      "browser": "chromium",
+      "viewport": "iphone",
+      "passed": true,
+      "appErrors": [],
+      "platformWarnings": []
+    },
+    {
+      "browser": "chromium",
+      "viewport": "android",
+      "passed": true,
+      "appErrors": [],
+      "platformWarnings": []
+    },
+    {
+      "browser": "chromium",
+      "viewport": "tablet",
+      "passed": true,
+      "appErrors": [],
+      "platformWarnings": []
+    },
+    {
+      "browser": "firefox",
+      "viewport": "desktop",
+      "passed": true,
+      "appErrors": [],
+      "platformWarnings": []
+    },
+    {
+      "browser": "firefox",
+      "viewport": "iphone",
+      "passed": true,
+      "appErrors": [],
+      "platformWarnings": []
+    },
+    {
+      "browser": "firefox",
+      "viewport": "android",
+      "passed": true,
+      "appErrors": [],
+      "platformWarnings": []
+    },
+    {
+      "browser": "firefox",
+      "viewport": "tablet",
+      "passed": true,
+      "appErrors": [],
+      "platformWarnings": []
+    },
+    {
+      "browser": "webkit",
+      "viewport": "desktop",
+      "passed": true,
+      "appErrors": [],
+      "platformWarnings": [
+        "TypeError: undefined is not an object (evaluating 'navigator.storage.persisted')"
+      ]
+    },
+    {
+      "browser": "webkit",
+      "viewport": "iphone",
+      "passed": true,
+      "appErrors": [],
+      "platformWarnings": [
+        "TypeError: undefined is not an object (evaluating 'navigator.storage.persisted')"
+      ]
+    },
+    {
+      "browser": "webkit",
+      "viewport": "android",
+      "passed": true,
+      "appErrors": [],
+      "platformWarnings": [
+        "TypeError: undefined is not an object (evaluating 'navigator.storage.persisted')"
+      ]
+    },
+    {
+      "browser": "webkit",
+      "viewport": "tablet",
+      "passed": true,
+      "appErrors": [],
+      "platformWarnings": [
+        "TypeError: undefined is not an object (evaluating 'navigator.storage.persisted')"
+      ]
+    }
+  ]
+}

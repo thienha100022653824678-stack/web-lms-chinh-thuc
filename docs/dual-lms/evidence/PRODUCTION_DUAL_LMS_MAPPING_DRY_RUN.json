@@ -1,0 +1,20 @@
+{
+  "captured": "2026-07-30",
+  "dry_run": true,
+  "production_ref": "aqozjkfwzmyfunqvcyjv",
+  "pii_selected": false,
+  "course_count": 8,
+  "unresolved_count": 0,
+  "duplicate_slug_count": 0,
+  "required_backfill_count": 0,
+  "rows": [
+    {"course":"banhmi4k","sales_site":null,"canonical_target":"banhmi4k","proposed_lms_tenant":"yeunauan","reason":"legacy_null_canonical_fallback","explicit_write_required":false,"warning":null},
+    {"course":"banhmicamsicula","sales_site":null,"canonical_target":"banhmicamsicula","proposed_lms_tenant":"yeunauan","reason":"legacy_null_canonical_fallback","explicit_write_required":false,"warning":null},
+    {"course":"bonglancuonnhatban","sales_site":null,"canonical_target":"bonglancuonnhatban","proposed_lms_tenant":"yeunauan","reason":"legacy_null_canonical_fallback","explicit_write_required":false,"warning":null},
+    {"course":"heomoixaolan","sales_site":null,"canonical_target":"heomoixaolan","proposed_lms_tenant":"yeunauan","reason":"legacy_null_canonical_fallback","explicit_write_required":false,"warning":null},
+    {"course":"nguyencammongtimHT","sales_site":null,"canonical_target":"nguyencammongtimHT","proposed_lms_tenant":"yeunauan","reason":"legacy_null_canonical_fallback","explicit_write_required":false,"warning":null},
+    {"course":"puddingnama","sales_site":null,"canonical_target":"puddingnama","proposed_lms_tenant":"yeunauan","reason":"legacy_null_canonical_fallback","explicit_write_required":false,"warning":null},
+    {"course":"thitxiennuongchaungoc","sales_site":null,"canonical_target":"thitxiennuongchaungoc","proposed_lms_tenant":"yeunauan","reason":"legacy_null_canonical_fallback","explicit_write_required":false,"warning":null},
+    {"course":"thitxiennuongchaungoc-yeubep","sales_site":"yeubep","canonical_target":"thitxiennuongchaungoc","proposed_lms_tenant":"yeunauan","reason":"canonical_target_owner","explicit_write_required":false,"warning":"LEGACY_CROSS_LMS_SHARED_MAPPING"}
+  ]
+}
