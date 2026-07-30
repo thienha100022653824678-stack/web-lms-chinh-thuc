@@ -1,6 +1,15 @@
 import { getAdminFromRequest, getGoogleDriveClient, getCourseFolderIdOrDiscover, addDriveFolderPermissionDirect, removeDriveFolderPermissionDirect } from "../lms.js";
 import { supabase } from "../supabase.js";
 import { applyCors } from "../cors.js";
+import {
+  assertCourseInLmsTenant,
+  auditLmsTenantOperation,
+  isLmsDualSystemEnabled,
+  lmsTenantErrorResponse,
+  listCanonicalCoursesForTenant,
+  requestLmsTenant
+} from "../lms-tenant.js";
+import { handlePreviewDriveDryRun } from "../preview-drive-adapter.js";
 
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { mode: "admin" });
@@ -18,6 +27,9 @@ export default async function handler(req, res) {
     }
 
     const { courseSlug } = req.body || {};
+    const multiSiteEnabled = isLmsDualSystemEnabled();
+    const requestedSite = multiSiteEnabled ? requestLmsTenant(req) : null;
+    if (await handlePreviewDriveDryRun({ req, res, supabase, adminEmail: adminSession.email, courseSlug, action: "sync_permissions" })) return;
 
     let driveClientInfo;
     try {
@@ -36,6 +48,9 @@ export default async function handler(req, res) {
     // Get list of courses to sync
     let coursesToSync = [];
     if (courseSlug) {
+      if (multiSiteEnabled) {
+        await assertCourseInLmsTenant(supabase, courseSlug, requestedSite, { canonicalOnly: true });
+      }
       const { data: course } = await supabase
         .from("courses")
         .select("slug, title")
@@ -47,11 +62,17 @@ export default async function handler(req, res) {
       }
       coursesToSync.push(course);
     } else {
-      const { data: courses } = await supabase
-        .from("courses")
-        .select("slug, title")
-        .eq("active", true);
-      coursesToSync = courses || [];
+      if (multiSiteEnabled) {
+        coursesToSync = (await listCanonicalCoursesForTenant(supabase, requestedSite))
+          .filter((course) => course.active)
+          .map(({ slug, title }) => ({ slug, title }));
+      } else {
+        const { data: courses } = await supabase
+          .from("courses")
+          .select("slug, title")
+          .eq("active", true);
+        coursesToSync = courses || [];
+      }
     }
 
     for (const course of coursesToSync) {
@@ -147,6 +168,18 @@ export default async function handler(req, res) {
         errors.push({ course: slug, error: courseErr.message });
       }
     }
+    if (multiSiteEnabled) {
+      for (const course of coursesToSync) {
+        await auditLmsTenantOperation(supabase, {
+          adminEmail: adminSession.email,
+          action: "lms_dual_drive_sync_permissions",
+          courseSlug: course.slug,
+          selectedTenant: requestedSite,
+          effectiveTenant: requestedSite,
+          metadata: { error_count: errorCount }
+        });
+      }
+    }
 
     return res.status(200).json({
       success: true,
@@ -160,6 +193,7 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
+    if (lmsTenantErrorResponse(res, err)) return;
     console.error("[admin-sync-drive-permissions] Unexpected error:", err);
     return res.status(500).json({
       success: false,

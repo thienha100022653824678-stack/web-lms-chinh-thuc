@@ -2,6 +2,8 @@ import { PassThrough } from "stream";
 import { getAdminFromRequest, getGoogleDriveClient, resolveCourseFolderTree, saveCourseFolderId } from "../lms.js";
 import { supabase } from "../supabase.js";
 import { applyCors } from "../cors.js";
+import { assertCourseInLmsTenant, auditLmsTenantOperation, isLmsDualSystemEnabled, lmsTenantErrorResponse, requestLmsTenant } from "../lms-tenant.js";
+import { handlePreviewDriveDryRun } from "../preview-drive-adapter.js";
 
 const MAX_MATERIAL_BYTES = 50 * 1024 * 1024;
 
@@ -80,6 +82,10 @@ export default async function handler(req, res) {
 
     if (!courseSlug) {
       return res.status(400).json({ success: false, error: "Thieu slug khoa hoc (course_slug)" });
+    }
+    if (await handlePreviewDriveDryRun({ req, res, supabase, adminEmail: adminSession.email, courseSlug, action: "upload_material" })) return;
+    if (isLmsDualSystemEnabled()) {
+      await assertCourseInLmsTenant(supabase, courseSlug, requestLmsTenant(req), { canonicalOnly: true });
     }
 
     if (!fileData || typeof fileData !== "string") {
@@ -177,6 +183,13 @@ export default async function handler(req, res) {
       console.warn("[admin-upload-material] Could not share file publicly:", err.message);
     }
 
+    if (isLmsDualSystemEnabled()) {
+      const tenant = requestLmsTenant(req);
+      await auditLmsTenantOperation(supabase, {
+        adminEmail: adminSession.email, action: "lms_dual_drive_upload_material",
+        courseSlug, selectedTenant: tenant, effectiveTenant: tenant
+      });
+    }
     return res.status(200).json({
       success: true,
       material: {
@@ -190,6 +203,7 @@ export default async function handler(req, res) {
       }
     });
   } catch (err) {
+    if (lmsTenantErrorResponse(res, err)) return;
     console.error("[admin-upload-material] Error:", err);
     return res.status(500).json({
       success: false,

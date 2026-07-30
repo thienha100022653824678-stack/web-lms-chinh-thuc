@@ -10,6 +10,7 @@ import {
 } from "../lms-session-guard.js";
 import { applyCors } from "../cors.js";
 import { isV2GlobalOneDeviceEnabled } from "../v2-flags.js";
+import { isLmsDualSystemEnabled, resolveCourseLmsTenant } from "../lms-tenant.js";
 
 const ACTIVE_ENROLLMENT_STATUSES = new Set([
   "active",
@@ -138,6 +139,9 @@ export default async function handler(req, res) {
     if (!email || !courseSlug || !studentSessionId) {
       return jsonError(res, 401, "Lien ket lop hoc thieu thong tin can thiet.", "invalid_entry_payload");
     }
+    const tenantResolution = isLmsDualSystemEnabled()
+      ? await resolveCourseLmsTenant(supabase, courseSlug)
+      : null;
 
     const { data: studentSession, error: sessionError } = globalThis.__RP2B1_STUDENT_SESSION_STUB__
       ? globalThis.__RP2B1_STUDENT_SESSION_STUB__
@@ -246,6 +250,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       ok: true,
       course_slug: courseSlug,
+      lms_tenant: tenantResolution?.effectiveTenant,
       lms_session_id: lmsSession.lms_session_id
       // RP2-B1: response intentionally omits the LMS device id and any
       // raw `lms_session` row metadata. The LMS client already knows the
@@ -256,13 +261,13 @@ export default async function handler(req, res) {
   } catch (err) {
     // RP2-B1: when the flag is on, fail-closed. Do not log or return
     // the raw DB error. Telemetry stays best-effort elsewhere.
-    if (isV2GlobalOneDeviceEnabled()) {
+    if (isV2GlobalOneDeviceEnabled() || isLmsDualSystemEnabled()) {
       console.error("[verify-entry-token] Flag-on fail-closed path engaged:", err.message);
       return jsonError(
         res,
         503,
         "He thong chua the xac minh phien hoc. Vui long thu lai sau.",
-        "one_device_policy_unavailable"
+        isLmsDualSystemEnabled() ? "UNRESOLVED_LMS_TENANT" : "one_device_policy_unavailable"
       );
     }
     console.error("[verify-entry-token] Unexpected error:", err.message);

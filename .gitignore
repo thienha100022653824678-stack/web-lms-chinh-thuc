@@ -26,5 +26,6 @@ review-dossier-*/
 .omc/
 docs/.omc/
 backups/
+_local_artifacts/
 # Microsoft Word lock file (transient)
 ~$*.docx

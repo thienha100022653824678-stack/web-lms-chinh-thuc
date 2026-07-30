@@ -1,6 +1,8 @@
 import { getAdminFromRequest, getGoogleDriveClient, resolveCourseFolderTree, saveCourseFolderId, getDriveFileId, getCourseFolderIdOrDiscover } from "../lms.js";
 import { supabase } from "../supabase.js";
 import { applyCors } from "../cors.js";
+import { assertCourseInLmsTenant, auditLmsTenantOperation, isLmsDualSystemEnabled, lmsTenantErrorResponse, requestLmsTenant } from "../lms-tenant.js";
+import { handlePreviewDriveDryRun } from "../preview-drive-adapter.js";
 
 async function moveDriveFileSafe(drive, fileId, newParentId) {
   try {
@@ -80,6 +82,10 @@ export default async function handler(req, res) {
 
     if (!courseSlug) {
       return res.status(400).json({ success: false, error: "Thiếu mã khóa học (courseSlug)" });
+    }
+    if (await handlePreviewDriveDryRun({ req, res, supabase, adminEmail: adminSession.email, courseSlug, action: "repair" })) return;
+    if (isLmsDualSystemEnabled()) {
+      await assertCourseInLmsTenant(supabase, courseSlug, requestLmsTenant(req), { canonicalOnly: true });
     }
 
     let drive;
@@ -288,6 +294,14 @@ export default async function handler(req, res) {
       syncError = e.message;
     }
 
+    if (isLmsDualSystemEnabled()) {
+      const tenant = requestLmsTenant(req);
+      await auditLmsTenantOperation(supabase, {
+        adminEmail: adminSession.email, action: "lms_dual_drive_repair",
+        courseSlug, selectedTenant: tenant, effectiveTenant: tenant,
+        metadata: { moved_count: movedCount, error_count: errorCount }
+      });
+    }
     return res.status(200).json({
       success: true,
       report: {
@@ -301,6 +315,7 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
+    if (lmsTenantErrorResponse(res, err)) return;
     console.error("[admin-repair-drive] Unexpected error:", err);
     return res.status(500).json({
       success: false,

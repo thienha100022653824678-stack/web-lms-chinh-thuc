@@ -1,6 +1,8 @@
 import { supabase } from "../supabase.js";
 import { getAdminFromRequest, getGoogleDriveClient } from "../lms.js";
 import { applyCors } from "../cors.js";
+import { assertCourseInLmsTenant, auditLmsTenantOperation, isLmsDualSystemEnabled, lmsTenantErrorResponse, requestLmsTenant } from "../lms-tenant.js";
+import { handlePreviewDriveDryRun } from "../preview-drive-adapter.js";
 
 // Helper to extract Drive File ID from URL or return raw ID if matched
 function extractDriveFileId(value) {
@@ -110,6 +112,10 @@ export default async function handler(req, res) {
     const { courseSlug, lessonData } = req.body || {};
     if (!courseSlug) {
       return res.status(400).json({ success: false, error: "Thiếu courseSlug" });
+    }
+    if (await handlePreviewDriveDryRun({ req, res, supabase, adminEmail: adminSession.email, courseSlug, action: "verify_media" })) return;
+    if (isLmsDualSystemEnabled()) {
+      await assertCourseInLmsTenant(supabase, courseSlug, requestLmsTenant(req), { canonicalOnly: true });
     }
 
     // Retrieve course folder
@@ -276,6 +282,13 @@ export default async function handler(req, res) {
       }
     }
 
+    if (isLmsDualSystemEnabled()) {
+      const tenant = requestLmsTenant(req);
+      await auditLmsTenantOperation(supabase, {
+        adminEmail: adminSession.email, action: "lms_dual_drive_verify_media",
+        courseSlug, selectedTenant: tenant, effectiveTenant: tenant
+      });
+    }
     return res.status(200).json({
       success: true,
       hasIssues: issues.length > 0,
@@ -285,6 +298,7 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
+    if (lmsTenantErrorResponse(res, err)) return;
     console.error("[verify-media] Unexpected error:", err);
     return res.status(500).json({ success: false, error: err.message || "Lỗi xử lý server" });
   }

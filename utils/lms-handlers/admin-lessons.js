@@ -2,6 +2,13 @@ import { supabase } from "../supabase.js";
 import { getAdminFromRequest } from "../lms.js";
 import { applyCors } from "../cors.js";
 import { fetchRecipeText } from "./public-lesson.js";
+import {
+  assertCourseInLmsTenant,
+  auditLmsTenantOperation,
+  isLmsDualSystemEnabled,
+  lmsTenantErrorResponse,
+  requestLmsTenant
+} from "../lms-tenant.js";
 
 function normalizeMaterials(value) {
   const raw = Array.isArray(value) ? value : [];
@@ -165,6 +172,11 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Thiếu tham số course" });
       }
       const courseSlug = String(course).trim();
+      if (isLmsDualSystemEnabled()) {
+        await assertCourseInLmsTenant(supabase, courseSlug, requestLmsTenant(req), {
+          canonicalOnly: true
+        });
+      }
 
       const { data: lessons, error } = await supabase
         .from("lessons")
@@ -214,6 +226,8 @@ export default async function handler(req, res) {
     // ── POST: Create / Update / Delete ────────────────────────────────────────
     if (req.method === "POST") {
       const { action, course, lesson, originalCourse, originalLesson, lessonData } = req.body || {};
+      const dualSystemEnabled = isLmsDualSystemEnabled();
+      const requestedSite = dualSystemEnabled ? requestLmsTenant(req) : null;
 
       if (!action) {
         return res.status(400).json({ success: false, error: "Thiếu tham số action" });
@@ -223,6 +237,9 @@ export default async function handler(req, res) {
       if (action === "create") {
         if (!lessonData || typeof lessonData !== "object") {
           return res.status(400).json({ success: false, error: "Thiếu dữ liệu lessonData" });
+        }
+        if (dualSystemEnabled) {
+          await assertCourseInLmsTenant(supabase, lessonData.course, requestedSite, { canonicalOnly: true });
         }
 
         // Fetch course ID by slug
@@ -279,6 +296,26 @@ export default async function handler(req, res) {
         }
 
         if (insertErr) throw insertErr;
+        if (dualSystemEnabled) {
+          const { data: written, error: verifyErr } = await supabase
+            .from("lessons")
+            .select("id,course_slug,lesson_no,title,status")
+            .eq("course_slug", lessonData.course)
+            .eq("lesson_no", targetLessonNo)
+            .maybeSingle();
+          if (verifyErr) throw verifyErr;
+          if (!written || written.course_slug !== lessonData.course || written.title !== lessonData.title) {
+            throw new Error("Lesson create read-after-write verification failed");
+          }
+          await auditLmsTenantOperation(supabase, {
+            adminEmail: adminSession.email,
+            action: "lms_dual_lesson_create",
+            courseSlug: lessonData.course,
+            selectedTenant: requestedSite,
+            effectiveTenant: requestedSite,
+            metadata: { lesson_no: targetLessonNo }
+          });
+        }
 
         // Sync the aggregated real course recipe to System 1 Portal.
         try {
@@ -297,6 +334,10 @@ export default async function handler(req, res) {
         }
         if (!lessonData || typeof lessonData !== "object") {
           return res.status(400).json({ success: false, error: "Thiếu dữ liệu lessonData" });
+        }
+        if (dualSystemEnabled) {
+          await assertCourseInLmsTenant(supabase, originalCourse, requestedSite, { canonicalOnly: true });
+          await assertCourseInLmsTenant(supabase, lessonData.course, requestedSite, { canonicalOnly: true });
         }
 
         // Fetch course ID by slug
@@ -348,6 +389,26 @@ export default async function handler(req, res) {
         }
 
         if (updateErr) throw updateErr;
+        if (dualSystemEnabled) {
+          const { data: written, error: verifyErr } = await supabase
+            .from("lessons")
+            .select("id,course_slug,lesson_no,title,status")
+            .eq("course_slug", lessonData.course)
+            .eq("lesson_no", parseInt(lessonData.lesson, 10))
+            .maybeSingle();
+          if (verifyErr) throw verifyErr;
+          if (!written || written.course_slug !== lessonData.course || written.title !== lessonData.title) {
+            throw new Error("Lesson update read-after-write verification failed");
+          }
+          await auditLmsTenantOperation(supabase, {
+            adminEmail: adminSession.email,
+            action: "lms_dual_lesson_update",
+            courseSlug: lessonData.course,
+            selectedTenant: requestedSite,
+            effectiveTenant: requestedSite,
+            metadata: { lesson_no: parseInt(lessonData.lesson, 10) }
+          });
+        }
 
         // Sync the aggregated real course recipe to System 1 Portal.
         try {
@@ -364,6 +425,9 @@ export default async function handler(req, res) {
         if (!course || !lesson) {
           return res.status(400).json({ success: false, error: "Thiếu tham số course hoặc lesson" });
         }
+        if (dualSystemEnabled) {
+          await assertCourseInLmsTenant(supabase, course, requestedSite, { canonicalOnly: true });
+        }
 
         const { error: deleteErr } = await supabase
           .from("lessons")
@@ -375,6 +439,26 @@ export default async function handler(req, res) {
           .eq("lesson_no", parseInt(lesson, 10));
 
         if (deleteErr) throw deleteErr;
+        if (dualSystemEnabled) {
+          const { data: written, error: verifyErr } = await supabase
+            .from("lessons")
+            .select("id,course_slug,lesson_no,status")
+            .eq("course_slug", course)
+            .eq("lesson_no", parseInt(lesson, 10))
+            .maybeSingle();
+          if (verifyErr) throw verifyErr;
+          if (!written || written.status !== "hidden") {
+            throw new Error("Lesson delete read-after-write verification failed");
+          }
+          await auditLmsTenantOperation(supabase, {
+            adminEmail: adminSession.email,
+            action: "lms_dual_lesson_hide",
+            courseSlug: course,
+            selectedTenant: requestedSite,
+            effectiveTenant: requestedSite,
+            metadata: { lesson_no: parseInt(lesson, 10) }
+          });
+        }
         return res.status(200).json({ success: true, message: "Đã ẩn bài học thành công" });
       }
 
@@ -383,6 +467,7 @@ export default async function handler(req, res) {
 
     return res.status(405).json({ success: false, error: "Method not allowed" });
   } catch (err) {
+    if (lmsTenantErrorResponse(res, err)) return;
     console.error("[admin-lessons] Error:", err);
     return res.status(500).json({
       success: false,

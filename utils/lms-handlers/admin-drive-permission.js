@@ -1,6 +1,8 @@
 import { supabase } from "../supabase.js";
 import { getAdminFromRequest, normalizeEmail, syncGoogleDrivePermission } from "../lms.js";
 import { applyCors } from "../cors.js";
+import { assertCourseInLmsTenant, auditLmsTenantOperation, isLmsDualSystemEnabled, lmsTenantErrorResponse, requestLmsTenant } from "../lms-tenant.js";
+import { handlePreviewDriveDryRun } from "../preview-drive-adapter.js";
 
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { mode: "admin" });
@@ -43,12 +45,26 @@ export default async function handler(req, res) {
     if (!targetEmail || !targetCourseSlug) {
       return res.status(400).json({ success: false, error: "Thiếu email hoặc course slug" });
     }
+    if (await handlePreviewDriveDryRun({ req, res, supabase, adminEmail: adminSession.email, courseSlug: targetCourseSlug, action: "direct_permission", email: targetEmail })) return;
+    if (isLmsDualSystemEnabled()) {
+      await assertCourseInLmsTenant(supabase, targetCourseSlug, requestLmsTenant(req), { canonicalOnly: true });
+    }
 
     const driveSync = await syncGoogleDrivePermission(supabase, {
       email: targetEmail,
       courseSlug: targetCourseSlug,
       action: "create"
     });
+    if (isLmsDualSystemEnabled()) {
+      const site = requestLmsTenant(req);
+      await auditLmsTenantOperation(supabase, {
+        adminEmail: adminSession.email,
+        action: "lms_dual_drive_permission",
+        courseSlug: targetCourseSlug,
+        selectedTenant: site,
+        effectiveTenant: site
+      });
+    }
 
     return res.status(200).json({
       success: !!driveSync.success,
@@ -56,6 +72,7 @@ export default async function handler(req, res) {
       error: driveSync.success ? null : driveSync.error || "Cấp lại quyền Drive thất bại"
     });
   } catch (err) {
+    if (lmsTenantErrorResponse(res, err)) return;
     console.error("[admin-drive-permission] Error:", err);
     return res.status(500).json({
       success: false,

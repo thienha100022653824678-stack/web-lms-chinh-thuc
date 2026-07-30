@@ -1,6 +1,12 @@
 import { supabase } from "../supabase.js";
 import { getAdminFromRequest, normalizeEmail } from "../lms.js";
 import { applyCors } from "../cors.js";
+import {
+  isLmsDualSystemEnabled,
+  listCanonicalCoursesForTenant,
+  lmsTenantErrorResponse,
+  requestLmsTenant
+} from "../lms-tenant.js";
 
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { mode: "admin" });
@@ -20,6 +26,24 @@ export default async function handler(req, res) {
     if (req.method === "GET") {
       const { search } = req.query || {};
       let query = supabase.from("students").select("*");
+      if (isLmsDualSystemEnabled()) {
+        const tenant = requestLmsTenant(req);
+        const courses = await listCanonicalCoursesForTenant(supabase, tenant);
+        const slugs = courses.map((course) => course.slug);
+        if (slugs.length === 0) {
+          return res.status(200).json({ success: true, students: [] });
+        }
+        const { data: enrollments, error: enrollmentError } = await supabase
+          .from("student_enrollments")
+          .select("email")
+          .in("course_slug", slugs);
+        if (enrollmentError) throw enrollmentError;
+        const emails = [...new Set((enrollments || []).map((row) => normalizeEmail(row.email)).filter(Boolean))];
+        if (emails.length === 0) {
+          return res.status(200).json({ success: true, students: [] });
+        }
+        query = query.in("email", emails);
+      }
 
       if (search) {
         const s = `%${search.trim()}%`;
@@ -109,6 +133,7 @@ export default async function handler(req, res) {
 
     return res.status(405).json({ success: false, error: "Method not allowed" });
   } catch (err) {
+    if (lmsTenantErrorResponse(res, err)) return;
     console.error("[admin-students] Error:", err);
     return res.status(500).json({
       success: false,

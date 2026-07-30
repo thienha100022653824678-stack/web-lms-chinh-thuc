@@ -2,6 +2,8 @@ import { PassThrough } from "stream";
 import { getAdminFromRequest, getGoogleDriveClient, resolveCourseFolderTree, saveCourseFolderId } from "../lms.js";
 import { supabase } from "../supabase.js";
 import { applyCors } from "../cors.js";
+import { assertCourseInLmsTenant, auditLmsTenantOperation, isLmsDualSystemEnabled, lmsTenantErrorResponse, requestLmsTenant } from "../lms-tenant.js";
+import { handlePreviewDriveDryRun } from "../preview-drive-adapter.js";
 
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024; // 4 MB
 
@@ -50,6 +52,10 @@ export default async function handler(req, res) {
       lessonNo,
       lessonTitle
     } = req.body || {};
+    if (await handlePreviewDriveDryRun({ req, res, supabase, adminEmail: adminSession.email, courseSlug: course, action: "upload_image" })) return;
+    if (isLmsDualSystemEnabled()) {
+      await assertCourseInLmsTenant(supabase, course, requestLmsTenant(req), { canonicalOnly: true });
+    }
 
     let drive;
     try {
@@ -203,6 +209,13 @@ export default async function handler(req, res) {
 
     const directUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
     const webViewLink = driveFile.data.webViewLink || `https://drive.google.com/file/d/${fileId}/view`;
+    if (isLmsDualSystemEnabled()) {
+      const tenant = requestLmsTenant(req);
+      await auditLmsTenantOperation(supabase, {
+        adminEmail: adminSession.email, action: "lms_dual_drive_upload_image",
+        courseSlug: course, selectedTenant: tenant, effectiveTenant: tenant
+      });
+    }
 
     return res.status(200).json({
       success: true,
@@ -212,6 +225,7 @@ export default async function handler(req, res) {
       warning: isFallback ? "Lưu ý: Không thể ghi vào thư mục cấu hình. File đã được tải lên thư mục gốc Drive của bạn." : null
     });
   } catch (err) {
+    if (lmsTenantErrorResponse(res, err)) return;
     console.error("[admin-upload-image] Unexpected error:", err);
     return res.status(500).json({
       success: false,

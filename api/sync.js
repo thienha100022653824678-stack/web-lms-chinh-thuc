@@ -14,6 +14,12 @@ import {
   maybeShadowEnrollmentAccess,
 } from "../utils/v2-outbox-shadow.js";
 import { warmRuntimeConfig } from "../utils/v2-runtime-controller.js";
+import {
+  assertCourseInLmsTenant,
+  isLmsDualSystemEnabled,
+  lmsTenantErrorResponse,
+  requireLmsTenant
+} from "../utils/lms-tenant.js";
 
 export default async function handler(req, res) {
   // Warm the V1/V2 runtime master switch once per request so the
@@ -64,7 +70,12 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { action, slug, title, subtitle, imageUrl, expected_start_date, active, email, courseSlug } = req.body || {};
+    const {
+      action, slug, title, subtitle, imageUrl, expected_start_date, active,
+      email, courseSlug, lmsTenant
+    } = req.body || {};
+    const dualEnabled = isLmsDualSystemEnabled();
+    const requestedTenant = dualEnabled ? requireLmsTenant(lmsTenant) : null;
 
     if (!action) {
       return res.status(400).json({ success: false, error: "Thiếu tham số action" });
@@ -81,7 +92,7 @@ export default async function handler(req, res) {
       // Check if course already exists
       const { data: existingCourse, error: fetchErr } = await supabase
         .from("courses")
-        .select("id, raw_data")
+        .select(dualEnabled ? "id,slug,raw_data,lms_tenant,sales_site,learning_course_slug,active" : "id, raw_data")
         .eq("slug", slug.trim())
         .maybeSingle();
 
@@ -96,6 +107,9 @@ export default async function handler(req, res) {
 
       let result;
       if (existingCourse) {
+        if (dualEnabled) {
+          await assertCourseInLmsTenant(supabase, slug, requestedTenant, { canonicalOnly: true });
+        }
         // Update metadata without breaking lessons or existing raw_data
         const updatePayload = {
           title: nextTitle,
@@ -130,6 +144,7 @@ export default async function handler(req, res) {
             image_url: nextImageUrl || null,
             expected_start_date: nextExpectedStartDate,
             active: active !== undefined ? active : true,
+            ...(dualEnabled ? { lms_tenant: requestedTenant } : {}),
             sort_order: 999 // Default to end of list
           })
           .select("id")
@@ -160,6 +175,9 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Thiếu email hoặc courseSlug" });
       }
 
+      if (dualEnabled) {
+        await assertCourseInLmsTenant(supabase, courseSlug, requestedTenant, { canonicalOnly: true });
+      }
       const syncResult = await syncEnrollment(supabase, {
         email,
         courseSlug,
@@ -185,6 +203,9 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Thiếu email hoặc courseSlug" });
       }
 
+      if (dualEnabled) {
+        await assertCourseInLmsTenant(supabase, courseSlug, requestedTenant, { canonicalOnly: true });
+      }
       const syncResult = await syncEnrollment(supabase, {
         email,
         courseSlug,
@@ -204,6 +225,7 @@ export default async function handler(req, res) {
 
     return res.status(400).json({ success: false, error: "Action không hợp lệ" });
   } catch (error) {
+    if (lmsTenantErrorResponse(res, error)) return;
     console.error("[sync] Error in handler:", error);
     return res.status(500).json({ success: false, error: error.message });
   }

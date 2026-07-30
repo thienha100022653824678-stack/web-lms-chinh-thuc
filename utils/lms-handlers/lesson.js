@@ -18,6 +18,7 @@ import { isV2GlobalOneDeviceEnabled } from "../v2-flags.js";
 import { applyCors } from "../cors.js";
 import { resolveMainMediaInfo } from "../lms-media.js";
 import { getOrLoadLmsRecipeText } from "../lms-content-cache.js";
+import { isLmsDualSystemEnabled, resolveCourseLmsTenant } from "../lms-tenant.js";
 import {
   installLmsTimingResponseHooks,
   timeLmsAsync,
@@ -595,6 +596,12 @@ export default async function handler(req, res) {
       }
     }
 
+    // The verified LMS session is bound to this canonical course slug. Tenant
+    // is resolved server-side from that course and never accepted from the browser.
+    const tenantResolution = isLmsDualSystemEnabled()
+      ? await resolveCourseLmsTenant(supabase, lessonResolved.course_slug)
+      : null;
+
     // 5. Secure Video URL & Media URLs (sync, depends only on lessonResolved)
     const { securedVideo, securedMedia } = timeLmsSync(timing, "bunny", () => ({
       securedVideo: signBunnyEmbedUrl(lessonResolved.video_url || ""),
@@ -627,6 +634,7 @@ export default async function handler(req, res) {
       return {
         success: true,
         email,
+        lmsTenant: tenantResolution?.effectiveTenant,
         lesson: formattedLesson
       };
     });
@@ -637,12 +645,12 @@ export default async function handler(req, res) {
     // RP2-B1 fail-closed: when the flag is on we never leak the raw
     // DB error to the client. Telemetry is best-effort and lives in
     // lms-session-guard.
-    if (isV2GlobalOneDeviceEnabled()) {
+    if (isV2GlobalOneDeviceEnabled() || isLmsDualSystemEnabled()) {
       return res.status(503).json({
         success: false,
         error: "one_device_policy_unavailable",
         authError: "one_device_policy_unavailable",
-        code: "one_device_policy_unavailable"
+        code: isLmsDualSystemEnabled() ? "UNRESOLVED_LMS_TENANT" : "one_device_policy_unavailable"
       });
     }
     console.error("[api/lms/lesson] Error:", err);

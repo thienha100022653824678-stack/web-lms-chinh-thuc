@@ -1,6 +1,14 @@
 import { supabase } from "../supabase.js";
 import { getAdminFromRequest } from "../lms.js";
 import { applyCors } from "../cors.js";
+import {
+  assertCourseInLmsTenant,
+  isLmsDualSystemEnabled,
+  isSelfTargetCourse,
+  lmsTenantErrorResponse,
+  requestLmsTenant,
+  resolveEffectiveLmsTenant
+} from "../lms-tenant.js";
 
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { mode: "admin" });
@@ -18,14 +26,45 @@ export default async function handler(req, res) {
 
     // ── GET: Read courses list + Config ───────────────────────────────────────
     if (req.method === "GET") {
+      const dualSystemEnabled = isLmsDualSystemEnabled();
+      const requestedSite = dualSystemEnabled ? requestLmsTenant(req) : null;
       // 1. Get course slugs from courses table
       const { data: courseRows, error: courseErr } = await supabase
         .from("courses")
-        .select("slug, title, subtitle, image_url, raw_data")
+        .select(dualSystemEnabled
+          ? "id,slug,title,subtitle,image_url,raw_data,sales_site,learning_course_slug,lms_tenant,active,is_published"
+          : "slug,title,subtitle,image_url,raw_data")
         .order("sort_order", { ascending: true });
 
       if (courseErr) throw courseErr;
-      const courses = (courseRows || []).map(c => c.slug);
+      let visibleRows = courseRows || [];
+      let legacySharedMappings = [];
+      if (dualSystemEnabled) {
+        const bySlug = new Map(visibleRows.map((course) => [course.slug, course]));
+        const scoped = [];
+        for (const course of visibleRows) {
+          const effectiveSite = await resolveEffectiveLmsTenant(course, {
+            findCourseBySlug: async (slug) => bySlug.get(slug) || null
+          });
+          if (effectiveSite === requestedSite && isSelfTargetCourse(course)) {
+            scoped.push({ ...course, effective_lms_tenant: effectiveSite });
+          }
+        }
+        visibleRows = scoped;
+        const visibleSlugs = new Set(scoped.map((course) => course.slug));
+        legacySharedMappings = (courseRows || [])
+          .filter((course) =>
+            !isSelfTargetCourse(course) &&
+            !course.lms_tenant &&
+            visibleSlugs.has(course.learning_course_slug)
+          )
+          .map((course) => ({
+            alias_slug: course.slug,
+            canonical_slug: course.learning_course_slug,
+            read_only: true
+          }));
+      }
+      const courses = visibleRows.map(c => c.slug);
 
       // 2. Read Config from site_config
       const { data: configRows, error: configErr } = await supabase
@@ -43,7 +82,17 @@ export default async function handler(req, res) {
         });
       }
 
-      for (const course of courseRows || []) {
+      if (dualSystemEnabled) {
+        const allCoursePrefixes = (courseRows || []).map((course) => `${course.slug}_`);
+        for (const key of Object.keys(config)) {
+          const ownerPrefix = allCoursePrefixes.find((prefix) => key.startsWith(prefix));
+          if (ownerPrefix && !courses.some((slug) => ownerPrefix === `${slug}_`)) {
+            delete config[key];
+          }
+        }
+      }
+
+      for (const course of visibleRows) {
         const slug = course.slug;
         const rawData = course.raw_data || {};
         if (!slug) continue;
@@ -68,7 +117,15 @@ export default async function handler(req, res) {
         }
       }
 
-      return res.status(200).json({ success: true, courses, config });
+      return res.status(200).json({
+        success: true,
+        courses,
+        courseRows: dualSystemEnabled ? visibleRows : undefined,
+        legacySharedMappings: dualSystemEnabled ? legacySharedMappings : undefined,
+        config,
+        lms_tenant: requestedSite,
+        dualSystemEnabled
+      });
     }
 
     // ── POST: Update Config ───────────────────────────────────────────────────
@@ -83,6 +140,11 @@ export default async function handler(req, res) {
       }
       if (!newConfig || typeof newConfig !== "object") {
         return res.status(400).json({ success: false, error: "Thiếu dữ liệu config" });
+      }
+      const dualSystemEnabled = isLmsDualSystemEnabled();
+      const requestedSite = dualSystemEnabled ? requestLmsTenant(req) : null;
+      if (dualSystemEnabled) {
+        await assertCourseInLmsTenant(supabase, course, requestedSite, { canonicalOnly: true });
       }
 
       for (const [field, value] of Object.entries(newConfig)) {
@@ -152,11 +214,20 @@ export default async function handler(req, res) {
         console.error("[admin-courses] Sync to courses table failed:", dbErr.message);
       }
 
+      if (dualSystemEnabled) {
+        const verified = await assertCourseInLmsTenant(supabase, course, requestedSite, { canonicalOnly: true });
+        return res.status(200).json({
+          success: true,
+          course: verified.course.slug,
+          lms_tenant: verified.effectiveTenant
+        });
+      }
       return res.status(200).json({ success: true });
     }
 
     return res.status(405).json({ success: false, error: "Method not allowed" });
   } catch (err) {
+    if (lmsTenantErrorResponse(res, err)) return;
     console.error("[admin-courses] Error:", err);
     return res.status(500).json({
       success: false,

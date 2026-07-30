@@ -1,6 +1,12 @@
 import { supabase } from "../supabase.js";
 import { getAdminFromRequest, normalizeEmail } from "../lms.js";
 import { applyCors } from "../cors.js";
+import {
+  isLmsDualSystemEnabled,
+  listCanonicalCoursesForTenant,
+  lmsTenantErrorResponse,
+  requestLmsTenant
+} from "../lms-tenant.js";
 
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { mode: "admin" });
@@ -26,6 +32,11 @@ export default async function handler(req, res) {
     }
 
     const cleanEmail = normalizeEmail(email);
+    const dualEnabled = isLmsDualSystemEnabled();
+    const tenant = dualEnabled ? requestLmsTenant(req) : null;
+    const visibleSlugs = dualEnabled
+      ? new Set((await listCanonicalCoursesForTenant(supabase, tenant)).map((course) => course.slug))
+      : null;
 
     // Fetch data with separate try/catches to be highly crash-resilient
     let student = null;
@@ -97,6 +108,17 @@ export default async function handler(req, res) {
       courses = data || [];
     } catch (e) {
       console.warn("Failed to fetch from courses:", e.message);
+    }
+
+    if (visibleSlugs) {
+      orders = orders.filter((order) =>
+        visibleSlugs.has(order.learning_course_slug || order.course_slug)
+      );
+      enrollments = enrollments.filter((enrollment) => visibleSlugs.has(enrollment.course_slug));
+      logs = logs.filter((log) => visibleSlugs.has(log.course_slug));
+      syncQueue = syncQueue.filter((item) => visibleSlugs.has(item.course_slug));
+      courses = courses.filter((course) => visibleSlugs.has(course.slug));
+      if (orders.length === 0 && enrollments.length === 0) student = null;
     }
 
     // Process conclusions
@@ -189,6 +211,7 @@ export default async function handler(req, res) {
       conclusions
     });
   } catch (error) {
+    if (lmsTenantErrorResponse(res, error)) return;
     console.error("STUDENT_TRACE_API_ERROR:", error);
     return res.status(500).json({ success: false, error: error.message });
   }

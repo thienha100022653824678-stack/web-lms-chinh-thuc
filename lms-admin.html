@@ -104,6 +104,26 @@
       </div>
     </header>
 
+    <section id="lmsTenantSelector" class="hidden bg-white border-b border-slate-200 px-4 sm:px-6 py-3 shadow-sm">
+      <div class="max-w-5xl mx-auto flex flex-col sm:flex-row sm:items-center gap-3">
+        <div class="sm:mr-3">
+          <div class="text-[10px] font-black tracking-[0.16em] text-slate-400">HỆ THỐNG QUẢN TRỊ</div>
+          <div class="text-xs font-semibold text-slate-600">Nội dung và học viên được tách bằng server-side scope</div>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button id="lmsTenantBtn-yeunauan" type="button" onclick="changeLmsTenant('yeunauan')" class="lms-tenant-btn rounded-xl border px-4 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brandGreen">
+            <span class="block text-xs font-black">LMS — shop.yeunauan.live</span>
+            <span class="sr-only">Chọn hệ thống LMS của shop.yeunauan.live</span>
+          </button>
+          <button id="lmsTenantBtn-yeubep" type="button" onclick="changeLmsTenant('yeubep')" class="lms-tenant-btn rounded-xl border px-4 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brandGreen">
+            <span class="block text-xs font-black">LMS — yeubep.shop</span>
+            <span class="sr-only">Chọn hệ thống LMS của yeubep.shop</span>
+          </button>
+        </div>
+        <span id="legacySharedNotice" class="hidden sm:ml-auto rounded-full bg-amber-100 text-amber-800 px-3 py-1 text-[10px] font-black">LIÊN KẾT DÙNG CHUNG CŨ</span>
+      </div>
+    </section>
+
     <!-- Shell Container -->
     <div class="flex-grow flex flex-col lg:flex-row min-h-0">
       
@@ -119,13 +139,13 @@
           🔑 Phân Quyền
         </button>
         <button onclick="switchTab('drive-health')" id="tabBtn-drive-health" class="tab-btn flex-grow lg:flex-none flex items-center justify-center lg:justify-start gap-2.5 py-4 lg:py-3 px-5 text-sm font-bold border-b-2 lg:border-b-0 lg:border-l-4 border-transparent text-slate-500 hover:bg-slate-50 transition">
-          🏥 Sức Khỏe Drive
+          🏥 Sức Khỏe Drive <span class="rounded bg-slate-100 px-1 text-[8px]">TOÀN HỆ THỐNG</span>
         </button>
         <button onclick="switchTab('student-trace')" id="tabBtn-student-trace" class="tab-btn flex-grow lg:flex-none flex items-center justify-center lg:justify-start gap-2.5 py-4 lg:py-3 px-5 text-sm font-bold border-b-2 lg:border-b-0 lg:border-l-4 border-transparent text-slate-500 hover:bg-slate-50 transition">
-          🔍 Tra Cứu Học Viên
+          🔍 Tra Cứu Học Viên <span class="rounded bg-slate-100 px-1 text-[8px]">TOÀN HỆ THỐNG</span>
         </button>
         <button onclick="switchTab('account-sharing')" id="tabBtn-account-sharing" class="tab-btn flex-grow lg:flex-none flex items-center justify-center lg:justify-start gap-2.5 py-4 lg:py-3 px-5 text-sm font-bold border-b-2 lg:border-b-0 lg:border-l-4 border-transparent text-slate-500 hover:bg-slate-50 transition">
-          🚨 Cảnh báo chia sẻ
+          🚨 Cảnh báo chia sẻ <span class="rounded bg-slate-100 px-1 text-[8px]">TOÀN HỆ THỐNG</span>
         </button>
       </aside>
 
@@ -988,6 +1008,11 @@
     // Config variables
     let googleClientId = "";
     let activeTab = "lessons";
+    const requestedInitialSite = new URLSearchParams(location.search).get("lms");
+    const storedLmsTenant = localStorage.getItem("lmsAdminTenant");
+    const initialLmsTenant = ["yeunauan", "yeubep"].includes(requestedInitialSite)
+      ? requestedInitialSite
+      : (["yeunauan", "yeubep"].includes(storedLmsTenant) ? storedLmsTenant : "yeunauan");
 
     // Application state
     const STATE = {
@@ -1007,6 +1032,9 @@
       lessonMaterials: [],
       students: [],
       enrollments: []
+      ,lmsTenant: initialLmsTenant
+      ,dualSystemEnabled: false
+      ,legacySharedMappings: []
     };
 
     // ── Reusable Course Autocomplete Component ──────────────────────────────
@@ -1298,7 +1326,40 @@
       if (STATE.sessionToken) {
         headers["Authorization"] = `Bearer ${STATE.sessionToken}`;
       }
+      headers["X-LMS-Tenant"] = STATE.lmsTenant;
       return headers;
+    }
+
+    function renderLmsTenantSelector() {
+      document.getElementById("lmsTenantSelector")?.classList.toggle("hidden", !STATE.dualSystemEnabled);
+      document.getElementById("legacySharedNotice")?.classList.toggle(
+        "hidden",
+        !STATE.dualSystemEnabled || STATE.legacySharedMappings.length === 0
+      );
+      document.querySelectorAll(".lms-tenant-btn").forEach((button) => {
+        const active = button.id === `lmsTenantBtn-${STATE.lmsTenant}`;
+        button.className = `lms-tenant-btn rounded-xl border px-4 py-2 text-left transition ${
+          active
+            ? "border-brandGreen bg-brandGreen text-white shadow"
+            : "border-slate-200 bg-white text-slate-600 hover:border-brandGreen"
+        }`;
+      });
+    }
+
+    async function changeLmsTenant(site) {
+      if (!["yeunauan", "yeubep"].includes(site) || site === STATE.lmsTenant) return;
+      STATE.lmsTenant = site;
+      localStorage.setItem("lmsAdminTenant", site);
+      selectedCourseFilter = "";
+      STATE.lessons = [];
+      clearLessonsCourseSelection();
+      const url = new URL(location.href);
+      url.searchParams.set("lms", site);
+      url.searchParams.delete("course");
+      history.replaceState({}, "", url);
+      renderLmsTenantSelector();
+      await loadCoursesAndMeta();
+      toast("Đã chuyển hệ thống quản trị", "success");
     }
 
     // ── Load Course list ───────────────────────────────────────────────────
@@ -1317,6 +1378,9 @@
 
         STATE.courses = d.courses || [];
         STATE.globalConfig = d.config || {};
+        STATE.dualSystemEnabled = Boolean(d.dualSystemEnabled);
+        STATE.legacySharedMappings = Array.isArray(d.legacySharedMappings) ? d.legacySharedMappings : [];
+        renderLmsTenantSelector();
 
         // Populate course dropdowns if select element exists
         const courseSelect = document.getElementById("courseSelect");
@@ -1390,6 +1454,15 @@
           });
         } else {
           modalEnrollCourseAutocomplete.renderDropdown();
+        }
+
+        if (STATE.dualSystemEnabled && STATE.courses.length === 0) {
+          toast("Hệ thống này chưa có khóa học LMS", "info");
+        }
+        const deepLinkedCourse = new URLSearchParams(location.search).get("course");
+        if (deepLinkedCourse && STATE.courses.includes(deepLinkedCourse)) {
+          const title = STATE.globalConfig[`${deepLinkedCourse}_title`] || deepLinkedCourse.toUpperCase();
+          selectLessonsCourseCallback(deepLinkedCourse, title);
         }
 
       } catch (err) {
@@ -4112,16 +4185,30 @@
         return null;
       };
       const savedToken = getCookie("admin_session_token");
-      
-      fetch("/api/lms/portal?endpoint=public-config").then(res => res.json()).then(async config => {
+
+      // A readable legacy cookie can be restored immediately.
+      if (savedToken) {
+        loadAdminSession({ sessionToken: savedToken });
+        return;
+      }
+
+      // Preview harness and hardened admin cookies are HttpOnly. Verify the
+      // server-side cookie before requesting Google configuration.
+      fetch("/api/lms/admin?endpoint=auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}"
+      }).then(async restoreResponse => {
+        const restored = await restoreResponse.json();
+        if (restoreResponse.ok && restored.success && restored.sessionToken) {
+          await loadAdminSession({ sessionToken: restored.sessionToken });
+          return;
+        }
+        const configResponse = await fetch("/api/lms/portal?endpoint=public-config");
+        const config = await configResponse.json();
         googleClientId = config.googleClientId;
         if (!googleClientId) {
           document.getElementById("loginStatusMsg").innerHTML = `Lỗi: Chưa thiết lập biến môi trường <b>GOOGLE_CLIENT_ID</b>`;
-          return;
-        }
-
-        if (savedToken) {
-          await loadAdminSession({ sessionToken: savedToken });
           return;
         }
 

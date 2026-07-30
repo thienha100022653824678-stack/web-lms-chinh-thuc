@@ -1,6 +1,7 @@
 import { supabase } from "../supabase.js";
 import { getAdminFromRequest, normalizeEmail, syncEnrollment } from "../lms.js";
 import { applyCors } from "../cors.js";
+import { assertCourseInLmsTenant, isLmsDualSystemEnabled, lmsTenantErrorResponse, requestLmsTenant } from "../lms-tenant.js";
 
 // Helper to validate email format
 function isValidEmail(email) {
@@ -39,6 +40,9 @@ export default async function handler(req, res) {
 
     if (!courseSlug) {
       return res.status(400).json({ success: false, error: "Thiếu mã khóa học (courseSlug)" });
+    }
+    if (isLmsDualSystemEnabled()) {
+      await assertCourseInLmsTenant(supabase, courseSlug, requestLmsTenant(req), { canonicalOnly: true });
     }
 
     // --- Clean and validate email list ---
@@ -173,6 +177,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ success: false, error: "Action không hợp lệ" });
 
   } catch (err) {
+    if (lmsTenantErrorResponse(res, err)) return;
     console.error("[bulk-enroll] Error processing action:", err);
     return res.status(500).json({ success: false, error: err.message || "Lỗi xử lý server" });
   }

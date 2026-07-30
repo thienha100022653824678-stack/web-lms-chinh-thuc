@@ -1,6 +1,8 @@
 import { supabase } from "../supabase.js";
 import { getAdminFromRequest, syncGoogleDrivePermission } from "../lms.js";
 import { applyCors } from "../cors.js";
+import { assertCourseInLmsTenant, auditLmsTenantOperation, isLmsDualSystemEnabled, lmsTenantErrorResponse, requestLmsTenant } from "../lms-tenant.js";
+import { handlePreviewDriveDryRun } from "../preview-drive-adapter.js";
 
 const ACTIVE_ENROLLMENT_STATUSES = ["active", "approved", "approved_ready", "approved_waiting_content", "completed", "da duyet"];
 const ERROR_DRIVE_STATUSES = ["failed", "FAILED", "pending_retry", "PENDING_RETRY", "error", "quota_limited", "QUOTA_LIMITED"];
@@ -24,6 +26,20 @@ export default async function handler(req, res) {
     }
 
     const { type, email, courseSlug } = req.body || {};
+    if (await handlePreviewDriveDryRun({ req, res, supabase, adminEmail: adminSession.email, courseSlug, action: "retry", email })) return;
+    if (isLmsDualSystemEnabled()) {
+      if (type === "all") {
+        return res.status(409).json({
+          success: false,
+          code: "MIXED_LMS_BATCH_FORBIDDEN",
+          error: "Batch Drive toàn hệ thống bị cấm khi Dual LMS bật"
+        });
+      }
+      if (!courseSlug) {
+        return res.status(400).json({ success: false, code: "COURSE_NOT_FOUND_IN_LMS", error: "Thiếu canonical course cho Drive retry" });
+      }
+      await assertCourseInLmsTenant(supabase, courseSlug, requestLmsTenant(req), { canonicalOnly: true });
+    }
 
     if (type === "single") {
       if (!email || !courseSlug) {
@@ -55,6 +71,14 @@ export default async function handler(req, res) {
       });
 
       if (result.success) {
+        if (isLmsDualSystemEnabled()) {
+          const tenant = requestLmsTenant(req);
+          await auditLmsTenantOperation(supabase, {
+            adminEmail: adminSession.email, action: "lms_dual_drive_retry",
+            courseSlug, selectedTenant: tenant, effectiveTenant: tenant,
+            metadata: { retry_type: "single", success: true }
+          });
+        }
         return res.status(200).json({ success: true, result });
       } else {
         return res.status(200).json({ success: false, error: result.error || "Cấp quyền thất bại", result });
@@ -101,6 +125,14 @@ export default async function handler(req, res) {
         }
       }
 
+      if (isLmsDualSystemEnabled()) {
+        const tenant = requestLmsTenant(req);
+        await auditLmsTenantOperation(supabase, {
+          adminEmail: adminSession.email, action: "lms_dual_drive_retry",
+          courseSlug, selectedTenant: tenant, effectiveTenant: tenant,
+          metadata: { retry_type: "course", success_count: successCount, failed_count: failedCount }
+        });
+      }
       return res.status(200).json({
         success: true,
         report: {
@@ -163,6 +195,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ success: false, error: "Loại retry không hợp lệ" });
 
   } catch (err) {
+    if (lmsTenantErrorResponse(res, err)) return;
     console.error("[drive-retry] Error in handler:", err);
     return res.status(500).json({ success: false, error: err.message || "Lỗi xử lý server" });
   }

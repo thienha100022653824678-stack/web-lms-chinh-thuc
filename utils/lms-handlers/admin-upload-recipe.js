@@ -2,6 +2,8 @@ import { PassThrough } from "stream";
 import { supabase } from "../supabase.js";
 import { getAdminFromRequest, getGoogleDriveClient } from "../lms.js";
 import { applyCors } from "../cors.js";
+import { assertCourseInLmsTenant, auditLmsTenantOperation, isLmsDualSystemEnabled, lmsTenantErrorResponse, requestLmsTenant } from "../lms-tenant.js";
+import { handlePreviewDriveDryRun } from "../preview-drive-adapter.js";
 
 export const config = {
   api: {
@@ -33,6 +35,11 @@ export default async function handler(req, res) {
     const adminSession = getAdminFromRequest(req);
     if (!adminSession) {
       return res.status(401).json({ success: false, error: "Chưa đăng nhập admin" });
+    }
+    const { course, lesson, title, fileData, text } = req.body || {};
+    if (await handlePreviewDriveDryRun({ req, res, supabase, adminEmail: adminSession.email, courseSlug: course, action: "upload_recipe" })) return;
+    if (isLmsDualSystemEnabled()) {
+      await assertCourseInLmsTenant(supabase, course, requestLmsTenant(req), { canonicalOnly: true });
     }
 
     let drive;
@@ -174,6 +181,13 @@ export default async function handler(req, res) {
       dbErrorMsg = prefix + `Đã tạo tài liệu Docs nhưng không thể cập nhật Supabase: ${dbErr.message}`;
     }
 
+    if (isLmsDualSystemEnabled()) {
+      const tenant = requestLmsTenant(req);
+      await auditLmsTenantOperation(supabase, {
+        adminEmail: adminSession.email, action: "lms_dual_drive_upload_recipe",
+        courseSlug: course, selectedTenant: tenant, effectiveTenant: tenant
+      });
+    }
     return res.status(200).json({
       success: true,
       recipeUrl,
@@ -183,6 +197,7 @@ export default async function handler(req, res) {
       warning: dbErrorMsg
     });
   } catch (err) {
+    if (lmsTenantErrorResponse(res, err)) return;
     console.error("[admin-upload-recipe] Unexpected error:", err);
     return res.status(500).json({
       success: false,

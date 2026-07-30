@@ -22,6 +22,7 @@ import { isV2GlobalOneDeviceEnabled } from "../v2-flags.js";
 import { resolveMainMediaInfo } from "../lms-media.js";
 import { getOrLoadLmsRecipeText } from "../lms-content-cache.js";
 import { applyCors } from "../cors.js";
+import { isLmsDualSystemEnabled, resolveCourseLmsTenant } from "../lms-tenant.js";
 
 const SESSION_COOKIE = "course_session_token";
 const API_VERSION = "premium-bunny-stream-v1";
@@ -445,6 +446,9 @@ export default async function handler(req, res) {
     // If no course is specified in request, default to the first allowed course
     // If a course is specified, use it directly so the check below can return 403 if unauthorized
     const activeCourseSlug = lmsSessionAccess?.courseSlug || (courseSlug ? courseSlug : allowedCourses[0]);
+    const tenantResolution = isLmsDualSystemEnabled()
+      ? await resolveCourseLmsTenant(supabase, activeCourseSlug)
+      : null;
 
     // RP2-B1: when the flag is on, `shouldRequireLmsVerifiedSession` is
     // always true and the LMS verified session was already enforced before
@@ -459,6 +463,7 @@ export default async function handler(req, res) {
         authError: code,
         code,
         course: activeCourseSlug,
+        lmsTenant: tenantResolution?.effectiveTenant,
         error: "Liên kết lớp học này cần được mở từ Cổng học viên. Vui lòng quay lại trang bài học trên yeunauan.live và bấm “Bài học gốc phục vụ giảng dạy” để vào lớp."
       });
     }
@@ -609,6 +614,7 @@ export default async function handler(req, res) {
       apiVersion: API_VERSION,
       email,
       course: activeCourseSlug,
+      lmsTenant: tenantResolution?.effectiveTenant,
       allowedCourses,
       courseInfo,
       lessons,
@@ -620,13 +626,13 @@ export default async function handler(req, res) {
     // RP2-B1: surface a fail-closed 503 when the flag is on. We never
     // echo the raw DB error to the client. Telemetry stays best-effort
     // elsewhere and is independent of this branch.
-    if (isV2GlobalOneDeviceEnabled()) {
+    if (isV2GlobalOneDeviceEnabled() || isLmsDualSystemEnabled()) {
       return res.status(503).json({
         success: false,
         allowed: false,
         error: "one_device_policy_unavailable",
         authError: "one_device_policy_unavailable",
-        code: "one_device_policy_unavailable"
+        code: isLmsDualSystemEnabled() ? "UNRESOLVED_LMS_TENANT" : "one_device_policy_unavailable"
       });
     }
     console.error("[course-data] Unexpected error:", err);

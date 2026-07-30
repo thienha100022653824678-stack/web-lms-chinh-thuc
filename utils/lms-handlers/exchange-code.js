@@ -9,6 +9,7 @@ import {
 import { OAuth2Client } from "google-auth-library";
 import { applyCors } from "../cors.js";
 import { isV2GlobalOneDeviceEnabled } from "../v2-flags.js";
+import { isLmsDualSystemEnabled } from "../lms-tenant.js";
 
 const SESSION_COOKIE = "course_session_token";
 const ACTIVE_ENROLLMENT_STATUSES = new Set([
@@ -48,7 +49,7 @@ export default async function handler(req, res) {
   // device login RPC. To make that bypass impossible to re-enable
   // accidentally, we fail closed BEFORE any Google/Supabase/session
   // work whenever the V2 one-device flag is on.
-  if (isV2GlobalOneDeviceEnabled()) {
+  if (isV2GlobalOneDeviceEnabled() || isLmsDualSystemEnabled()) {
     const cors = applyCors(req, res, {
       mode: "portal",
       methods: "POST, OPTIONS",
