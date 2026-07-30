@@ -26,7 +26,6 @@ export default async function handler(req, res) {
     }
 
     const { type, email, courseSlug } = req.body || {};
-    if (await handlePreviewDriveDryRun({ req, res, supabase, adminEmail: adminSession.email, courseSlug, action: "retry", email })) return;
     if (isLmsDualSystemEnabled()) {
       if (type === "all") {
         return res.status(409).json({
@@ -40,6 +39,7 @@ export default async function handler(req, res) {
       }
       await assertCourseInLmsTenant(supabase, courseSlug, requestLmsTenant(req), { canonicalOnly: true });
     }
+    if (await handlePreviewDriveDryRun({ req, res, supabase, adminEmail: adminSession.email, courseSlug, action: "retry", email })) return;
 
     if (type === "single") {
       if (!email || !courseSlug) {

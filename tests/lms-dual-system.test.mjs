@@ -126,8 +126,10 @@ test("student identity stays global while lists derive visibility from tenant en
 test("mixed-LMS Drive retry is rejected before any global batch query", () => {
   const source = fs.readFileSync(new URL("../utils/lms-handlers/admin-drive-retry.js", import.meta.url), "utf8");
   const rejection = source.indexOf("MIXED_LMS_BATCH_FORBIDDEN");
+  const previewAdapter = source.indexOf("handlePreviewDriveDryRun");
+  const adapterCall = source.indexOf("await handlePreviewDriveDryRun", previewAdapter + 1);
   const globalQuery = source.indexOf('if (type === "all")', rejection + 1);
-  assert.ok(rejection > 0 && globalQuery > rejection);
+  assert.ok(rejection > 0 && globalQuery > rejection && adapterCall > rejection);
 });
 
 test("selector supports storage, deep links, empty state and global badges", () => {
