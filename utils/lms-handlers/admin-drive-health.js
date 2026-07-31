@@ -140,6 +140,14 @@ export default async function handler(req, res) {
 
   } catch (err) {
     console.error("[drive-health] Error in handler:", err);
-    return res.status(500).json({ success: false, error: err.message || "Lỗi xử lý server" });
+    const isBackendConfigError = /invalid api key|invalid.*jwt|supabase.*(?:url|key)/i
+      .test(String(err?.message || ""));
+    return res.status(isBackendConfigError ? 503 : 500).json({
+      success: false,
+      code: isBackendConfigError ? "LMS_DATA_BACKEND_UNAVAILABLE" : "DRIVE_HEALTH_UNAVAILABLE",
+      error: isBackendConfigError
+        ? "Không thể kết nối kho dữ liệu LMS"
+        : "Không thể tải sức khỏe Drive"
+    });
   }
 }

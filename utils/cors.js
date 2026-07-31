@@ -27,7 +27,7 @@
 const CORS_MODES = Object.freeze(["admin", "portal", "internal", "public"]);
 
 const DEFAULT_ALLOWED_HEADERS = {
-  admin: "Content-Type, Authorization",
+  admin: "Content-Type, Authorization, X-LMS-Tenant",
   portal: "Content-Type",
   internal: "Content-Type, X-Sync-Secret",
   public: "Content-Type"

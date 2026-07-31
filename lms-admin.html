@@ -1346,6 +1346,12 @@
       });
     }
 
+    function applyPublicRuntimeConfig(config) {
+      googleClientId = String(config?.googleClientId || "");
+      STATE.dualSystemEnabled = Boolean(config?.lmsDualSystemEnabled);
+      renderLmsTenantSelector();
+    }
+
     async function changeLmsTenant(site) {
       if (!["yeunauan", "yeubep"].includes(site) || site === STATE.lmsTenant) return;
       STATE.lmsTenant = site;
@@ -4177,6 +4183,18 @@
     }
 
     function initGoogleSignIn() {
+      // Load non-secret runtime posture before restoring an existing session.
+      // This lets the selector render independently of the first DB-backed
+      // courses request and gives operators a truthful feature posture even
+      // when the data backend is unavailable.
+      const publicConfigPromise = fetch("/api/lms/portal?endpoint=public-config")
+        .then(async (response) => {
+          if (!response.ok) throw new Error("PUBLIC_CONFIG_UNAVAILABLE");
+          const config = await response.json();
+          applyPublicRuntimeConfig(config);
+          return config;
+        });
+
       // 1. Check cookies for existing session
       const getCookie = (name) => {
         const value = `; ${document.cookie}`;
@@ -4188,7 +4206,12 @@
 
       // A readable legacy cookie can be restored immediately.
       if (savedToken) {
-        loadAdminSession({ sessionToken: savedToken });
+        publicConfigPromise
+          .then(() => loadAdminSession({ sessionToken: savedToken }))
+          .catch((err) => {
+            console.error(err);
+            document.getElementById("loginStatusMsg").innerText = "Lỗi tải cấu hình hệ thống.";
+          });
         return;
       }
 
@@ -4204,9 +4227,7 @@
           await loadAdminSession({ sessionToken: restored.sessionToken });
           return;
         }
-        const configResponse = await fetch("/api/lms/portal?endpoint=public-config");
-        const config = await configResponse.json();
-        googleClientId = config.googleClientId;
+        await publicConfigPromise;
         if (!googleClientId) {
           document.getElementById("loginStatusMsg").innerHTML = `Lỗi: Chưa thiết lập biến môi trường <b>GOOGLE_CLIENT_ID</b>`;
           return;

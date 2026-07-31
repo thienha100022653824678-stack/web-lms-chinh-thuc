@@ -76,12 +76,30 @@ test("Progress admin handler validates canonical course/lesson and verifies pers
   assert.match(source, /lms_dual_progress_update/);
 });
 
-test("Admin cookie restore runs before Google config so isolated Preview needs no Google secret", () => {
+test("Admin runtime posture loads before cookie restore without requiring Google sign-in", () => {
   const html = fs.readFileSync(new URL("../lms-admin.html", import.meta.url), "utf8");
   const saved = html.indexOf("if (savedToken)");
   const config = html.indexOf('fetch("/api/lms/portal?endpoint=public-config")');
-  assert.ok(saved > 0 && config > saved);
-  assert.match(html.slice(saved, config), /loadAdminSession/);
+  assert.ok(config > 0 && saved > config);
+  assert.match(html, /applyPublicRuntimeConfig/);
+  assert.match(html, /STATE\.dualSystemEnabled = Boolean\(config\?\.lmsDualSystemEnabled\)/);
+  assert.match(html.slice(saved), /publicConfigPromise[\s\S]+loadAdminSession/);
   assert.match(html, /Preview harness[\s\S]+HttpOnly/);
   assert.match(html, /body: "\{\}"/);
+});
+
+test("P4 correction exposes safe flag posture and permits tenant header", () => {
+  const config = fs.readFileSync(
+    new URL("../utils/lms-handlers/public-config.js", import.meta.url),
+    "utf8"
+  );
+  const cors = fs.readFileSync(new URL("../utils/cors.js", import.meta.url), "utf8");
+  const drive = fs.readFileSync(
+    new URL("../utils/lms-handlers/admin-drive-health.js", import.meta.url),
+    "utf8"
+  );
+  assert.match(config, /lmsDualSystemEnabled/);
+  assert.match(cors, /Content-Type, Authorization, X-LMS-Tenant/);
+  assert.match(drive, /LMS_DATA_BACKEND_UNAVAILABLE/);
+  assert.doesNotMatch(drive, /error:\s*err\.message/);
 });

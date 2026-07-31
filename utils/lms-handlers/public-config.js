@@ -13,6 +13,8 @@ export default async function handler(req, res) {
   }
 
   res.status(200).json({
-    googleClientId: process.env.GOOGLE_CLIENT_ID || ""
+    googleClientId: process.env.GOOGLE_CLIENT_ID || "",
+    lmsDualSystemEnabled:
+      String(process.env.LMS_DUAL_SYSTEM_ENABLED || "").trim().toLowerCase() === "true"
   });
 }
