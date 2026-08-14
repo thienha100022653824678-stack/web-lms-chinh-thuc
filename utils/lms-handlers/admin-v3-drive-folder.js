@@ -10,6 +10,10 @@ const ALLOWED_TYPES = new Set([
   "lesson_material"
 ]);
 
+function previewWritesBlocked() {
+  return String(process.env.VERCEL_ENV || "").toLowerCase() !== "production";
+}
+
 export default async function handler(req, res) {
   const cors = applyCors(req, res, { mode: "admin" });
   if (cors.handled) return res.status(cors.status).json(cors.body);
@@ -19,6 +23,17 @@ export default async function handler(req, res) {
   try {
     const adminSession = getAdminFromRequest(req);
     if (!adminSession) return res.status(401).json({ success: false, error: "admin_auth_required" });
+
+    // Preview shares Production credentials/data. Never create Drive folders or
+    // start V3 media writes from a Preview deployment.
+    if (previewWritesBlocked()) {
+      return res.status(409).json({
+        success: false,
+        error: "preview_v3_write_blocked",
+        code: "preview_v3_write_blocked",
+        previewReadOnly: true
+      });
+    }
 
     const body = req.body || {};
     const courseSlug = String(body.course_slug || "").trim();
@@ -57,3 +72,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ success: false, error: "v3_drive_folder_failed" });
   }
 }
+
+export const _internals = { previewWritesBlocked };
