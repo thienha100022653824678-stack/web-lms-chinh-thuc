@@ -40,6 +40,14 @@ export const config = {
   },
 };
 
+function isV3PreviewLessonWrite(req, endpoint) {
+  if (String(process.env.VERCEL_ENV || "").toLowerCase() === "production") return false;
+  if (endpoint !== "lessons") return false;
+  if (String(req.method || "GET").toUpperCase() !== "POST") return false;
+  const referer = String(req.headers?.referer || req.headers?.referrer || "");
+  return /\/v3-admin(?:\.html)?(?:[?#]|$)/i.test(referer);
+}
+
 export default async function handler(req, res) {
   // Warm the V1/V2 runtime master switch once per request so the
   // synchronous behavioral gate (isV2ActiveCached) is populated for every
@@ -49,6 +57,18 @@ export default async function handler(req, res) {
   await warmRuntimeConfig();
 
   const { endpoint } = req.query || {};
+
+  // V3 Preview shares Production DB. Block lesson mutation originating from
+  // the V3 Preview composer while leaving the existing V1/V2 Admin behavior
+  // untouched. Read-only GETs remain available for UI verification.
+  if (isV3PreviewLessonWrite(req, endpoint)) {
+    return res.status(409).json({
+      success: false,
+      error: "preview_v3_write_blocked",
+      code: "preview_v3_write_blocked",
+      previewReadOnly: true
+    });
+  }
 
   if (endpoint === "auth") {
     return adminAuthHandler(req, res);
@@ -119,3 +139,5 @@ export default async function handler(req, res) {
 
   return res.status(404).json({ success: false, error: "LMS Admin Endpoint not found" });
 }
+
+export const _internals = { isV3PreviewLessonWrite };
