@@ -177,3 +177,75 @@ if (typeof window !== "undefined") {
   var timer = window.setInterval(maybeHandoff, 120);
   maybeHandoff();
 })();
+
+// ── V3 multi-course chooser repair ──────────────────────────────────────────
+// The first V3 chooser rendered course slugs inside a double-quoted inline
+// onclick attribute. A slug such as "banhmi4k" therefore terminated the
+// attribute early: the course names were visible but the buttons were inert.
+// Keep this repair isolated to /v3. It overrides ONLY the multiple-course
+// chooser and uses DOM event listeners + URLSearchParams instead of inline JS.
+(function installV3MultiCourseChooserRepair() {
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+  if (!/(?:^|\/)v3(?:\.html)?$/i.test(window.location.pathname || "")) return;
+
+  var startedAt = Date.now();
+  var timer = window.setInterval(function () {
+    if (Date.now() - startedAt > 10000) {
+      window.clearInterval(timer);
+      return;
+    }
+    if (typeof window.chooseCourse !== "function" || window.__v3CourseChooserRepairInstalled) return;
+
+    var originalChooseCourse = window.chooseCourse;
+    window.__v3CourseChooserRepairInstalled = true;
+    window.chooseCourse = function (payload) {
+      var courses = payload && Array.isArray(payload.allowedCourses) ? payload.allowedCourses : [];
+      var current = "";
+      try { current = String(new URL(window.location.href).searchParams.get("course") || "").trim(); } catch (_) {}
+
+      // Preserve the original path whenever no chooser is needed.
+      if ((payload && payload.verifiedSession && payload.verifiedCourse) ||
+          (current && courses.some(function (c) { return String((c && c.slug) || c || "") === current; })) ||
+          courses.length <= 1) {
+        return originalChooseCourse(payload);
+      }
+
+      var appNode = document.getElementById("app");
+      if (!appNode) return originalChooseCourse(payload);
+
+      var box = document.createElement("div");
+      box.className = "state";
+      var icon = document.createElement("div");
+      icon.style.fontSize = "40px";
+      icon.textContent = "📚";
+      var title = document.createElement("h2");
+      title.textContent = "Chọn khóa học";
+      var text = document.createElement("p");
+      text.textContent = "Tài khoản của bạn có nhiều khóa đang hoạt động.";
+      box.appendChild(icon);
+      box.appendChild(title);
+      box.appendChild(text);
+
+      courses.forEach(function (course) {
+        var slug = String((course && course.slug) || course || "").trim();
+        if (!slug) return;
+        var button = document.createElement("button");
+        button.type = "button";
+        button.className = "secondary";
+        button.dataset.course = slug;
+        button.textContent = String((course && course.title) || slug);
+        button.addEventListener("click", function () {
+          var url = new URL(window.location.href);
+          url.searchParams.set("course", slug);
+          // Existing query params such as admin_preview=1 are preserved.
+          window.location.assign(url.toString());
+        });
+        box.appendChild(button);
+      });
+
+      appNode.innerHTML = "";
+      appNode.appendChild(box);
+    };
+    window.clearInterval(timer);
+  }, 20);
+})();
