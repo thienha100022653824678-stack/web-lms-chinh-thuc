@@ -44,6 +44,13 @@ function buildFlagPosture() {
   );
 }
 
+function previewWritesBlocked() {
+  // Production Preview uses the real Production Supabase environment. Never
+  // let a Preview click mutate the live V1/V2/V3 mode rows. Runtime mutation
+  // becomes available only on a real Production deployment after approval.
+  return String(process.env.VERCEL_ENV || "").toLowerCase() !== "production";
+}
+
 async function buildResponse({ forceRefresh = false } = {}) {
   const state = forceRefresh
     ? await refreshV3PresentationConfig()
@@ -51,6 +58,7 @@ async function buildResponse({ forceRefresh = false } = {}) {
   return {
     success: true,
     ...state,
+    previewReadOnly: previewWritesBlocked(),
     // Existing V2 feature posture remains visible in the same System tab.
     flags: buildFlagPosture()
   };
@@ -85,6 +93,15 @@ export default async function handler(req, res) {
 
     if (req.method !== "POST") {
       return safeError(res, 405, "method_not_allowed");
+    }
+
+    if (previewWritesBlocked()) {
+      return res.status(409).json({
+        success: false,
+        error: "preview_runtime_write_blocked",
+        code: "preview_runtime_write_blocked",
+        previewReadOnly: true
+      });
     }
 
     const body = req.body || {};
@@ -123,4 +140,4 @@ export default async function handler(req, res) {
   }
 }
 
-export const _internals = { parseBool, buildFlagPosture, buildResponse };
+export const _internals = { parseBool, buildFlagPosture, buildResponse, previewWritesBlocked };
