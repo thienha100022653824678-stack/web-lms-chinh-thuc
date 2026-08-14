@@ -19,6 +19,7 @@ import adminStudentTraceHandler from "../../utils/lms-handlers/admin-student-tra
 import adminAccountSharingAlertsHandler from "../../utils/lms-handlers/admin-account-sharing-alerts.js";
 import adminRuntimeModeHandler from "../../utils/lms-handlers/admin-runtime-mode.js";
 import adminV3RuntimeModeHandler from "../../utils/lms-handlers/admin-v3-runtime-mode.js";
+import adminV3DriveFolderHandler from "../../utils/lms-handlers/admin-v3-drive-folder.js";
 import { warmRuntimeConfig } from "../../utils/v2-runtime-controller.js";
 
 export const config = {
@@ -111,6 +112,9 @@ export default async function handler(req, res) {
   }
   if (endpoint === "v3-runtime-mode") {
     return adminV3RuntimeModeHandler(req, res);
+  }
+  if (endpoint === "v3-drive-folder") {
+    return adminV3DriveFolderHandler(req, res);
   }
 
   return res.status(404).json({ success: false, error: "LMS Admin Endpoint not found" });
