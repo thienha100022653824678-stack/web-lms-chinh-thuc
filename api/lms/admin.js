@@ -18,6 +18,8 @@ import adminVerifyMediaHandler from "../../utils/lms-handlers/admin-verify-media
 import adminStudentTraceHandler from "../../utils/lms-handlers/admin-student-trace.js";
 import adminAccountSharingAlertsHandler from "../../utils/lms-handlers/admin-account-sharing-alerts.js";
 import adminRuntimeModeHandler from "../../utils/lms-handlers/admin-runtime-mode.js";
+import adminV3RuntimeModeHandler from "../../utils/lms-handlers/admin-v3-runtime-mode.js";
+import adminV3DriveFolderHandler from "../../utils/lms-handlers/admin-v3-drive-folder.js";
 import { warmRuntimeConfig } from "../../utils/v2-runtime-controller.js";
 
 export const config = {
@@ -38,6 +40,14 @@ export const config = {
   },
 };
 
+function isV3PreviewLessonWrite(req, endpoint) {
+  if (String(process.env.VERCEL_ENV || "").toLowerCase() === "production") return false;
+  if (endpoint !== "lessons") return false;
+  if (String(req.method || "GET").toUpperCase() !== "POST") return false;
+  const referer = String(req.headers?.referer || req.headers?.referrer || "");
+  return /\/v3-admin(?:\.html)?(?:[?#]|$)/i.test(referer);
+}
+
 export default async function handler(req, res) {
   // Warm the V1/V2 runtime master switch once per request so the
   // synchronous behavioral gate (isV2ActiveCached) is populated for every
@@ -47,6 +57,18 @@ export default async function handler(req, res) {
   await warmRuntimeConfig();
 
   const { endpoint } = req.query || {};
+
+  // V3 Preview shares Production DB. Block lesson mutation originating from
+  // the V3 Preview composer while leaving the existing V1/V2 Admin behavior
+  // untouched. Read-only GETs remain available for UI verification.
+  if (isV3PreviewLessonWrite(req, endpoint)) {
+    return res.status(409).json({
+      success: false,
+      error: "preview_v3_write_blocked",
+      code: "preview_v3_write_blocked",
+      previewReadOnly: true
+    });
+  }
 
   if (endpoint === "auth") {
     return adminAuthHandler(req, res);
@@ -108,6 +130,14 @@ export default async function handler(req, res) {
   if (endpoint === "runtime-mode") {
     return adminRuntimeModeHandler(req, res);
   }
+  if (endpoint === "v3-runtime-mode") {
+    return adminV3RuntimeModeHandler(req, res);
+  }
+  if (endpoint === "v3-drive-folder") {
+    return adminV3DriveFolderHandler(req, res);
+  }
 
   return res.status(404).json({ success: false, error: "LMS Admin Endpoint not found" });
 }
+
+export const _internals = { isV3PreviewLessonWrite };

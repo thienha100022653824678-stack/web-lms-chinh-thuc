@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Đang mở lớp học…</title>
+  <style>
+    html,body{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#eef6fb;color:#27465a}
+    body{display:grid;place-items:center}.box{background:#fff;border:1px solid #d8e6ef;border-radius:18px;padding:24px 28px;box-shadow:0 18px 60px #537b9226;text-align:center;max-width:360px}
+    .spin{width:28px;height:28px;border:3px solid #d7e8f2;border-top-color:#4d86a8;border-radius:50%;margin:0 auto 14px;animation:r .8s linear infinite}@keyframes r{to{transform:rotate(360deg)}}
+    p{font-size:13px;margin:0;color:#718899}
+  </style>
+</head>
+<body>
+  <div class="box"><div class="spin"></div><strong>Đang mở lớp học</strong><p>Hệ thống đang chọn phiên bản học phù hợp…</p></div>
+  <script>
+    (async function(){
+      const url = new URL(window.location.href);
+      const isPreview = /\.vercel\.app$/i.test(window.location.hostname);
+      let target = "/lms.html"; // fail-safe: current LMS
+
+      // Preview-only override. It never writes Supabase and is ignored on
+      // daubepnho.store. The System Preview page stores these values locally.
+      if (isPreview) {
+        const queryMode = String(url.searchParams.get("preview_mode") || "").toLowerCase();
+        const storedMode = String(localStorage.getItem("v3_preview_mode") || "").toLowerCase();
+        const previewMode = ["v2","v3"].includes(queryMode) ? queryMode : storedMode;
+        const v3Kill = localStorage.getItem("v3_preview_kill") === "1";
+        if (previewMode === "v3" && !v3Kill) target = "/v3";
+        if (previewMode === "v2" || v3Kill) target = "/lms.html";
+        if (previewMode) {
+          url.searchParams.delete("preview_mode");
+          window.location.replace(target + url.search + url.hash);
+          return;
+        }
+      }
+
+      try {
+        const res = await fetch("/api/v3-mode", { cache: "no-store", credentials: "same-origin" });
+        const state = await res.json();
+        if (res.ok && state && state.effectiveMode === "v3") target = "/v3";
+      } catch (_) {}
+      window.location.replace(target + url.search + url.hash);
+    })();
+  </script>
+</body>
+</html>
