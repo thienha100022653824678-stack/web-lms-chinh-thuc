@@ -18,6 +18,7 @@ import adminVerifyMediaHandler from "../../utils/lms-handlers/admin-verify-media
 import adminStudentTraceHandler from "../../utils/lms-handlers/admin-student-trace.js";
 import adminAccountSharingAlertsHandler from "../../utils/lms-handlers/admin-account-sharing-alerts.js";
 import adminRuntimeModeHandler from "../../utils/lms-handlers/admin-runtime-mode.js";
+import adminV3RuntimeModeHandler from "../../utils/lms-handlers/admin-v3-runtime-mode.js";
 import { warmRuntimeConfig } from "../../utils/v2-runtime-controller.js";
 
 export const config = {
@@ -107,6 +108,9 @@ export default async function handler(req, res) {
   }
   if (endpoint === "runtime-mode") {
     return adminRuntimeModeHandler(req, res);
+  }
+  if (endpoint === "v3-runtime-mode") {
+    return adminV3RuntimeModeHandler(req, res);
   }
 
   return res.status(404).json({ success: false, error: "LMS Admin Endpoint not found" });
