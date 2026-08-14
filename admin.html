@@ -6,117 +6,103 @@
   <title>Culinary CMS</title>
   <style>
     html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#f8fafc}
-    #adminCore{display:block;width:100%;height:100%;border:0;background:#f8fafc}
+    #shell{display:block;width:100%;height:100%;border:0;background:#f8fafc}
   </style>
 </head>
 <body>
-  <iframe id="adminCore" src="/admin-core.html" title="Culinary CMS Admin"></iframe>
+<iframe id="shell" src="/admin-v3-shell.html" title="Culinary CMS Admin"></iframe>
 <script>
 (function(){
-  const frame=document.getElementById('adminCore');
-  let installTimer=null;
+  const shellFrame=document.getElementById('shell');
+  const LS_MODE='v3_preview_mode';
+  const LS_V3_KILL='v3_preview_kill';
+  const LS_GLOBAL_KILL='v3_preview_global_kill';
 
-  function h(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));}
-  function buttonDisabled(el,disabled){if(!el)return;el.disabled=!!disabled;el.classList.toggle('opacity-50',!!disabled);el.classList.toggle('cursor-not-allowed',!!disabled);}
-
-  function install(){
-    let w,d;
-    try{w=frame.contentWindow;d=frame.contentDocument;}catch(_){return false;}
-    if(!w||!d)return false;
-    const panel=d.getElementById('tabContent-system');
-    if(!panel)return false;
-    if(panel.dataset.v3ShellInstalled==='1')return true;
-    panel.dataset.v3ShellInstalled='1';
-
-    panel.innerHTML=`
-      <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-        <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-          <div>
-            <div class="flex items-center gap-2 flex-wrap"><h2 class="text-lg font-extrabold text-slate-800">Chế độ hệ thống (V1 / V2 / V3)</h2><span id="v3ShellEnvBadge" class="text-[9px] font-black px-2 py-1 rounded-full bg-slate-100 text-slate-500">…</span></div>
-            <p class="text-xs text-slate-500 mt-1 leading-relaxed max-w-5xl"><b>V1</b> và <b>V2</b> giữ nguyên nền tảng hiện tại. <b>V3</b> là Telegram Channel LMS chạy như presentation layer trên V2. Chuyển V3 không đổi schema, bài học, enrollment hay dữ liệu Drive.</p>
-          </div>
-          <button onclick="v3ShellRefresh()" class="text-xs font-bold text-slate-500 hover:text-brandGreen transition">↻ Làm mới</button>
-        </div>
-
-        <div class="rounded-xl border border-slate-200 bg-slate-50 p-4 mt-5">
-          <div class="flex flex-wrap items-center gap-4">
-            <div class="flex items-center gap-2"><span class="text-[10px] font-black text-slate-400 uppercase">Đã chọn</span><span id="v3ShellConfigured" class="text-sm font-extrabold px-3 py-1 rounded-full bg-slate-200 text-slate-700">…</span></div>
-            <div class="flex items-center gap-2"><span class="text-[10px] font-black text-slate-400 uppercase">Hiệu lực</span><span id="v3ShellEffective" class="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-200 text-slate-600">…</span></div>
-            <div class="flex items-center gap-2"><span class="text-[10px] font-black text-slate-400 uppercase">Global kill</span><span id="v3ShellGlobalKill" class="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-200 text-slate-600">…</span></div>
-            <div class="flex items-center gap-2"><span class="text-[10px] font-black text-slate-400 uppercase">V3 kill</span><span id="v3ShellV3Kill" class="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-200 text-slate-600">…</span></div>
-          </div>
-          <p id="v3ShellSource" class="text-[10px] text-slate-400 mt-2">Nguồn: …</p>
-        </div>
-
-        <div class="grid md:grid-cols-3 gap-3 mt-5">
-          <button id="v3ShellBtnV1" onclick="v3ShellSetMode('v1')" class="text-left p-4 rounded-xl border-2 border-slate-200 bg-white hover:border-emerald-300 transition disabled:opacity-50 disabled:cursor-not-allowed"><div class="font-extrabold text-sm text-slate-800">🟢 V1 — Hệ thống hiện tại</div><p class="text-[10px] text-slate-500 mt-1 leading-relaxed">Nền an toàn cũ. Global kill switch luôn có thể ép hệ thống về V1.</p></button>
-          <button id="v3ShellBtnV2" onclick="v3ShellSetMode('v2')" class="text-left p-4 rounded-xl border-2 border-slate-200 bg-white hover:border-indigo-300 transition disabled:opacity-50 disabled:cursor-not-allowed"><div class="font-extrabold text-sm text-slate-800">📚 V2 — Hệ thống học hiện tại</div><p class="text-[10px] text-slate-500 mt-1 leading-relaxed">Giữ nguyên LMS V2, session/device/outbox và các feature flag đang dùng.</p></button>
-          <button id="v3ShellBtnV3" onclick="v3ShellSetMode('v3')" class="text-left p-4 rounded-xl border-2 border-slate-200 bg-white hover:border-sky-400 transition disabled:opacity-50 disabled:cursor-not-allowed"><div class="font-extrabold text-sm text-slate-800">💬 V3 — Telegram Channel LMS</div><p class="text-[10px] text-slate-500 mt-1 leading-relaxed">Feed liên tục, media mosaic/viewer, phụ lục và Admin upload nền; chạy trên nền V2.</p></button>
-        </div>
-        <p id="v3ShellModeMsg" class="text-xs font-bold text-amber-600 min-h-[16px] mt-3"></p>
-      </div>
-
-      <div class="grid xl:grid-cols-2 gap-6">
-        <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-          <h2 class="text-base font-extrabold text-slate-800">⛔ Global kill switch (khẩn cấp)</h2>
-          <p class="text-xs text-slate-500 mt-1 mb-4 leading-relaxed">Giữ nguyên semantics Production hiện tại: bật là ép toàn bộ hệ thống về V1, kể cả khi đang chọn V2 hoặc V3.</p>
-          <div class="flex flex-wrap gap-3"><button id="v3ShellGlobalOn" onclick="v3ShellSetKill('global',true)" class="px-4 py-2.5 rounded-xl text-sm font-bold border-2 border-red-200 bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-50">Bật global kill (ép V1)</button><button id="v3ShellGlobalOff" onclick="v3ShellSetKill('global',false)" class="px-4 py-2.5 rounded-xl text-sm font-bold border-2 border-slate-200 bg-white text-slate-600 hover:border-slate-300 disabled:opacity-50">Tắt global kill</button></div>
-        </div>
-        <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-          <h2 class="text-base font-extrabold text-slate-800">🛟 V3 kill switch</h2>
-          <p class="text-xs text-slate-500 mt-1 mb-4 leading-relaxed">Chỉ rút presentation V3 về V2. Mode đã chọn vẫn có thể là V3; tắt V3 kill sẽ quay lại V3 mà không đổi dữ liệu.</p>
-          <div class="flex flex-wrap gap-3"><button id="v3ShellV3On" onclick="v3ShellSetKill('v3',true)" class="px-4 py-2.5 rounded-xl text-sm font-bold border-2 border-red-200 bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-50">Bật V3 kill (ép V2)</button><button id="v3ShellV3Off" onclick="v3ShellSetKill('v3',false)" class="px-4 py-2.5 rounded-xl text-sm font-bold border-2 border-slate-200 bg-white text-slate-600 hover:border-slate-300 disabled:opacity-50">Tắt V3 kill</button></div>
-        </div>
-      </div>
-
-      <div id="v3ShellPreviewNote" class="hidden bg-sky-50 border border-sky-200 rounded-2xl p-4 text-xs text-sky-800 leading-relaxed"></div>
-
-      <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><h2 class="text-base font-extrabold text-slate-800">V3 Telegram LMS</h2><p class="text-xs text-slate-500 mt-1">Mở nhanh giao diện V3 để kiểm tra. Preview learner dùng read-only Admin view; Production learner vẫn đi qua Cổng + entry-token.</p></div><div class="flex flex-wrap gap-2"><a id="v3ShellLearnerLink" target="_blank" class="px-3 py-2 rounded-xl bg-sky-600 text-white text-xs font-bold">Mở V3 học viên</a><a id="v3ShellAdminLink" target="_blank" class="px-3 py-2 rounded-xl bg-slate-800 text-white text-xs font-bold">Mở Admin V3</a></div></div>
-      </div>
-
-      <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-        <h2 class="text-base font-extrabold text-slate-800">Trạng thái flag V2</h2>
-        <p class="text-xs text-slate-500 mt-1 mb-4"><b>configured</b> = flag có cấu hình. <b>enabled</b> = thực sự hiệu lực sau runtime V1/V2. V3 không đổi semantics của các flag này.</p>
-        <div id="v3ShellFlagGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-xs"></div>
-      </div>`;
-
-    function headers(){try{return typeof w.authHeaders==='function'?w.authHeaders():{'Content-Type':'application/json'};}catch(_){return {'Content-Type':'application/json'};}}
-    const endpoint='/api/lms/admin?endpoint=v3-runtime-mode';
-
-    function clsBadge(el,kind){if(!el)return;const map={v1:'bg-emerald-100 text-emerald-700',v2:'bg-indigo-100 text-indigo-700',v3:'bg-sky-100 text-sky-700',off:'bg-slate-200 text-slate-600',danger:'bg-red-100 text-red-700'};el.className=(el.id==='v3ShellConfigured'?'text-sm font-extrabold px-3 py-1 rounded-full ':'text-xs font-bold px-2.5 py-1 rounded-full ')+(map[kind]||map.off);}
-    function flags(flags){const grid=d.getElementById('v3ShellFlagGrid');if(!grid)return;const entries=Object.entries(flags||{});grid.innerHTML=entries.length?entries.map(([key,info])=>`<div class="rounded-lg border border-slate-200 p-2.5"><div class="font-bold text-slate-700 truncate">${h(key)}</div><div class="text-[10px] text-slate-400 truncate">${h(info&&info.envName||'')}</div><div class="flex gap-1.5 mt-1.5"><span class="px-1.5 py-0.5 rounded font-bold ${info&&info.configured?'text-emerald-700 bg-emerald-50':'text-slate-400 bg-slate-50'}">${info&&info.configured?'✅':'⚪'} configured</span><span class="px-1.5 py-0.5 rounded font-bold ${info&&info.enabled?'text-emerald-700 bg-emerald-50':'text-slate-400 bg-slate-50'}">${info&&info.enabled?'🟢':'⚪'} enabled</span></div></div>`).join(''):'<div class="text-slate-400 col-span-full">Không có flag V2.</div>';}
-
-    async function refresh(){
-      const msg=d.getElementById('v3ShellModeMsg');
-      try{
-        const r=await w.fetch(endpoint,{method:'GET',headers:headers(),cache:'no-store'});const s=await r.json();if(!r.ok||!s.success)throw new Error(s.error||'Không tải được runtime');
-        const configured=String(s.configuredMode||'v1').toLowerCase(),effective=String(s.effectiveMode||'v1').toLowerCase();
-        const c=d.getElementById('v3ShellConfigured'),e=d.getElementById('v3ShellEffective'),g=d.getElementById('v3ShellGlobalKill'),vk=d.getElementById('v3ShellV3Kill');
-        c.textContent=configured.toUpperCase();clsBadge(c,configured);e.textContent=effective.toUpperCase()+' đang hoạt động';clsBadge(e,effective);g.textContent=s.globalKillSwitch?'BẬT (ép V1)':'Tắt';clsBadge(g,s.globalKillSwitch?'danger':'off');vk.textContent=s.v3KillSwitch?'BẬT (ép V2)':'Tắt';clsBadge(vk,s.v3KillSwitch?'danger':'off');
-        d.getElementById('v3ShellSource').textContent='Nguồn: '+String(s.source||'—');
-        ['v1','v2','v3'].forEach(m=>{const b=d.getElementById('v3ShellBtn'+m.toUpperCase());if(!b)return;b.classList.toggle('border-emerald-500',m==='v1'&&configured===m);b.classList.toggle('border-indigo-500',m==='v2'&&configured===m);b.classList.toggle('border-sky-500',m==='v3'&&configured===m);});
-        const ro=Boolean(s.previewReadOnly);['v3ShellBtnV1','v3ShellBtnV2','v3ShellBtnV3','v3ShellGlobalOn','v3ShellGlobalOff','v3ShellV3On','v3ShellV3Off'].forEach(id=>buttonDisabled(d.getElementById(id),ro));
-        const env=d.getElementById('v3ShellEnvBadge');env.textContent=ro?'PREVIEW • READ ONLY':'PRODUCTION';env.className='text-[9px] font-black px-2 py-1 rounded-full '+(ro?'bg-sky-100 text-sky-700':'bg-emerald-100 text-emerald-700');
-        const note=d.getElementById('v3ShellPreviewNote');if(ro){note.classList.remove('hidden');note.innerHTML='ℹ️ <b>Preview an toàn:</b> các nút đổi V1/V2/V3 và kill switch bị khóa server-side, không ghi Supabase Production. Dùng trang <a class="font-bold underline" href="/v3-system-preview.html" target="_blank">V3 Production Preview</a> để mô phỏng chuyển mode bằng localStorage.';}else note.classList.add('hidden');
-        const selected=(d.getElementById('courseSelect')&&d.getElementById('courseSelect').value)||'';const qp=selected?'?course='+encodeURIComponent(selected):'';d.getElementById('v3ShellAdminLink').href='/v3-admin'+qp;d.getElementById('v3ShellLearnerLink').href='/v3'+qp+(qp?'&':'?')+(ro?'admin_preview=1':'');
-        flags(s.flags||{});if(msg)msg.textContent='';
-      }catch(err){if(msg){msg.textContent='Không tải được V3 runtime: '+(err&&err.message||err);msg.className='text-xs font-bold text-red-600 min-h-[16px] mt-3';}}
+  function ctx(){
+    try{
+      const sw=shellFrame.contentWindow,sd=shellFrame.contentDocument;
+      const core=sd&&sd.getElementById('adminCore');
+      if(!core)return null;
+      const w=core.contentWindow,d=core.contentDocument;
+      if(!w||!d||!d.getElementById('tabContent-system'))return null;
+      return {sw,sd,core,w,d};
+    }catch(_){return null;}
+  }
+  function badge(el,kind,big){
+    if(!el)return;
+    const map={v1:'bg-emerald-100 text-emerald-700',v2:'bg-indigo-100 text-indigo-700',v3:'bg-sky-100 text-sky-700',off:'bg-slate-200 text-slate-600',danger:'bg-red-100 text-red-700'};
+    el.className=(big?'text-sm font-extrabold px-3 py-1 rounded-full ':'text-xs font-bold px-2.5 py-1 rounded-full ')+(map[kind]||map.off);
+  }
+  function selectedFromReal(d){
+    const raw=String(d.getElementById('v3ShellConfigured')?.textContent||'').trim().toLowerCase();
+    return ['v1','v2','v3'].includes(raw)?raw:'v2';
+  }
+  function localMode(d){
+    let m=localStorage.getItem(LS_MODE);
+    if(!['v1','v2','v3'].includes(m||'')){
+      m=selectedFromReal(d);
+      localStorage.setItem(LS_MODE,m);
     }
+    return m;
+  }
+  function render(){
+    const c=ctx();if(!c)return false;
+    const {w,d}=c;
+    const env=d.getElementById('v3ShellEnvBadge');
+    if(!env||!String(env.textContent||'').includes('PREVIEW'))return false;
 
-    async function post(body){const r=await w.fetch(endpoint,{method:'POST',headers:headers(),body:JSON.stringify(body)});const s=await r.json();if(!r.ok||!s.success)throw new Error(s.error||'Cập nhật thất bại');return s;}
-    w.v3ShellRefresh=refresh;
-    w.v3ShellSetMode=async function(mode){if(!w.confirm('Chuyển hệ thống sang '+String(mode).toUpperCase()+'?'))return;const msg=d.getElementById('v3ShellModeMsg');try{if(msg)msg.textContent='Đang chuyển…';await post({action:'set_mode',mode});await refresh();if(typeof w.toast==='function')w.toast('Đã chuyển sang '+String(mode).toUpperCase(),'success');}catch(err){if(msg){msg.textContent=err.message;msg.className='text-xs font-bold text-red-600 min-h-[16px] mt-3';}if(typeof w.toast==='function')w.toast(err.message,'error');}};
-    w.v3ShellSetKill=async function(kind,value){const label=kind==='global'?'global kill switch':'V3 kill switch';if(!w.confirm((value?'Bật ':'Tắt ')+label+'?'))return;const msg=d.getElementById('v3ShellModeMsg');try{if(msg)msg.textContent='Đang cập nhật…';await post(kind==='global'?{action:'set_global_kill_switch',killSwitch:!!value}:{action:'set_v3_kill_switch',killSwitch:!!value});await refresh();if(typeof w.toast==='function')w.toast('Đã cập nhật '+label,'success');}catch(err){if(msg){msg.textContent=err.message;msg.className='text-xs font-bold text-red-600 min-h-[16px] mt-3';}if(typeof w.toast==='function')w.toast(err.message,'error');}};
+    const m=localMode(d);
+    const g=localStorage.getItem(LS_GLOBAL_KILL)==='1';
+    const vk=localStorage.getItem(LS_V3_KILL)==='1';
+    const effective=g?'v1':(m==='v1'?'v1':(m==='v3'?(vk?'v2':'v3'):'v2'));
 
-    const systemBtn=d.getElementById('tabBtn-system');if(systemBtn)systemBtn.addEventListener('click',()=>setTimeout(refresh,80));
-    const observer=new MutationObserver(()=>{if(!panel.classList.contains('hidden'))refresh();});observer.observe(panel,{attributes:true,attributeFilter:['class']});
-    refresh();
+    const configured=d.getElementById('v3ShellConfigured');
+    const eff=d.getElementById('v3ShellEffective');
+    const global=d.getElementById('v3ShellGlobalKill');
+    const v3kill=d.getElementById('v3ShellV3Kill');
+    if(configured){configured.textContent=m.toUpperCase();badge(configured,m,true);}
+    if(eff){eff.textContent=effective.toUpperCase()+' đang mô phỏng';badge(eff,effective,false);}
+    if(global){global.textContent=g?'BẬT (mô phỏng ép V1)':'Tắt';badge(global,g?'danger':'off',false);}
+    if(v3kill){v3kill.textContent=vk?'BẬT (mô phỏng ép V2)':'Tắt';badge(v3kill,vk?'danger':'off',false);}
+
+    env.textContent='PREVIEW • LOCAL SIM';
+    env.className='text-[9px] font-black px-2 py-1 rounded-full bg-sky-100 text-sky-700';
+    const source=d.getElementById('v3ShellSource');if(source)source.textContent='Nguồn hiển thị: preview-local (localStorage) • không ghi DB Production';
+
+    ['v1','v2','v3'].forEach(x=>{
+      const b=d.getElementById('v3ShellBtn'+x.toUpperCase());if(!b)return;
+      b.disabled=false;b.classList.remove('opacity-50','cursor-not-allowed');
+      b.classList.toggle('border-emerald-500',x==='v1'&&m===x);
+      b.classList.toggle('border-indigo-500',x==='v2'&&m===x);
+      b.classList.toggle('border-sky-500',x==='v3'&&m===x);
+    });
+    ['v3ShellGlobalOn','v3ShellGlobalOff','v3ShellV3On','v3ShellV3Off'].forEach(id=>{const b=d.getElementById(id);if(b){b.disabled=false;b.classList.remove('opacity-50','cursor-not-allowed');}});
+
+    const note=d.getElementById('v3ShellPreviewNote');
+    if(note){note.classList.remove('hidden');note.innerHTML='ℹ️ <b>Preview LOCAL SIMULATION:</b> các nút V1/V2/V3 và kill switch bên trên hoạt động cục bộ bằng localStorage. <b>Không có POST thay đổi mode/kill switch xuống Supabase Production.</b> Reload trang vẫn giữ trạng thái mô phỏng trên trình duyệt này.';}
+    const msg=d.getElementById('v3ShellModeMsg');if(msg){msg.textContent='Preview local: '+m.toUpperCase()+' → hiệu lực mô phỏng '+effective.toUpperCase();msg.className='text-xs font-bold text-sky-700 min-h-[16px] mt-3';}
+
+    const selected=(d.getElementById('courseSelect')&&d.getElementById('courseSelect').value)||'';
+    const qp=selected?'?course='+encodeURIComponent(selected):'';
+    const learner=d.getElementById('v3ShellLearnerLink');if(learner)learner.href='/v3'+qp+(qp?'&':'?')+'admin_preview=1';
+    const admin=d.getElementById('v3ShellAdminLink');if(admin)admin.href='/v3-admin'+qp;
+
+    w.v3ShellSetMode=function(mode){
+      mode=String(mode||'').toLowerCase();if(!['v1','v2','v3'].includes(mode))return;
+      if(!w.confirm('Mô phỏng chuyển Preview sang '+mode.toUpperCase()+'?\nKhông ghi Production.'))return;
+      localStorage.setItem(LS_MODE,mode);render();if(typeof w.toast==='function')w.toast('Preview mô phỏng '+mode.toUpperCase(),'success');
+    };
+    w.v3ShellSetKill=function(kind,value){
+      if(!w.confirm((value?'Bật ':'Tắt ')+(kind==='global'?'global kill':'V3 kill')+' trên Preview?\nChỉ lưu localStorage, không ghi Production.'))return;
+      localStorage.setItem(kind==='global'?LS_GLOBAL_KILL:LS_V3_KILL,value?'1':'0');render();if(typeof w.toast==='function')w.toast('Đã cập nhật mô phỏng Preview','success');
+    };
+    w.v3ShellRefresh=function(){render();};
     return true;
   }
 
-  function start(){if(installTimer)clearInterval(installTimer);let attempts=0;installTimer=setInterval(()=>{attempts++;if(install()||attempts>120){clearInterval(installTimer);installTimer=null;}},250);}
-  frame.addEventListener('load',start);start();
+  function tick(){render();}
+  shellFrame.addEventListener('load',()=>setTimeout(tick,300));
+  setInterval(tick,350);
 })();
 </script>
 </body>
