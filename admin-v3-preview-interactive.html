@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Culinary CMS</title>
+  <style>
+    html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#f8fafc}
+    #shell{display:block;width:100%;height:100%;border:0;background:#f8fafc}
+  </style>
+</head>
+<body>
+<iframe id="shell" src="/admin-v3-shell.html" title="Culinary CMS Admin"></iframe>
+<script>
+(function(){
+  const shellFrame=document.getElementById('shell');
+  const LS_MODE='v3_preview_mode';
+  const LS_V3_KILL='v3_preview_kill';
+  const LS_GLOBAL_KILL='v3_preview_global_kill';
+  let installed=false;
+
+  function ctx(){
+    try{
+      const sw=shellFrame.contentWindow,sd=shellFrame.contentDocument;
+      const core=sd&&sd.getElementById('adminCore');
+      if(!core)return null;
+      const w=core.contentWindow,d=core.contentDocument;
+      if(!w||!d||!d.getElementById('tabContent-system'))return null;
+      return {sw,sd,core,w,d};
+    }catch(_){return null;}
+  }
+  function badge(el,kind,big){
+    if(!el)return;
+    const map={v1:'bg-emerald-100 text-emerald-700',v2:'bg-indigo-100 text-indigo-700',v3:'bg-sky-100 text-sky-700',off:'bg-slate-200 text-slate-600',danger:'bg-red-100 text-red-700'};
+    el.className=(big?'text-sm font-extrabold px-3 py-1 rounded-full ':'text-xs font-bold px-2.5 py-1 rounded-full ')+(map[kind]||map.off);
+  }
+  function selectedFromReal(d){
+    const raw=String(d.getElementById('v3ShellConfigured')?.textContent||'').trim().toLowerCase();
+    return ['v1','v2','v3'].includes(raw)?raw:'v2';
+  }
+  function localMode(d){
+    let m=localStorage.getItem(LS_MODE);
+    if(!['v1','v2','v3'].includes(m||'')){
+      m=selectedFromReal(d);
+      localStorage.setItem(LS_MODE,m);
+    }
+    return m;
+  }
+  function render(){
+    const c=ctx();if(!c)return false;
+    const {w,d}=c;
+    const env=d.getElementById('v3ShellEnvBadge');
+    if(!env||!String(env.textContent||'').includes('PREVIEW'))return false;
+
+    const m=localMode(d);
+    const g=localStorage.getItem(LS_GLOBAL_KILL)==='1';
+    const vk=localStorage.getItem(LS_V3_KILL)==='1';
+    const effective=g?'v1':(m==='v1'?'v1':(m==='v3'?(vk?'v2':'v3'):'v2'));
+
+    const configured=d.getElementById('v3ShellConfigured');
+    const eff=d.getElementById('v3ShellEffective');
+    const global=d.getElementById('v3ShellGlobalKill');
+    const v3kill=d.getElementById('v3ShellV3Kill');
+    if(configured){configured.textContent=m.toUpperCase();badge(configured,m,true);}
+    if(eff){eff.textContent=effective.toUpperCase()+' đang mô phỏng';badge(eff,effective,false);}
+    if(global){global.textContent=g?'BẬT (mô phỏng ép V1)':'Tắt';badge(global,g?'danger':'off',false);}
+    if(v3kill){v3kill.textContent=vk?'BẬT (mô phỏng ép V2)':'Tắt';badge(v3kill,vk?'danger':'off',false);}
+
+    env.textContent='PREVIEW • LOCAL SIM';
+    env.className='text-[9px] font-black px-2 py-1 rounded-full bg-sky-100 text-sky-700';
+    const source=d.getElementById('v3ShellSource');if(source)source.textContent='Nguồn hiển thị: preview-local (localStorage) • không ghi DB Production';
+
+    ['v1','v2','v3'].forEach(x=>{
+      const b=d.getElementById('v3ShellBtn'+x.toUpperCase());if(!b)return;
+      b.disabled=false;b.classList.remove('opacity-50','cursor-not-allowed');
+      b.classList.toggle('border-emerald-500',x==='v1'&&m===x);
+      b.classList.toggle('border-indigo-500',x==='v2'&&m===x);
+      b.classList.toggle('border-sky-500',x==='v3'&&m===x);
+    });
+    ['v3ShellGlobalOn','v3ShellGlobalOff','v3ShellV3On','v3ShellV3Off'].forEach(id=>{const b=d.getElementById(id);if(b){b.disabled=false;b.classList.remove('opacity-50','cursor-not-allowed');}});
+
+    const note=d.getElementById('v3ShellPreviewNote');
+    if(note){note.classList.remove('hidden');note.innerHTML='ℹ️ <b>Preview LOCAL SIMULATION:</b> các nút V1/V2/V3 và kill switch bên trên hoạt động cục bộ bằng localStorage. <b>Không có POST thay đổi mode/kill switch xuống Supabase Production.</b> Reload trang vẫn giữ trạng thái mô phỏng trên trình duyệt này.';}
+    const msg=d.getElementById('v3ShellModeMsg');if(msg){msg.textContent='Preview local: '+m.toUpperCase()+' → hiệu lực mô phỏng '+effective.toUpperCase();msg.className='text-xs font-bold text-sky-700 min-h-[16px] mt-3';}
+
+    const selected=(d.getElementById('courseSelect')&&d.getElementById('courseSelect').value)||'';
+    const qp=selected?'?course='+encodeURIComponent(selected):'';
+    const learner=d.getElementById('v3ShellLearnerLink');if(learner)learner.href='/v3'+qp+(qp?'&':'?')+'admin_preview=1';
+    const admin=d.getElementById('v3ShellAdminLink');if(admin)admin.href='/v3-admin'+qp;
+
+    w.v3ShellSetMode=function(mode){
+      mode=String(mode||'').toLowerCase();if(!['v1','v2','v3'].includes(mode))return;
+      if(!w.confirm('Mô phỏng chuyển Preview sang '+mode.toUpperCase()+'?\nKhông ghi Production.'))return;
+      localStorage.setItem(LS_MODE,mode);render();if(typeof w.toast==='function')w.toast('Preview mô phỏng '+mode.toUpperCase(),'success');
+    };
+    w.v3ShellSetKill=function(kind,value){
+      if(!w.confirm((value?'Bật ':'Tắt ')+(kind==='global'?'global kill':'V3 kill')+' trên Preview?\nChỉ lưu localStorage, không ghi Production.'))return;
+      localStorage.setItem(kind==='global'?LS_GLOBAL_KILL:LS_V3_KILL,value?'1':'0');render();if(typeof w.toast==='function')w.toast('Đã cập nhật mô phỏng Preview','success');
+    };
+    w.v3ShellRefresh=function(){render();};
+    installed=true;
+    return true;
+  }
+
+  function tick(){render();}
+  shellFrame.addEventListener('load',()=>{installed=false;setTimeout(tick,300);});
+  setInterval(tick,350);
+})();
+</script>
+</body>
+</html>
