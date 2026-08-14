@@ -5,7 +5,8 @@
 - Repository: `thienha100022653824678-stack/web-lms-chinh-thuc`
 - Stable code commit: `d1ac980057cabc622bc48ed565537986b438d75d`
 - Stable backup branch: `backup/v3-production-stable-20260814`
-- Production Vercel deployment: `dpl_34dHN2vnycWWE4Y9e4r7Brydu7Wr`
+- Pre-sync `main` backup: `backup/main-before-v3-sync-20260814`
+- Original promoted Production deployment: `dpl_34dHN2vnycWWE4Y9e4r7Brydu7Wr`
 - Canonical domains:
   - `https://www.daubepnho.store`
   - `https://daubepnho.store`
@@ -102,7 +103,7 @@ Global kill has higher priority than V2/V3 selection.
 
 ## 6. Database emergency reference
 
-Use the Admin runtime endpoint/UI whenever possible because it also follows controller ordering and audit behavior. Direct DB changes are emergency-only.
+Use the Admin runtime endpoint/UI whenever possible because it follows controller ordering and audit behavior. Direct DB changes are emergency-only.
 
 Expected V3-active rows:
 
@@ -137,19 +138,41 @@ Commit:
 
 `d1ac980057cabc622bc48ed565537986b438d75d`
 
-The Production deployment serving this code at the stable checkpoint is:
+The original Production deployment serving this code at the stable checkpoint is:
 
 `dpl_34dHN2vnycWWE4Y9e4r7Brydu7Wr`
 
-Do not redeploy an older `main` commit as a rollback without checking the V2/V3 runtime and session-guard changes first.
+Do not redeploy an older historical `main` commit as a rollback without checking the V2/V3 runtime and session-guard changes first.
 
-## 8. Git branch state at stable checkpoint
+## 8. Git normalization completed
 
-At audit time:
+Before normalization:
 
-- `main` is an ancestor of the Production baseline.
-- Production baseline is **93 commits ahead** of `main`.
-- Production baseline is **0 commits behind** `main`.
-- Merge base equals current `main` commit `f9220e8128e13e93d803e0c014c39be5819f557c`.
+- `main` pointed to `f9220e8128e13e93d803e0c014c39be5819f557c`.
+- Production baseline was 93 commits ahead and 0 commits behind `main`.
+- The merge base was exactly the old `main`, so the relationship was linear and safe to fast-forward.
 
-Therefore the safe Git normalization path is a **non-force fast-forward** of `main` to the stable Production lineage. Do not create a synthetic merge or force-push unless the branch relationship changes before execution.
+Actions completed:
+
+1. Created `backup/main-before-v3-sync-20260814` at the old `main` SHA.
+2. Fast-forwarded `main` to `d1ac980057cabc622bc48ed565537986b438d75d` with `force=false`.
+3. Re-compared branches after the update.
+
+Final state:
+
+```text
+main == baseline/production-fc12c3b-20260814
+ahead_by = 0
+behind_by = 0
+status = identical
+```
+
+No synthetic merge commit and no force-push were used.
+
+## 9. Development-state cleanup notes
+
+- PR #7 is merged into the verified Production lineage.
+- The old `main` pointer is preserved in `backup/main-before-v3-sync-20260814`.
+- The exact V3 stable code is preserved in `backup/v3-production-stable-20260814`.
+- Documentation work is isolated on `docs/v3-production-stable-20260814` so the stable backup branch remains byte-for-byte at the production code checkpoint.
+- Do not delete the rollback branches until a later maintenance window.
