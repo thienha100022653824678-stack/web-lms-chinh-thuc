@@ -15,14 +15,32 @@
   <div class="box"><div class="spin"></div><strong>Đang mở lớp học</strong><p>Hệ thống đang chọn phiên bản học phù hợp…</p></div>
   <script>
     (async function(){
-      const suffix = window.location.search + window.location.hash;
+      const url = new URL(window.location.href);
+      const isPreview = /\.vercel\.app$/i.test(window.location.hostname);
       let target = "/lms.html"; // fail-safe: current LMS
+
+      // Preview-only override. It never writes Supabase and is ignored on
+      // daubepnho.store. The System Preview page stores these values locally.
+      if (isPreview) {
+        const queryMode = String(url.searchParams.get("preview_mode") || "").toLowerCase();
+        const storedMode = String(localStorage.getItem("v3_preview_mode") || "").toLowerCase();
+        const previewMode = ["v2","v3"].includes(queryMode) ? queryMode : storedMode;
+        const v3Kill = localStorage.getItem("v3_preview_kill") === "1";
+        if (previewMode === "v3" && !v3Kill) target = "/v3";
+        if (previewMode === "v2" || v3Kill) target = "/lms.html";
+        if (previewMode) {
+          url.searchParams.delete("preview_mode");
+          window.location.replace(target + url.search + url.hash);
+          return;
+        }
+      }
+
       try {
         const res = await fetch("/api/v3-mode", { cache: "no-store", credentials: "same-origin" });
         const state = await res.json();
         if (res.ok && state && state.effectiveMode === "v3") target = "/v3";
       } catch (_) {}
-      window.location.replace(target + suffix);
+      window.location.replace(target + url.search + url.hash);
     })();
   </script>
 </body>
