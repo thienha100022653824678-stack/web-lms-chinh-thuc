@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/admin.html", "destination": "/admin-v3-shell.html" },
     { "source": "/learning", "destination": "/learning.html" },
     { "source": "/v3", "destination": "/v3.html" },
     { "source": "/v3-admin", "destination": "/v3-admin.html" }
