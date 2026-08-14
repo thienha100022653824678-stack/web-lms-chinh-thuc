@@ -17,6 +17,7 @@
   const LS_MODE='v3_preview_mode';
   const LS_V3_KILL='v3_preview_kill';
   const LS_GLOBAL_KILL='v3_preview_global_kill';
+  let previewTimer=null;
 
   function ctx(){
     try{
@@ -49,7 +50,12 @@
     const c=ctx();if(!c)return false;
     const {w,d}=c;
     const env=d.getElementById('v3ShellEnvBadge');
-    if(!env||!String(env.textContent||'').includes('PREVIEW'))return false;
+    if(!env)return false;
+    const envText=String(env.textContent||'');
+    if(!envText.includes('PREVIEW')){
+      if(envText.includes('PRODUCTION')&&previewTimer){clearInterval(previewTimer);previewTimer=null;}
+      return false;
+    }
 
     const m=localMode(d);
     const g=localStorage.getItem(LS_GLOBAL_KILL)==='1';
@@ -102,7 +108,7 @@
 
   function tick(){render();}
   shellFrame.addEventListener('load',()=>setTimeout(tick,300));
-  setInterval(tick,350);
+  previewTimer=setInterval(tick,350);
 })();
 </script>
 </body>
